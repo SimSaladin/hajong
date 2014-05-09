@@ -1,7 +1,9 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, OverloadedStrings #-}
 module Riichi where
 
+import Data.Text (Text)
 import Control.Lens
+import Control.Applicative
 import Control.Monad
 import Data.Map (Map)
 import Data.Maybe
@@ -39,11 +41,14 @@ type Points = Int
 data Set = Shuntsu [Tile] -- straight
          | Koutsu [Tile] -- triplet
          | Kantsu [Tile] -- quadret
+         deriving (Show, Read, Eq)
 
 data Shout = Pon | Kan | Chi | Ron
+           deriving (Show, Read, Eq)
 
 data TurnAction = Discard Player Tile Bool -- ^ Riichi?
                 | Ankan Tile
+                deriving (Show, Read)
 
          -- Jantou [Tile] -- pair
 
@@ -52,68 +57,95 @@ data Hand = Hand
           , _handOpen :: [Set]
           , _handPick :: Maybe Tile
           , _handDiscards :: [(Tile, Maybe Player)] -- maybe shouted
-          , _handRiichi :: Maybe Int
-          }
+          , _handRiichi :: Bool
+          , _handFuriten :: Maybe Bool -- ^ Just (temporary?)
+          } deriving (Show, Read, Eq)
 
 makeLenses ''Hand
 
 initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles [] Nothing [] Nothing
+initHand tiles = Hand tiles [] Nothing [] False Nothing
 
-discard :: Tile -> Hand -> Maybe Hand
-discard tile hand = do
+discard :: Tile -> Hand -> Either Text Hand
+discard tile hand
+    | hand ^. handPick == Just tile = Right $ hand & set handPick Nothing . setDiscard
+    | hand ^. handRiichi            = Left "Cannot change wait in riichi"
+    | otherwise                     = case ys of
+        []      -> Left "Tile not in hand"
+        (_:ys') -> Right $ hand & set handConcealed (xs ++ ys') . setDiscard
+    where
+        (xs, ys) = break (== tile) (_handConcealed hand)
+        setDiscard = over handDiscards (++ [(tile, Nothing)])
 
-    guard $ hand ^. handRiichi . to isJust
+--- game -------------------------------
 
-    let (xs, ys) = break (== tile) (_handConcealed hand)
-    case ys of
-        []      -> Nothing
-        (_:ys') -> Just $ hand &
-            set handConcealed (xs ++ ys')
-            . over handDiscards (++ [(tile, Nothing)])
-
-data RiichiState = RiichiState
+data RiichiSecret = RiichiSecret
                  { _riichiWall :: [Tile]
                  , _riichiWanpai :: [Tile]
-                 , _riichiDora :: [Tile]
+                 , _riichiHands :: Map Player Hand
+                 } deriving (Show, Read)
+
+data RiichiPublic = RiichiPublic
+                 { _riichiDora :: [Tile]
                  , _riichiRound :: Kazehai
                  , _riichiDealer :: Player
-                 , _riichiHands :: Map Player Hand
                  , _riichiPoints :: Map Player Points
                  , _riichiTurn :: Player
                  , _riichiEvents :: [Either Shout TurnAction]
-                 }
+                 } deriving (Show, Read)
 
-makeLenses ''RiichiState
+data RiichiPlayer = RiichiPlayer
+                  { _riichiPlayer :: Player
+                  , _riichiPublic :: RiichiPublic
+                  , _riichiHand :: Hand
+                  } deriving (Show, Read)
 
-initRiichi :: RiichiState
-initRiichi = RiichiState
-    { _riichiRound = Ton
+type RiichiState = (RiichiSecret, RiichiPublic)
+
+makeLenses ''RiichiSecret
+makeLenses ''RiichiPublic
+makeLenses ''RiichiPlayer
+
+newGame :: RiichiPublic
+newGame = RiichiPublic
+    { _riichiDora   = []
+    , _riichiRound  = Ton
     , _riichiDealer = 1
     , _riichiPoints = Map.fromList $ zip [1..] (replicate 4 25000)
+    , _riichiTurn   = 1
+    , _riichiEvents = []
     }
 
-nextRound :: RiichiState -> IO RiichiState
-nextRound state = do
-    tiles <- shuffleM riichiTiles
-    let (hands            , xs)   = splitAt (13 * 4) tiles
-        ((h1, h2), (h3, h4)) = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
-        (dora : wanpai, wall) = splitAt 14 xs
+newSecret :: IO RiichiSecret
+newSecret = liftM dealTiles $ shuffleM riichiTiles
+    where
+        dealTiles tiles = RiichiSecret
+            { _riichiWall = wall
+            , _riichiWanpai = wanpai
+            , _riichiHands = Map.fromList $ zip [1..] (map initHand [h1, h2, h3, h4])
+            } where
+                (hands, xs)             = splitAt (13 * 4) tiles
+                ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
+                (wanpai, wall)          = splitAt 14 xs
 
-    return $ state
-        { _riichiWanpai = wanpai
-        , _riichiDora = [dora]
-        , _riichiHands = Map.fromList $ zip [1..] (map initHand [h1, h2, h3, h4])
-        , _riichiWall = wall
-        , _riichiTurn = _riichiDealer state
-        }
+setSecret :: RiichiSecret -> RiichiPublic -> (RiichiSecret, RiichiPublic)
+setSecret secret public =
+    (secret & set riichiWanpai wanpai', public & set riichiDora [dora])
+    where
+        (dora : wanpai') = secret ^. riichiWanpai
 
-actionApply :: RiichiState -> TurnAction -> RiichiState
+newRiichiState :: IO RiichiState
+newRiichiState = liftM (`setSecret` newGame) newSecret
+
+nextRound :: RiichiPublic -> IO (RiichiSecret, RiichiPublic)
+nextRound public = do
+    secret <- newSecret
+    return $ setSecret secret $ public & set riichiTurn (public ^. riichiDealer)
+
+actionApply :: RiichiState -> TurnAction -> Either Text RiichiState
 actionApply state (Discard player tile riichi) =
-    case state ^. riichiHands . at player of
-        Nothing -> error "Invalid player"
-        Just hand -> case discard tile hand of
-             Nothing -> error "Tile not discardable"
-             Just hand' -> riichiHands . at player ?~ hand' $ state
-
+    maybe (Left "No such player") go (state ^. _1.riichiHands.at player)
+    where
+        go = fmap updateHand . discard tile . (if riichi then set handRiichi True else id)
+        updateHand hand = state & _1.riichiHands.at player ?~ hand
 

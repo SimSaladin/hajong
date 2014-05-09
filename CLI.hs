@@ -1,27 +1,29 @@
-{-# LANGUAGE TemplateHaskell, OverloadedStrings, NoImplicitPrelude, FlexibleContexts #-}
+{-# LANGUAGE RankNTypes, TemplateHaskell, OverloadedStrings, NoImplicitPrelude, FlexibleContexts #-}
 
 module CLI where
 
 import Riichi
 
-import ClassyPrelude hiding (finally, handle)
+import ClassyPrelude hiding (finally, handle, toLower)
 import Control.Lens
-import Data.Text (Text)
+import Control.Applicative
+import Data.List (elemIndex)
+import Data.Char (isUpper, toLower)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Map as M
 import Control.Concurrent (forkIO, killThread, myThreadId, ThreadId)
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Reader
 import Control.Monad.Reader.Class
 import System.Console.Haskeline
-import System.Exit
 import qualified Network.WebSockets as WS
 
 type Client = (Text, WS.Connection)
 
 data ServerState = ServerState
-                 { _serverGames :: Map Int (RiichiState, [Client])
-                 , _serverLounge :: [Client]
+                 { _serverGames :: Map Int (Text, RiichiState, [Client])
+                 , _serverLounge :: Map Text WS.Connection
+                 , _serverCounter :: Int
                  }
 
 data Lounge = Lounge
@@ -29,50 +31,49 @@ data Lounge = Lounge
             , _loungeGames :: Map Int [Text] -- id -> nicks
             } deriving (Show, Read)
 
+makeLenses ''Lounge
+
 data Event = JoinServer Text -- ^ Nick
            | PartServer Text
+           | LoungeInfo Lounge
+           | Message Text Text -- ^ from, content
+           | NewGame Text
+           | JoinGame Int
+           | StartGame RiichiPlayer
            | GameAction TurnAction
            | GameShout Shout
-           | LoungeInfo Lounge
-           | NewClient Text
-           | StartGame RiichiState
-           | Message Text Text -- ^ from, content
-           | Invalid
+           | Invalid Text
            deriving (Show, Read)
 
 instance WS.WebSocketsData Event where
-    fromLazyByteString = fromMaybe Invalid . readMay . T.unpack . WS.fromLazyByteString
+    fromLazyByteString = fromMaybe (Invalid "Malformed event") . readMay . T.unpack . WS.fromLazyByteString
     toLazyByteString = WS.toLazyByteString . T.pack . show
 
-
-data ClientState = ClientState
-                 { _clientConn :: WS.Connection
-                 , _clientLounge :: MVar Lounge
-                 , _clientGame  :: MVar (Maybe RiichiState)
-                 , _clientReceiveChan :: TChan String
-                 , _clientMainThread :: ThreadId
-                 }
-
 makeLenses ''ServerState
-makeLenses ''ClientState
-makeLenses ''Lounge
-
-newServerState :: ServerState
-newServerState = ServerState mempty []
 
 broadcast :: Event -> ServerState -> IO ()
 broadcast event state =
-    forM_ ( (state ^. serverLounge) ++ (state ^. serverGames . each . _2) )
-        (\(_, conn) -> unicast conn event)
+    forM_ ((state ^. serverLounge & toListOf each) ++ (state ^. serverGames & toListOf (each._3.each.to snd)))
+        (`unicast` event)
 
 multicast :: Int -> Event -> ServerState -> IO ()
 multicast nth event state =
     case state ^. serverGames . at nth of
-        Nothing           -> error "Game not found"
-        Just (_, clients) -> forM_ clients $ \(_, conn) -> unicast conn event
+        Nothing              -> error "Game not found"
+        Just (_, _, clients) -> forM_ clients $ \(_, conn) -> unicast conn event
 
 unicast :: MonadIO m => WS.Connection -> Event -> m ()
 unicast conn = liftIO . WS.sendTextData conn
+
+-- * Server
+
+serverMain :: IO ()
+serverMain = do
+    state <- newMVar newServerState
+    WS.runServer "0.0.0.0" 9160 $ serverApp state
+
+newServerState :: ServerState
+newServerState = ServerState mempty mempty 0
 
 serverApp :: MVar ServerState -> WS.ServerApp
 serverApp state pending = do
@@ -80,114 +81,271 @@ serverApp state pending = do
     event <- WS.receiveData conn
     putStrLn "New client"
     case event of
-        JoinServer nick -> flip finally disconnect $ do
-            let client = (nick, conn)
-            modifyMVar_ state $ \s -> if s ^. serverLounge . to (elem nick . map fst)
-                then unicast conn Invalid >> return s
-                else do
-                    let s' = s & serverLounge %~ (client :)
-                    unicast conn (LoungeInfo $ Lounge (s' ^. serverLounge . to (map fst)) mempty)
-                    broadcast (NewClient nick) s'
-                    return s'
-            talk state client
-        _ -> unicast conn Invalid
+        JoinServer nick -> let
+
+            connect = do
+                modifyMVar_ state $ \s -> if s ^. serverLounge.at nick.to isJust
+                    then unicast conn (Invalid "Nick already in use") >> return s
+                    else do
+                        let s' = s & serverLounge %~ insertMap nick conn
+                        unicast conn $ LoungeInfo $ Lounge (s' ^. serverLounge . to M.keys) mempty
+                        broadcast (JoinServer nick) s'
+                        return s'
+                talk state (nick, conn)
+
+            disconnect = do
+                putStrLn "Client disconnected"
+                broadcast (PartServer nick) =<< readMVar state
+
+            in finally connect disconnect
+
+        _ -> unicast conn (Invalid "No JoinServer received. Please identify yourself.")
     where
-        disconnect = do
-            putStrLn "Disconnecting client"
-            error "disconnect not ipmlemented"
 
 talk :: MVar ServerState -> Client -> IO ()
-talk state (user, conn) = forever $ do
+talk stateVar client@(user, conn) = forever $ do
     event <- WS.receiveData conn :: IO Event
-    print event
+    withMVar stateVar $ \state -> case event of
+        JoinServer _      -> unicast conn $ Invalid "Already joined"
+        PartServer reason -> broadcast (Message "" $ "User " <> user <> " has left [" <> reason <> "]") state
+        Message _ msg     -> broadcast (Message user msg) state
+        NewGame name      -> serverCreateGame client name stateVar
+        _ -> do
+            unicast conn (Invalid "Event not allowed or not implemented.")
+            print $ "[ignored event] " <> show event
 
-printUsers :: (MonadIO m, MonadReader ClientState m) => m ()
-printUsers = do
-    lounge <- view clientLounge >>= liftIO . readMVar
-    liftIO $ putStrLn $ "Users idle: " <> intercalate ", " (lounge ^. loungeNicksIdle)
+serverCreateGame :: Client -> Text -> MVar ServerState -> IO ()
+serverCreateGame client@(nick,conn) name stateVar = do
+    game <- newRiichiState
+    modifyMVar stateVar $ \state -> do
+        let counter = state ^. serverCounter
+            state' =
+                state & over serverGames (insertMap counter (name, game, [client]))
+              . over serverCounter (+1)
+              . over serverLounge (deleteMap nick)
+        unicast conn $ JoinGame counter
+        return (state', ())
 
-printLounge :: (MonadIO m, MonadReader ClientState m) => m ()
-printLounge = do
-    printUsers
-    putStrLn $ "Current games: "
+-- * Client
 
-startGame :: (MonadIO m, MonadReader ClientState m) => m ()
-startGame = 
-    liftIO $ putStrLn "Game!"
+type Output a = (Applicative m, MonadIO m, MonadReader ClientState m) => m a
 
-clientReceiver :: (MonadIO m, MonadReader ClientState m) => m ()
-clientReceiver = do
-    conn <- view clientConn
-    forever $ liftIO (WS.receiveData conn) >>= clientEventHandler
+type UI = ReaderT ClientState (InputT IO)
 
--- | Print to main thread's haskeline via a chan from any thread.
-clientPrint :: (MonadIO m, MonadReader ClientState m) => [String] -> m ()
-clientPrint xs = do
-    chan <- view clientReceiveChan
-    mapM_ (liftIO . atomically . writeTChan chan) xs
-    view clientMainThread >>= liftIO . (`throwTo` Interrupt)
+data ClientState = ClientState
+                 { _clientConn :: WS.Connection
+                 , _clientMainThread :: ThreadId
+                 , _clientLounge :: MVar Lounge
+                 , _clientGame  :: MVar (Maybe RiichiPlayer)
+                 , _clientReceiveChan :: TChan Text
+                 , _clientCanInterrupt :: MVar Bool
+                 }
 
-clientInputLoop :: ClientState -> InputT IO ()
-clientInputLoop state = withInterrupt loop
-    where
-        loop = handle interrupt $ runReaderT clientInputHandler state >> loop
 
-        interrupt Interrupt = do
-            mline <- liftIO (atomically $ tryReadTChan $ state ^. clientReceiveChan)
-            maybe loop (\line -> outputStrLn line >> interrupt Interrupt) mline
+makeLenses ''ClientState
 
 newClientState :: WS.Connection -> IO ClientState
-newClientState conn = ClientState conn <$> newMVar (Lounge [] mempty) <*> newMVar Nothing <*> newTChanIO <*> myThreadId
+newClientState conn = ClientState conn
+    <$> myThreadId
+    <*> newMVar (Lounge [] mempty)
+    <*> newMVar Nothing
+    <*> newTChanIO
+    <*> newMVar True
 
-clientEventHandler :: (MonadIO m, MonadReader ClientState m) => Event -> m ()
-clientEventHandler (LoungeInfo lounge) = view clientLounge >>= liftIO . (`swapMVar` lounge) >> printLounge
-clientEventHandler (StartGame gstate) = view clientGame >>=  liftIO . (`swapMVar` Just gstate) >> startGame
-clientEventHandler x = clientPrint ["Unhandled event: " <> show x]
+clientMain :: Maybe Handle -> IO ()
+clientMain = WS.runClient "localhost" 9160 "/" . clientApp
 
-clientInputHandler :: ReaderT ClientState (InputT IO) ()
-clientInputHandler = do
-    minput <- lift $ getInputLine "% "
-    unless (minput == Just "quit") $ do
-        case minput of
-            Nothing     -> return ()
-            Just ""     -> return ()
-
-            Just ('r':'a':'w':' ':input) ->
-                maybe (lift $ outputStrLn "Cmd not recognized")
-                      (\e -> view clientConn >>= (`unicast` e)) (readMay input)
-
-            Just input
-                | "users" `isPrefixOf` input -> printUsers
-                | "games" `isPrefixOf` input -> undefined
-                | "new"   `isPrefixOf` input -> undefined -- createGame 
-
-            Just x -> lift $ outputStrLn $ "Command `" <> x <> "` not recognized"
-
-clientApp :: WS.ClientApp ()
-clientApp conn = do
+clientApp :: Maybe Handle -> WS.ClientApp ()
+clientApp mhandle conn = do
     state <- newClientState conn
     putStrLn "Connected to server. Type 'help' for available commands."
 
     listenerThread <- forkIO (runReaderT clientReceiver state)
 
     unicast conn (JoinServer "whoami")
-    runInputT defaultSettings (clientInputLoop state)
+    runInputTBehavior (maybe defaultBehavior useFileHandle mhandle) defaultSettings (clientInputLoop state)
 
     -- cleanup
     unicast conn (PartServer "Bye")
     killThread listenerThread
 
-serverMain :: IO ()
-serverMain = do
-    state <- newMVar newServerState
-    WS.runServer "0.0.0.0" 9160 $ serverApp state
+-- ** Helpers
 
-clientMain :: IO ()
-clientMain = WS.runClient "localhost" 9160 "/" clientApp
+uiNoInterrupt :: UI a -> UI a
+uiNoInterrupt f = do
+    ivar <- view clientCanInterrupt
+    (liftIO (swapMVar ivar False) >> f) `finally` liftIO (swapMVar ivar True)
 
--- | Documentation for 'main'
-main :: IO ()
-main = do
+uiAskParam :: String -> (String -> UI ()) -> UI ()
+uiAskParam prompt f = lift (getInputLine prompt) >>= maybe (return ()) f
+
+rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
+rview l = view l >>= liftIO . readMVar
+
+rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
+rswap l a = view l >>= liftIO . (`swapMVar` a)
+
+toServer :: Event -> Output ()
+toServer ev = view clientConn >>= (`unicast` ev)
+
+ui :: UI [Text] -> UI ()
+ui f = f >>= lift . outputStr . unpack . unlines
+
+-- | Print to main thread's haskeline via a chan from any thread.
+queue :: Output [Text] -> Output ()
+queue f = do
+    xs <- f
+    chan <- view clientReceiveChan
+    mapM_ (liftIO . atomically . writeTChan chan) xs
+    interrupt <- view clientCanInterrupt >>= liftIO . readMVar
+    when interrupt $ view clientMainThread >>= liftIO . (`throwTo` Interrupt)
+
+-- * Input
+
+clientInputLoop :: ClientState -> InputT IO ()
+clientInputLoop state = withInterrupt loop
+    where
+        loop = handle interrupt $ do
+            minput <- getInputChar "% "
+            case minput of
+                Nothing  -> loop
+                Just 'q' -> return ()
+                Just input -> runReaderT (clientInputHandler input) state >> loop
+
+        interrupt Interrupt = do
+            mline <- liftIO (atomically $ tryReadTChan $ state ^. clientReceiveChan)
+            maybe loop (\line -> outputStrLn (unpack line) >> interrupt Interrupt) mline
+
+clientInputHandler :: Char -> UI ()
+clientInputHandler '?' = printHelp
+clientInputHandler '!' = printStatus
+clientInputHandler ' ' = uiNoInterrupt chatMessage
+clientInputHandler  x  = do
+    inGame <- rview clientGame
+    if isJust inGame then gameHandler x else loungeHandler x
+    where
+        loungeHandler 'n' = ui printUsers
+        loungeHandler 'g' = ui printGames
+        loungeHandler 'c' = uiNoInterrupt createGame
+        loungeHandler 'j' = uiNoInterrupt joinGame
+        loungeHandler 'r' = uiNoInterrupt rawCommand
+        loungeHandler  _  = unknownCommand
+
+        gameHandler 'p' = undefined
+        gameHandler 'c' = undefined
+        gameHandler 'k' = undefined
+        gameHandler 'r' = undefined
+        gameHandler 'l' = undefined
+        gameHandler  x  = case elemIndex (toLower x) discardKeys of
+                              Nothing -> unknownCommand
+                              Just n -> discardTile n (isUpper x)
+
+        discardKeys = "aoeuidhtns-mwvz"
+
+        unknownCommand = lift $ outputStrLn $ "Command `" <> [x] <> "` not recognized"
+
+discardTile :: Int -> Bool -> UI ()
+discardTile n riichi = do
+    Just game <- rview clientGame
+    let tiles = game ^. riichiHand . handConcealed ++ maybeToList (game ^. riichiHand . handPick)
+    case tiles ^? traversed.index n of
+        Nothing   -> lift $ outputStrLn $ "No tile at index " <> show n
+        Just tile -> toServer $ GameAction $ Discard (_riichiPlayer game) tile riichi
+
+printHelp :: UI ()
+printHelp = lift $ outputStrLn $ unlines
+    [ "Every command is initiated by it's first [l]etter"
+    , ""
+    , "Global commands"
+    , "  [?] (help)                 Show this help text"
+    , "  [!] (status)               Show status information"
+    , "  <Space> (message)          Open a line prompt, send with enter."
+    , "  [q]uit                     Close the client"
+    , ""
+    , "Messages are received in lounge or in-game only, corresponding to"
+    , "your location. Use `l ` to send messages to lounge from a game"
+    , ""
+    , "In lounge"
+    , "  [n]ames                    Show idle users"
+    , "  [g]ames                    Show all games and players"
+    , "  [c]reate <name>            Create a new game"
+    , "  [j]oin <name>              Join game"
+    , "  [r]aw <cmd>                Send direct protocol command (for debugging only)"
+    , ""
+    , "In game"
+    , "  [aoeuidhtns-mwvz]          Discard [n]:th tile"
+    , "  [p]on [c]hi [k]an [r]on    Shout a discard or declare kantsu"
+    , "  [l]ounge                   Interpret next letter as a lounge commend"
+    ]
+
+printStatus :: UI ()
+printStatus = do
+    mgame <- rview clientGame
+    lift $ case mgame of
+        Nothing -> outputStrLn "In lounge"
+        Just game -> outputStrLn "In game"
+
+chatMessage :: UI ()
+chatMessage = lift (getInputLine "say: ") >>= send
+    where
+        send Nothing = return ()
+        send (Just msg)
+            | null msg  = return ()
+            | otherwise = toServer $ Message "" (pack msg)
+
+createGame :: UI ()
+createGame = lift (getInputLine "Game name: ") >>= maybe (return ()) go
+    where
+        go "" = lift (outputStrLn "Name cannot be empty")
+        go name = toServer $ NewGame $ pack name
+
+joinGame :: UI ()
+joinGame = printGames >> uiAskParam "join game: " go
+    where
+        go str = case readMay str of
+            Nothing -> lift $ outputStrLn $ "NaN: " <> str
+            Just n  -> toServer $ JoinGame n
+
+rawCommand :: UI ()
+rawCommand = uiAskParam "send command: " go
+    where
+        go str = case readMay str of
+            Nothing -> lift $ outputStrLn "Command not recognized"
+            Just cmd -> toServer cmd
+
+-- * Output
+
+clientReceiver :: ReaderT ClientState IO ()
+clientReceiver = do
+    conn <- view clientConn
+    forever $ liftIO (WS.receiveData conn) >>= clientEventHandler
+
+clientEventHandler :: Event -> ReaderT ClientState IO ()
+clientEventHandler (LoungeInfo lounge) = rswap clientLounge lounge >> queue printLounge
+clientEventHandler (StartGame gstate)  = rswap clientGame (Just gstate) >> startGame
+clientEventHandler x = queue (return ["Unhandled event: " <> tshow x])
+
+printUsers :: Output [Text] -- (MonadIO m, MonadReader ClientState m) => m ()
+printUsers = do
+    lounge <- view clientLounge >>= liftIO . readMVar
+    return [ "Users idle: " <> intercalate ", " (lounge ^. loungeNicksIdle)]
+
+printGames :: Output [Text]
+printGames = do
+    lounge <- rview clientLounge
+    return [ "Games: " <> mconcat (lounge ^. loungeGames ^.. each . to (intercalate ", ")) ]
+
+printLounge :: Output [Text]
+printLounge = liftA2 (++) printUsers printGames
+
+startGame :: Output ()
+startGame = 
+    queue $ return ["Entering game!"]
+
+-- * Main
+
+hajongCLI :: IO ()
+hajongCLI = do
     args <- getArgs
     case args of 
         (x:_) | "s" `isPrefixOf` x -> server
@@ -200,4 +358,4 @@ main = do
                 _   -> client
     where
         server = putStrLn "Starting server..." >> serverMain
-        client = putStrLn "Starting client..." >> clientMain
+        client = putStrLn "Starting client..." >> clientMain Nothing
