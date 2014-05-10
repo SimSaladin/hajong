@@ -4,18 +4,18 @@ module CLI where
 
 import Riichi
 
-import ClassyPrelude hiding (finally, handle, toLower)
-import Control.Lens
-import Control.Applicative
-import Data.List (elemIndex)
-import Data.Char (isUpper, toLower)
+import           ClassyPrelude hiding (finally, handle, toLower)
+import           Control.Lens
+import           Control.Applicative
+import           Control.Concurrent (forkIO, killThread, myThreadId, ThreadId)
+import           Control.Monad.Trans.Reader
+import           Control.Monad.Reader.Class
+import           Data.List (elemIndex)
+import           Data.Char (isUpper, toLower)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Map as M
-import Control.Concurrent (forkIO, killThread, myThreadId, ThreadId)
-import Control.Monad.Trans.Reader
-import Control.Monad.Reader.Class
-import System.Console.Haskeline
+import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
 
 type Client = (Text, WS.Connection)
@@ -95,6 +95,8 @@ serverApp state pending = do
 
             disconnect = do
                 putStrLn "Client disconnected"
+                modifyMVar_ state $ return . over serverLounge (deleteMap nick)
+                    . over (serverGames . each . _3) (deleteMap nick)
                 broadcast (PartServer nick) =<< readMVar state
 
             in finally connect disconnect
@@ -166,7 +168,7 @@ clientApp mhandle conn = do
     runInputTBehavior (maybe defaultBehavior useFileHandle mhandle) defaultSettings (clientInputLoop state)
 
     -- cleanup
-    unicast conn (PartServer "Bye")
+    WS.sendClose conn (PartServer "Bye")
     killThread listenerThread
 
 -- ** Helpers
