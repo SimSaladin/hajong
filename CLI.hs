@@ -300,7 +300,7 @@ clientInputLoop state = withInterrupt loop
                 <> if gameN >= 0
                        then maybe "waiting" (const "playing") inGame <> "[" <> tshow gameN <> "]"
                        else "idle"
-                <> " % "
+                <> "% "
 
             case minput of
                 Nothing  -> loop
@@ -421,6 +421,7 @@ clientEventHandler (StartGame gstate)  = rswap clientGame (Just gstate) >> start
 clientEventHandler (JoinGame n nick)   = handleJoinGame n nick 
 clientEventHandler (NewGame info)      = gameCreated info
 clientEventHandler (Message sayer msg) = out $ "<" <> sayer <> "> " <> msg
+clientEventHandler (Invalid err)       = out $ "[error] " <> err
 clientEventHandler x = queue (return ["Unhandled event: " <> tshow x])
 
 clientReceiver :: ReaderT ClientState IO ()
