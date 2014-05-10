@@ -30,6 +30,7 @@ library
                      , haskeline               >=0.6  && <0.8
                      , stm 
                      , mtl
+                     , random
   other-extensions:    TemplateHaskell, OverloadedStrings
   default-language:    Haskell2010
   ghc-options:         -threaded
@@ -56,5 +57,6 @@ test-suite test
                      , tasty
                      , tasty-hunit
                      , unix
+                     , temporary == 1.2.0.1
 
   ghc-options:       -rtsopts

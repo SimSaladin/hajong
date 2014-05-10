@@ -7,7 +7,7 @@ import Riichi
 import           ClassyPrelude hiding (finally, handle, toLower)
 import           Control.Lens
 import           Control.Applicative
-import           Control.Concurrent (forkIO, killThread, myThreadId, ThreadId)
+import           Control.Concurrent (forkIO, killThread, myThreadId, ThreadId, threadDelay)
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Reader.Class
 import           Data.List (elemIndex)
@@ -15,6 +15,7 @@ import           Data.Char (isUpper, toLower)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Map as M
+import           System.Random
 import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
 
@@ -67,47 +68,69 @@ unicast conn = liftIO . WS.sendTextData conn
 
 -- * Server
 
+dumpState :: ServerState -> IO ()
+dumpState state = print
+    ( state ^. serverCounter
+    , state ^. serverLounge.to M.keys
+    , state ^. serverGames & toListOf each & map (over _3 (map fst))
+    )
+
 serverMain :: IO ()
 serverMain = do
-    state <- newMVar newServerState
+    state <- atomically $ newTVar newServerState
     WS.runServer "0.0.0.0" 9160 $ serverApp state
 
 newServerState :: ServerState
 newServerState = ServerState mempty mempty 0
 
-serverApp :: MVar ServerState -> WS.ServerApp
+serverApp :: TVar ServerState -> WS.ServerApp
 serverApp state pending = do
     conn  <- WS.acceptRequest pending
     event <- WS.receiveData conn
-    putStrLn "New client"
+    -- atomically (readTVar state)
+    -- dumpState =<<
     case event of
         JoinServer nick -> let
 
             connect = do
-                modifyMVar_ state $ \s -> if s ^. serverLounge.at nick.to isJust
-                    then unicast conn (Invalid "Nick already in use") >> return s
-                    else do
-                        let s' = s & serverLounge %~ insertMap nick conn
-                        unicast conn $ LoungeInfo $ Lounge (s' ^. serverLounge . to M.keys) mempty
-                        broadcast (JoinServer nick) s'
-                        return s'
-                talk state (nick, conn)
+                accepted <- atomically $ do
+                    s <- readTVar state
+                    if s ^. serverLounge.at nick.to isJust
+                        then return Nothing
+                        else do
+                            let s' = s & serverLounge %~ insertMap nick conn
+                            writeTVar state s'
+                            return (Just s')
+                case accepted of
+                    Nothing -> unicast conn $ Invalid "Nick already in use"
+                    Just s  -> do
+                        unicast conn $ LoungeInfo $ Lounge (s ^. serverLounge . to M.keys) mempty
+                        broadcast (JoinServer nick) s
+                        talk state (nick, conn)
 
             disconnect = do
                 putStrLn "Client disconnected"
-                modifyMVar_ state $ return . over serverLounge (deleteMap nick)
-                    . over (serverGames . each . _3) (deleteMap nick)
-                broadcast (PartServer nick) =<< readMVar state
+                s <- atomically $ do
+                    modifyTVar state
+                        $ over serverLounge (deleteMap nick)
+                        . over (serverGames . each . _3) (deleteMap nick)
+                    readTVar state
+                broadcast (PartServer nick) s
 
-            in finally connect disconnect
+            in do
+                putStrLn $ "New client " <> nick
+                finally connect disconnect
 
-        _ -> unicast conn (Invalid "No JoinServer received. Please identify yourself.")
+        _ -> do
+            putStrLn $ pack $ "Received non-event first: " <> show event
+            unicast conn (Invalid "No JoinServer received. Please identify yourself.")
     where
 
-talk :: MVar ServerState -> Client -> IO ()
+talk :: TVar ServerState -> Client -> IO ()
 talk stateVar client@(user, conn) = forever $ do
     event <- WS.receiveData conn :: IO Event
-    withMVar stateVar $ \state -> case event of
+    state <- readTVarIO stateVar
+    case event of
         JoinServer _      -> unicast conn $ Invalid "Already joined"
         PartServer reason -> broadcast (Message "" $ "User " <> user <> " has left [" <> reason <> "]") state
         Message _ msg     -> broadcast (Message user msg) state
@@ -116,17 +139,20 @@ talk stateVar client@(user, conn) = forever $ do
             unicast conn (Invalid "Event not allowed or not implemented.")
             print $ "[ignored event] " <> show event
 
-serverCreateGame :: Client -> Text -> MVar ServerState -> IO ()
+serverCreateGame :: Client -> Text -> TVar ServerState -> IO ()
 serverCreateGame client@(nick,conn) name stateVar = do
     game <- newRiichiState
-    modifyMVar stateVar $ \state -> do
+
+    counter <- atomically $ do
+        state <- readTVar stateVar
         let counter = state ^. serverCounter
-            state' =
-                state & over serverGames (insertMap counter (name, game, [client]))
-              . over serverCounter (+1)
-              . over serverLounge (deleteMap nick)
-        unicast conn $ JoinGame counter
-        return (state', ())
+        writeTVar stateVar $ state
+            & over serverGames (insertMap counter (name, game, [client]))
+            . over serverCounter (+1)
+            . over serverLounge (deleteMap nick)
+        return counter
+
+    unicast conn $ JoinGame counter
 
 -- * Client
 
@@ -142,8 +168,6 @@ data ClientState = ClientState
                  , _clientReceiveChan :: TChan Text
                  , _clientCanInterrupt :: MVar Bool
                  }
-
-
 makeLenses ''ClientState
 
 newClientState :: WS.Connection -> IO ClientState
@@ -160,16 +184,21 @@ clientMain = WS.runClient "localhost" 9160 "/" . clientApp
 clientApp :: Maybe Handle -> WS.ClientApp ()
 clientApp mhandle conn = do
     state <- newClientState conn
+    ident <- liftM pack $ replicateM 5 $ randomRIO ('a', 'z')
+
     putStrLn "Connected to server. Type 'help' for available commands."
 
     listenerThread <- forkIO (runReaderT clientReceiver state)
 
-    unicast conn (JoinServer "whoami")
+    unicast conn (JoinServer ident)
+
     runInputTBehavior (maybe defaultBehavior useFileHandle mhandle) defaultSettings (clientInputLoop state)
 
     -- cleanup
     WS.sendClose conn (PartServer "Bye")
+    putStrLn "Parted successfully"
     killThread listenerThread
+    threadDelay 500000 -- FIXME wait for listener thread
 
 -- ** Helpers
 
@@ -196,10 +225,11 @@ ui f = f >>= lift . outputStr . unpack . unlines
 -- | Print to main thread's haskeline via a chan from any thread.
 queue :: Output [Text] -> Output ()
 queue f = do
-    xs <- f
     chan <- view clientReceiveChan
-    mapM_ (liftIO . atomically . writeTChan chan) xs
-    interrupt <- view clientCanInterrupt >>= liftIO . readMVar
+    interrupt <- rview clientCanInterrupt
+
+    f >>= mapM_ (liftIO . atomically . writeTChan chan)
+
     when interrupt $ view clientMainThread >>= liftIO . (`throwTo` Interrupt)
 
 -- * Input
@@ -209,6 +239,7 @@ clientInputLoop state = withInterrupt loop
     where
         loop = handle interrupt $ do
             minput <- getInputChar "% "
+            -- putStrLn $ pack $ show minput
             case minput of
                 Nothing  -> loop
                 Just 'q' -> return ()
@@ -238,7 +269,7 @@ clientInputHandler  x  = do
         gameHandler 'k' = undefined
         gameHandler 'r' = undefined
         gameHandler 'l' = undefined
-        gameHandler  x  = case elemIndex (toLower x) discardKeys of
+        gameHandler  _  = case elemIndex (toLower x) discardKeys of
                               Nothing -> unknownCommand
                               Just n -> discardTile n (isUpper x)
 
@@ -298,8 +329,10 @@ chatMessage = lift (getInputLine "say: ") >>= send
 createGame :: UI ()
 createGame = lift (getInputLine "Game name: ") >>= maybe (return ()) go
     where
-        go "" = lift (outputStrLn "Name cannot be empty")
-        go name = toServer $ NewGame $ pack name
+        go name = let name' = T.dropWhileEnd (== ' ') $ T.dropWhile (== ' ') $ pack name
+                      in case name' of
+                             "" -> lift (outputStrLn "Name cannot be empty")
+                             _  -> toServer $ NewGame name'
 
 joinGame :: UI ()
 joinGame = printGames >> uiAskParam "join game: " go
