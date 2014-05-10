@@ -3,7 +3,6 @@ module Riichi where
 
 import Data.Text (Text)
 import Control.Lens
-import Control.Applicative
 import Control.Monad
 import Data.Map (Map)
 import Data.Maybe
@@ -38,10 +37,10 @@ type Player = Int
 
 type Points = Int
 
-data Set = Shuntsu [Tile] -- straight
-         | Koutsu [Tile] -- triplet
-         | Kantsu [Tile] -- quadret
-         deriving (Show, Read, Eq)
+data Mentsu = Shuntsu [Tile] -- straight
+            | Koutsu [Tile] -- triplet
+            | Kantsu [Tile] -- quadret
+            deriving (Show, Read, Eq)
 
 data Shout = Pon | Kan | Chi | Ron
            deriving (Show, Read, Eq)
@@ -54,7 +53,7 @@ data TurnAction = Discard Player Tile Bool -- ^ Riichi?
 
 data Hand = Hand
           { _handConcealed :: [Tile]
-          , _handOpen :: [Set]
+          , _handOpen :: [Mentsu]
           , _handPick :: Maybe Tile
           , _handDiscards :: [(Tile, Maybe Player)] -- maybe shouted
           , _handRiichi :: Bool

@@ -34,13 +34,13 @@ clientCLILoungeTests = testGroup "CLI Lounge Unit Tests"
     , testCase "g lists games"                      $ runClient "g" =~ "Games"
     , testCase "c gives create prompt"              $ runClient "cNamed\n" =~ "Game name"
     , testCase "c doesn't accept empty name"        $ runClient "c \n" =~ "empty"
-    , testCase "j opens join prompt"                $ runClient "j-1\n" =~ "join game"
+    , testCase "j opens join prompt"                $ runClient "j-1\n" =~ "join game"  -- TODO
     , testCase "r sends a raw command"              $ runClient "rMessage \"from\" \"me\"\n" =~ "send command"
     ]
 
 clientCLIGameTests :: TestTree
 clientCLIGameTests = testGroup "CLI In-Game unit tests"
-    [ testCase "" undefined ]  -- $ gameClient "
+    [ testCase "join a game" $ runClient "j0\n" =~ "Ready to start game" ]
 
 (=~) :: IO Text -> Text -> IO ()
 f =~ t = f >>= \res -> isInfixOf t res @? unpack (unlines ["== Got ==", res, "\n== Expected ==", t])
@@ -53,13 +53,18 @@ runClient input = do
 
     pid <- forkProcess $ do
         k <- newKnob (input <> "q")
-        (output, res) <- capture $ timeout 3000000 $ withFileHandle k "knob" ReadMode $ \h -> do
-            clientMain $ Just h
-            hFlush stdout
+
+        (output, res) <-
+            withFileHandle k "knob" ReadMode $ capture . timeout 3000000 . clientMain . Just
+
         writeFile (fpFromString fpRes) output
 
     _ <- getProcessStatus True False pid
     finally (readFile $ fpFromString fpRes) (removeLink fpRes)
+
+twoClients :: IO ()
+twoClients = do
+        undefined
 
 -- | Start the server process silenced
 startServer :: IO ProcessID
