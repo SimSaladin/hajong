@@ -5,18 +5,19 @@ module CLI where
 import Riichi
 
 import           ClassyPrelude hiding (finally, handle, toLower)
-import           Data.Set (mapMonotonic)
+import           Data.Set (mapMonotonic, size)
 import           Control.Lens
 import           Control.Applicative
 import           Control.Concurrent (forkFinally, killThread, myThreadId, ThreadId, threadDelay)
+import           Control.Monad (zipWithM_)
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Reader.Class
-import           Data.List (delete, elemIndex)
+import           Data.List (elemIndex)
 import           Data.Char (isUpper, toLower)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import qualified Data.Map as M
 import           System.Random
+import           System.Random.Shuffle
 import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
 
@@ -40,7 +41,6 @@ data ServerState = ServerState
                  , _serverLounge :: Set Client
                  , _serverGames :: Map Int (Text, RiichiState, Set Client)
                  , _serverCounter :: Int
-
                  }
 
 data Lounge = Lounge
@@ -56,7 +56,7 @@ data Event = JoinServer Text -- ^ Nick
            | Message Text Text -- ^ from, content
            | CreateGame Text
            | NewGame (Int, Text, Set Nick) -- name, nicks
-           | StartGame RiichiPlayer
+           | StartGame (RiichiPlayer, [Nick]) -- play order
            | JoinGame Int Text -- ^ Game lounge
            | GameAction TurnAction
            | GameShout Shout
@@ -161,23 +161,43 @@ talk stateVar client@(Client nick conn) = forever $ do
             unicast conn (Invalid "Event not allowed or not implemented.")
             print $ "[ignored event] " <> show event
 
+viewTuple :: (Applicative f, MonadReader s f) => Getting a1 s a1 -> Getting a s a -> f (a1, a)
+viewTuple l m = (,) <$> view l <*> view m
+
 addToGame :: Int -> Client -> TVar ServerState -> IO ()
 addToGame n client@(Client nick conn) stateVar = do
-    joined <- atomically $ do
+    res <- atomically $ do
         state <- readTVar stateVar
         case state ^. serverGames.at n of
-            Nothing              -> return (Left "Game not found")
-            Just (_, _, clients) ->
-                if client `member` clients
-                    then return $ Left "Already in that game"
-                    else do
-                        let state' = state
-                                & over (serverGames.at n.traversed._3) (insertSet client)
-                                . over serverLounge (deleteSet client)
-                        writeTVar stateVar state'
-                        return $ Right state'
 
-    either (unicast conn . Invalid) (broadcast (JoinGame n nick)) joined
+            Nothing -> return (Left "Game not found")
+
+            Just (_, _, clients)
+                | client `member` clients -> return $ Left "Already in that game"
+
+                | size clients >= 4 -> return $ Left "That game is full"
+
+                | otherwise -> do
+                    let state' = state
+                            & over (serverGames.at n.traversed._3) (insertSet client)
+                            . over serverLounge (deleteSet client)
+                    writeTVar stateVar state'
+                    return $ Right (size clients >= 3, state')
+
+    either (unicast conn . Invalid) handleGameAdd res
+    where
+        handleGameAdd (starting, state) = do
+            broadcast (JoinGame n nick) state
+            when starting $ do
+                let Just (riichiState, clients) = state^.serverGames.at n <&> viewTuple _2 _3
+
+                clients' <- shuffleM $ setToList clients
+
+                let nickOrder = map getNick clients'
+                    handlePlayer player (Client _ conn') =
+                        unicast conn' $ StartGame (getRiichiPlayer riichiState player ^?! _Just, nickOrder)
+
+                zipWithM_ handlePlayer defaultPlayers clients'
 
 serverCreateGame :: Client -> Text -> TVar ServerState -> IO ()
 serverCreateGame client@(Client nick conn) name stateVar = do
@@ -208,7 +228,7 @@ data ClientState = ClientState
                  , _clientNick         :: Text
                  , _clientMainThread   :: ThreadId
                  , _clientLounge       :: MVar Lounge
-                 , _clientGame         :: MVar (Maybe RiichiPlayer)
+                 , _clientGame         :: MVar (Maybe (RiichiPlayer, [Nick]))
                  , _clientReceiveChan  :: TChan Text
                  , _clientCanInterrupt :: MVar Bool
                  , _clientWaiting      :: MVar Int
@@ -253,7 +273,10 @@ clientApp mhandle conn = do
 uiNoInterrupt :: UI a -> UI a
 uiNoInterrupt f = do
     ivar <- view clientCanInterrupt
-    (liftIO (swapMVar ivar False) >> f) `finally` liftIO (swapMVar ivar True)
+    (liftIO (swapMVar ivar False) >> f) `finally`
+        -- throw interrupt to print stuff from queue after the action.
+        (liftIO (swapMVar ivar True)
+        >> view clientMainThread >>= liftIO . (`throwTo` Interrupt))
 
 uiAskParam :: String -> (String -> UI ()) -> UI ()
 uiAskParam prompt f = lift (getInputLine prompt) >>= maybe (return ()) f
@@ -264,6 +287,7 @@ rview l = view l >>= liftIO . readMVar
 rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
 rswap l a = view l >>= liftIO . (`swapMVar` a)
 
+rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
 rmodify l f = view l >>= liftIO . (`modifyMVar_` f)
 
 toServer :: Event -> Output ()
@@ -277,9 +301,7 @@ queue :: Output [Text] -> Output ()
 queue f = do
     chan <- view clientReceiveChan
     interrupt <- rview clientCanInterrupt
-
     f >>= mapM_ (liftIO . atomically . writeTChan chan)
-
     when interrupt $ view clientMainThread >>= liftIO . (`throwTo` Interrupt)
 
 out :: Text -> Output ()
@@ -296,11 +318,12 @@ clientInputLoop state = withInterrupt loop
 
             inGame <- liftIO (readMVar $ state ^. clientGame)
             gameN <- liftIO (readMVar $ state ^. clientWaiting)
-            minput <- getInputChar $ unpack $ nick <> ":"
-                <> if gameN >= 0
-                       then maybe "waiting" (const "playing") inGame <> "[" <> tshow gameN <> "]"
+            minput <- getInputChar $ unpack $
+                "("
+                <> (if gameN >= 0
+                       then maybe "wait" (const "game") inGame <> " " <> tshow gameN
                        else "idle"
-                <> "% "
+                ) <> ") <" <> nick <> "> "
 
             case minput of
                 Nothing  -> loop
@@ -341,11 +364,11 @@ clientInputHandler  x  = do
 
 discardTile :: Int -> Bool -> UI ()
 discardTile n riichi = do
-    Just game <- rview clientGame
-    let tiles = game ^. riichiHand . handConcealed ++ maybeToList (game ^. riichiHand . handPick)
+    game <- rview clientGame <&>  (^._1) . (^?! _Just)
+    let tiles = game^.riichiHand.handConcealed ++ maybeToList (game^.riichiHand.handPick)
     case tiles ^? traversed.index n of
         Nothing   -> lift $ outputStrLn $ "No tile at index " <> show n
-        Just tile -> toServer $ GameAction $ Discard (_riichiPlayer game) tile riichi
+        Just tile -> toServer $ GameAction $ Discard (game^.riichiPlayer) tile riichi
 
 printHelp :: UI ()
 printHelp = lift $ outputStrLn $ unlines
@@ -460,16 +483,17 @@ handleJoinGame n nick = do
         . over (loungeGames.at n.traversed._2) (insertSet nick)
         . over loungeNicksIdle (deleteSet nick)
 
+    lounge <- rview clientLounge
+    let count = length $ view (loungeGames.at n.traversed._2) lounge
+        countInfo
+            | count < 4 = tshow (4 - count) <> " more players until game starts." 
+            | otherwise = " Game is starting!"
+
     me <- liftM (== nick) $ view clientNick
     if me
         then do _ <- rswap clientWaiting n
-                out ("Ready to start game " <> tshow n)
-        else do lounge <- rview clientLounge
-                let count = length $ view (loungeGames.at n.traversed._2) lounge
-                    countInfo
-                        | count < 4 = " (" <> tshow (4 - count) <> " more needed.)" 
-                        | otherwise = " Game starting!"
-                out $ nick <> " joined game no. " <> tshow n <> countInfo
+                out $ "Joined the game (" <> tshow n <> "). " <> countInfo
+        else out $ nick <> " joined game (" <> tshow n <> "). " <> countInfo
 
 -- * Output
 

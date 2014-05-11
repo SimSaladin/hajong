@@ -115,6 +115,36 @@ newGame = RiichiPublic
     , _riichiEvents = []
     }
 
+newRiichiState :: IO RiichiState
+newRiichiState = liftM (`setSecret` newGame) newSecret
+
+nextRound :: RiichiState -> IO RiichiState
+nextRound (_, public) = do
+    secret <- newSecret
+    return $ setSecret secret $ public & set riichiTurn (public ^. riichiDealer)
+
+actionApply :: RiichiState -> TurnAction -> Either Text RiichiState
+actionApply state (Discard player tile riichi) =
+    maybe (Left "No such player") go (state ^. _1.riichiHands.at player)
+    where
+        go = fmap updateHand . discard tile . (if riichi then set handRiichi True else id)
+        updateHand hand = state & _1.riichiHands.at player ?~ hand
+
+getRiichiPlayer :: RiichiState -> Player -> Maybe RiichiPlayer
+getRiichiPlayer (secret, public) player =
+    secret ^. riichiHands . at player <&> RiichiPlayer player public 
+
+defaultPlayers :: [Player]
+defaultPlayers = [1..4]
+
+-- * Internal
+
+setSecret :: RiichiSecret -> RiichiPublic -> RiichiState
+setSecret secret public =
+    (secret & set riichiWanpai wanpai', public & set riichiDora [dora])
+    where
+        (dora : wanpai') = secret ^. riichiWanpai
+
 newSecret :: IO RiichiSecret
 newSecret = liftM dealTiles $ shuffleM riichiTiles
     where
@@ -126,25 +156,4 @@ newSecret = liftM dealTiles $ shuffleM riichiTiles
                 (hands, xs)             = splitAt (13 * 4) tiles
                 ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
                 (wanpai, wall)          = splitAt 14 xs
-
-setSecret :: RiichiSecret -> RiichiPublic -> (RiichiSecret, RiichiPublic)
-setSecret secret public =
-    (secret & set riichiWanpai wanpai', public & set riichiDora [dora])
-    where
-        (dora : wanpai') = secret ^. riichiWanpai
-
-newRiichiState :: IO RiichiState
-newRiichiState = liftM (`setSecret` newGame) newSecret
-
-nextRound :: RiichiPublic -> IO (RiichiSecret, RiichiPublic)
-nextRound public = do
-    secret <- newSecret
-    return $ setSecret secret $ public & set riichiTurn (public ^. riichiDealer)
-
-actionApply :: RiichiState -> TurnAction -> Either Text RiichiState
-actionApply state (Discard player tile riichi) =
-    maybe (Left "No such player") go (state ^. _1.riichiHands.at player)
-    where
-        go = fmap updateHand . discard tile . (if riichi then set handRiichi True else id)
-        updateHand hand = state & _1.riichiHands.at player ?~ hand
 
