@@ -13,6 +13,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import CLI
+import Riichi
 
 main :: IO ()
 main = do
@@ -63,6 +64,15 @@ clientCLIGameTests = testGroup "CLI In-Game unit tests"
         -- putStrLn c
         -- putStrLn d
     ]
+
+gameTests :: TestTree
+gameTests = testGroup "Game tests"
+    [ testCase "" $ do
+        game <- newRiichiState
+        undefined
+    ]
+
+---------------------------------------------------
 
 (=~) :: IO Text -> Text -> IO ()
 f =~ t = f >>= \res -> isInfixOf t res @? unpack (unlines ["== Got ==", res, "\n== Expected ==", t])
