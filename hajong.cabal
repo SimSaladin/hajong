@@ -17,8 +17,11 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Riichi
+                     , Tiles
+                     , Yaku
                      , CLI
                      , Server
+                     , PrettyPrint
 
   build-depends:       base                    >=4.6
                      , lens                    >=4.0
@@ -41,7 +44,10 @@ executable hajong
   default-language:    Haskell2010
   hs-source-dirs:      app
 
-  build-depends:       hajong, base
+  build-depends:       hajong
+                     , base
+                     , classy-prelude
+                     , text
 
 test-suite test
   type:                exitcode-stdio-1.0
@@ -52,12 +58,14 @@ test-suite test
   build-depends:       hajong
                      , base
                      , classy-prelude
+                     , lens
                      , silently
                      , async
                      , knob
                      , tasty
                      , tasty-hunit
+                     , tasty-quickcheck
                      , unix
-                     , temporary == 1.2.0.1
+                     , temporary
 
   ghc-options:       -rtsopts

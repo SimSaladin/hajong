@@ -4,8 +4,7 @@ module CLI where
 
 import           ClassyPrelude hiding (finally, handle, toLower)
 import           Control.Lens
-import           Control.Applicative
-import           Control.Concurrent (forkFinally, killThread, myThreadId, ThreadId, threadDelay)
+import           Control.Concurrent (forkFinally, killThread, myThreadId, ThreadId)
 import           Control.Monad.Reader (runReaderT, ReaderT, MonadReader(..))
 import           Data.List (elemIndex)
 import           Data.Char (isUpper, toLower)
@@ -15,6 +14,7 @@ import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
 import           Riichi
 import           Server hiding (Client) -- TODO it shouldn't even export this
+import           PrettyPrint
 
 -- * Types
 
@@ -40,25 +40,13 @@ newClientState conn nick = ClientState conn nick
     <*> newMVar True
     <*> newMVar (-1)
 
-rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
-rview l = view l >>= liftIO . readMVar
-
-rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
-rswap l a = view l >>= liftIO . (`swapMVar` a)
-
-rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
-rmodify l f = view l >>= liftIO . (`modifyMVar_` f)
-
 class ( Functor m, Applicative m, Monad m
       , MonadIO m, MonadException m
       , MonadReader ClientState m
       ) => ClientOutput m where
-
     emit :: Event -> m ()
     emit ev = view clientConn >>= (`unicast` ev)
-
     outAll :: [Text] -> m ()
-
     out :: Text -> m ()
     out x = outAll [x]
 
@@ -90,6 +78,17 @@ instance MonadReader ClientState (InputT (ReaderT ClientState IO)) where
 
 type Client a = ClientOutput m => m a
 type UI     a = ClientInput m => m a
+
+-- * Helpers
+
+rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
+rview l = view l >>= liftIO . readMVar
+
+rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
+rswap l a = view l >>= liftIO . (`swapMVar` a)
+
+rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
+rmodify l f = view l >>= liftIO . (`modifyMVar_` f)
 
 askParam' :: ClientInput m => Text -> (Text -> m ()) -> m ()
 askParam' prompt f = askParam prompt >>= maybe (return ()) f
@@ -343,8 +342,15 @@ printLounge :: Client ()
 printLounge = printUsers >> printGames
 
 startGame :: Client ()
-startGame = 
+startGame = do
     out "Entering game!"
+    printGameState
+
+printGameState :: Client ()
+printGameState = do
+    Just (game, nicks) <- rview clientGame
+    let public = game ^. riichiPublic
+    undefined
 
 ppGame :: Int -> (Text, Set Nick) -> Text
 ppGame n (name,nicks) = mconcat ["(", tshow n, ") ", name, " [", ppNicks nicks, "]"]

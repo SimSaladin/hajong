@@ -1,6 +1,8 @@
+{-# LANGUAGE NoImplicitPrelude, OverloadedStrings #-}
 module Main where
 
 import ClassyPrelude
+import qualified Data.Text.IO as T
 import Server
 import CLI
 
