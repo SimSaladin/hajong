@@ -48,4 +48,4 @@ setTileNumber :: Tile -> Number -> Tile
 setTileNumber (Man _ r) n = Man n r
 setTileNumber (Pin _ r) n = Pin n r
 setTileNumber (Sou _ r) n = Sou n r
-setTileNumber _         n = error "Not suited tile"
+setTileNumber _         _ = error "Not suited tile"

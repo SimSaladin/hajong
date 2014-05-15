@@ -55,6 +55,7 @@ data RiichiPublic = RiichiPublic
 
 data RiichiPlayer = RiichiPlayer
                   { _riichiPublic :: RiichiPublic
+                  , _riichiPublicHands :: Map Player HandPublic
                   , _riichiHand :: Hand
                   } deriving (Show, Read)
 
@@ -97,6 +98,7 @@ handOf' :: GameMonad m => Player -> m Hand
 handOf' player = use (handOf player) >>= maybe (throwError "Player not found") return
 
 -- | huh?
+handOf :: Functor f => Int -> (Maybe Hand -> f (Maybe Hand)) -> RiichiSecret -> f RiichiSecret
 handOf player = riichiHands.at player
 
 -- * Initialize
@@ -146,7 +148,7 @@ nextRound (_, public) = do
     secret <- newSecret
     return $ setSecret secret $ public & set riichiTurn (public ^. riichiDealer)
 
--- | Apply an action on a player
+-- | Apply an action on current player's turn
 runTurn :: GameMonad m => TurnAction -> m ()
 runTurn action = do
     player <- view riichiTurn
@@ -209,11 +211,13 @@ tenpai hand = True -- TODO implement
 --    mm-mm-mm  XX      XX XX XX XX XX XX          |
 --    mm-mm-mm  XX      XX XX XX XX XX XX XX XX XX |
 --    mm-mm-mm
--- mm-mm-mm-mm     _ _ _ _ _ _ _ _ _ _ _ _ _  mm-mm-mm-mm
+-- mm-mm-mm-mm 
+--
+--            01 02 03 04 05 06 07 08 09 10 11 12 13   14
+--                                            mm-mm-mm-mm
 --                 S Player3      (25000)     mm-mm-mm
 --                                            mm-mm-mm
 --                                            mm-mm-mm
---
 --  Parts:  - mentsu (ankan, open)
 --          - discard pile
 --          - dead wall (NN)

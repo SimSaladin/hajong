@@ -1,22 +1,22 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE NoImplicitPrelude, OverloadedStrings #-}
+{-# LANGUAGE NoImplicitPrelude, OverloadedStrings, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
 
-import Prelude ((!!))
 import ClassyPrelude hiding (assert)
-import Control.Lens hiding (elements)
-import Control.Concurrent hiding (newMVar, withMVar, modifyMVar_)
+import Control.Lens hiding (elements, snoc, cons)
+import Control.Concurrent (threadDelay, forkIO)
 import Control.Applicative
+import Control.Monad.State  (StateT(..), evalStateT)
+import Control.Monad.Reader (ReaderT(..), runReaderT)
 import Data.Knob
-import Data.Maybe
 import System.IO (IOMode(..))
 import System.IO.Silently
 import System.IO.Temp
-import System.IO.Unsafe
 import System.Posix
 import System.Timeout
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
+import qualified Test.QuickCheck.Property as Q
 
 import CLI
 import Tiles
@@ -35,36 +35,12 @@ main = do
 
 tests :: TestTree
 tests = testGroup "Hajong tests"
-    [ clientCLILoungeTests
-    , clientCLIGameTests
-    , gameTests
-    , prettyPrintTests
-    ]
+    [ clientTests, prettyPrintQC, prettyPrintHUnit, gameTests ]
 
-clientCLILoungeTests :: TestTree
-clientCLILoungeTests = testGroup "CLI Lounge Unit Tests"
-    [ testCase "connect + terminate on q"           $ runClient "" =~ "Connected to server"
-    , testCase "? shows the help message"           $ runClient "?" =~ "Show this help text"
-    , testCase "! shows status as lounge on start"  $ runClient "!" =~ "In lounge"
-    , testCase "<Space>[message] gives prompt"      $ runClient " The message\n" =~ "say:"
-    , testCase "n lists idle users"                 $ runClient "n" =~ "Users idle:"
-    , testCase "g lists games"                      $ runClient "g" =~ "Games"
-    , testCase "c gives create prompt"              $ runClient "cNamed\n" =~ "Game name"
-    , testCase "c doesn't accept empty name"        $ runClient "c \n" =~ "empty"
-    , testCase "j opens join prompt"                $ runClient "j-1\n" =~ "join game"  -- TODO
-    , testCase "r sends a raw command"              $ runClient "rMessage \"from\" \"me\"\n" =~ "send command"
-    ]
+-- * Game
 
-clientCLIGameTests :: TestTree
-clientCLIGameTests = testGroup "CLI In-Game unit tests"
-    [ testCase "joining bogus game raises error"                      $ runClient "j-1\n" =~ "[error]"
-    , testCase "joining game works (NOTE: requires game 0 on server)" $ runClient "j0\n"  =~ "Ready to start game 0"
-    , testCase "game starts when 4 clients have joined" $ return ()
-    ]
-
--- | Tests on pure game
 gameTests :: TestTree
-gameTests = testGroup "Game tests"
+gameTests = testGroup "Pure game state tests"
     [ testCase "New game initialized right" $ do
         (secret, public) <- newRiichiState
 
@@ -82,61 +58,135 @@ gameTests = testGroup "Game tests"
     ]
 
 -- | PrettyPrint
-prettyPrintTests :: TestTree
-prettyPrintTests = testGroup "QC PrettyPrint tests"
-    [ testGroup "PrettyPrint QC"
+prettyPrintHUnit :: TestTree
+prettyPrintHUnit = testGroup "PrettyPrint HUnit"
+    [ testCase "Show and read Hand" $
+        "S1 S2 S3 S4 S5 S6 S7 S8 S9 M1 M2 M3 G! G!" `preadAssert`
+        ( map (flip Sou False) [Ii .. Chuu]
+        <> map (flip Man False) [Ii .. San]
+        <> [Sangen Hatsu, Sangen Hatsu])
 
-        [ testProperty "pread . pshow === id (Hand)" (preadPshowEquals :: Hand -> Bool)
-        , testProperty "pread . pshow === id (Mentsu)" (preadPshowEquals :: Mentsu -> Bool)
-        ]
+    , testCase "Show and read Hand" $
+        "M3-M3-M3" `preadAssert` Koutsu [Man San False, Man San False, Man San False] True
 
-    , testGroup "PrettyPrint HUnit"
+    , testCase "DiscardPileOwn"   $ DiscardPileOwn   souTiles `pshowAssert`
+            "S1 S2 S3 S4 S5 S6\nS7 S8 S9         \n                 "
 
-        [ testCase "Hand PrettyRead and -Print" $ preadAssert "S1 S2 S3 S4 S5 S6 S7 S8 S9 M1 M2 M3 G! G!"
-            $ map (flip Sou False) [Ii .. Chuu] <> map (flip Man False) [Ii .. San] <> [Sangen Hatsu, Sangen Hatsu]
+    , testCase "DiscardPileLeft"  $ DiscardPileLeft  souTiles `pshowAssert`
+            "   S7 S1\n   S8 S2\n   S9 S3\n      S4\n      S5\n      S6"
 
-        , testCase "Mentsu PrettyRead and -Print" $ preadAssert "M3-M3-M3"
-            (Koutsu [Man San True, Man San True, Man San True] True)
-        ]
+    , testCase "DiscardPileRight" $ DiscardPileRight souTiles `pshowAssert`
+            "S6      \nS5      \nS4      \nS3 S9   \nS2 S8   \nS1 S7   "
+
+    , testCase "DiscardPileFront" $ DiscardPileFront souTiles `pshowAssert`
+            "                 \n         S9 S8 S7\nS6 S5 S4 S3 S2 S1"
     ]
 
--- * Game
+prettyPrintQC :: TestTree
+prettyPrintQC = testGroup "PrettyPrint QC"
+    [ testProperty "pread . pshow === id (Hand)"    (preadPshowEquals :: Hand -> Bool)
+    , testProperty "pread . pshow === id (Mentsu)"  (preadPshowEquals :: Mentsu -> Bool)
+    , testProperty "length (pshow Tile) == 2"       ((== 2) . length . pshow :: Tile -> Bool)
+    , testProperty "Pretty discards (own)" $ liftA2 propAllInfixOf (pshow . DiscardPileOwn) (map pshow)
+    , testProperty "Pretty discards (left)" $ liftA2 propAllInfixOf (pshow . DiscardPileLeft) (map pshow)
+    , testProperty "Pretty discards (right)" $ liftA2 propAllInfixOf (pshow . DiscardPileRight) (map pshow)
+    , testProperty "Pretty discards (front)" $ liftA2 propAllInfixOf (pshow . DiscardPileFront) (map pshow)
+    ]
 
 -- | pread . show == id
 preadPshowEquals :: (Eq x, PrettyPrint x, PrettyRead x) => x -> Bool
 preadPshowEquals = liftA2 (==) id (pread . pshow)
 
--- | Assert that pread input == expected
-preadAssert :: (Eq x, PrettyRead x) => Text -> x -> Assertion
-preadAssert input expected = pread input == expected @? "Not as expected: " <> unpack input
+propAllInfixOf :: Text -> [Text] -> Property
+propAllInfixOf result xs = conjoin $ flip map xs $
+    \x -> if x `isInfixOf` result
+              then Q.succeeded
+              else Q.failed { Q.reason = unpack $ x <> " not found in result" }
 
-randomHand :: Hand
-randomHand = unsafePerformIO newRiichiState & fromJust . view (_1.riichiHands.at 0)
+-- | Assert that pread input == expected and input == pshow expected
+preadAssert :: (Show x, Eq x, PrettyRead x, PrettyPrint x) => Text -> x -> Assertion
+preadAssert input expected =
+    let calculated = pread input
+    in (calculated == expected && input == pshow expected) @? (unpack . unlines)
+        [ "Input:         " <> input
+        , "Expected:      " <> tshow expected
+        , "Input read:    " <> tshow calculated
+        , "Expected read: " <> pshow expected
+        ]
+
+pshowAssert :: (Show x, PrettyPrint x) => x -> Text -> Assertion
+pshowAssert x expected = pshow x == expected @? (unpack . unlines)
+    [ "= Read ="    , cons '"' . flip snoc '"' $ pshow x
+    , "= Expected =", cons '"' . flip snoc '"' $ expected
+    , "Value: " <> tshow x
+    ]
+
+souTiles :: [Tile]
+souTiles = map (flip Sou False) [Ii .. Chuu]
 
 -- * Client
 
+-- | Tests for client side
+clientTests :: TestTree
+clientTests = testGroup "Client tests"
+    [ clientCLILoungeTests
+    , clientCLIGameTests
+    ]
+
+clientCLILoungeTests :: TestTree
+clientCLILoungeTests = testGroup "CLI Lounge Unit Tests"
+    [ testCase "connect + terminate on q"           $ runClient [   ]                           =~ "Connected to server"
+    , testCase "? shows the help message"           $ runClient ["?"]                           =~ "Show this help text"
+    , testCase "! shows status as lounge on start"  $ runClient ["!"]                           =~ "In lounge"
+    , testCase "<Space>[message] gives prompt"      $ runClient [" ","The message"]             =~ "say:"
+    , testCase "n lists idle users"                 $ runClient ["n"]                           =~ "Users idle:"
+    , testCase "g lists games"                      $ runClient ["g"]                           =~ "ames"
+    , testCase "c gives create prompt"              $ runClient ["c","Named"]                   =~ "Game name"
+    , testCase "c doesn't accept empty name"        $ runClient ["c"," "]                       =~ "empty"
+    , testCase "j opens join prompt"                $ runClient ["j","-1"]                      =~ "join game"  -- TODO
+    , testCase "r sends a raw command"              $ runClient ["r","Message \"from\" \"me\""] =~ "send command"
+    ]
+
+clientCLIGameTests :: TestTree
+clientCLIGameTests = testGroup "CLI In-Game unit tests"
+    [ testCase "joining bogus game raises error"                      $ runClient ["j","-1" ] =~ "[error]"
+    , testCase "joining game works (NOTE: requires game 0 on server)" $ runClient ["j","0"]   =~ "Joined the game"
+    , testCase "game starts when 4 clients have joined" $ return ()
+    ]
+
+type ClientInputDummy = StateT (MVar Text, TChan Text) (ReaderT ClientState IO)
+
+instance ClientOutput ClientInputDummy where
+    outAll xs = do
+        chan <- use _2
+        liftIO . atomically $ mapM_ (writeTChan chan) xs
+
+instance ClientInput ClientInputDummy where
+    askChar   prompt   = out prompt >> use _1 >>= liftIO . takeMVar & liftM (Just . unsafeHead)
+    withParam prompt f = out prompt >> use _1 >>= liftIO . takeMVar >>= f
+
+runClient :: [Text] -> IO Text
+runClient xs = do
+    inputVar <- newEmptyMVar
+    _ <- forkIO $ mapM_ (\x -> threadDelay 500000 >> putMVar inputVar x) $ xs ++ ["q"]
+    runClient' inputVar <&> unlines
+
+runClient' :: MVar Text -> IO [Text]
+runClient' inputVar = do
+    outputChan <- newBroadcastTChanIO
+    outputReadChan <- atomically $ dupTChan outputChan
+
+    let runDummy ma = runReaderT $ evalStateT ma (inputVar, outputChan)
+        loop        = inputLoop loop
+
+    clientMain' (runDummy loop) (runDummy clientReceiver)
+
+    let readChan = tryReadTChan outputReadChan >>= maybe (return []) (\x -> (x :) <$> readChan)
+        in atomically readChan
+
+-- | "action =~ expected" => expected `isInfixOf` (result of action)
 (=~) :: IO Text -> Text -> IO ()
 f =~ t = f >>= \res -> isInfixOf t res @? unpack (unlines ["== Got ==", res, "\n== Expected ==", t])
-
--- | Run a client with predefined input
-runClient :: ByteString -> IO Text
-runClient input = do
-    putStrLn "runClient"
-    (fpRes, hRes) <- openTempFile "/tmp" "hajong-test-res.log"
-    hClose (fpRes `seq` hRes)
-
-    pid <- forkProcess $ clientProcess fpRes input
-    _ <- getProcessStatus True False pid
-
-    finally (readFile $ fpFromString fpRes) (removeLink fpRes)
-
-clientProcess :: String -> ByteString -> IO ()
-clientProcess fp input = do
-    k <- newKnob (input <> "q")
-    (theOutput, res) <-
-        withFileHandle k "knob" ReadMode $
-        capture . timeout 3000000 . clientMain . Just
-    writeFile (fpFromString fp) (theOutput <> if isNothing res then "Client didn't terminate" else "")
 
 -- * Server
 

@@ -40,8 +40,13 @@ newClientState conn nick = ClientState conn nick
     <*> newMVar True
     <*> newMVar (-1)
 
+-- ** Typeclass hackery
+
+type Client a = ClientOutput m => m a
+type UI     a = ClientInput m => m a
+
 class ( Functor m, Applicative m, Monad m
-      , MonadIO m, MonadException m
+      , MonadIO m
       , MonadReader ClientState m
       ) => ClientOutput m where
     emit :: Event -> m ()
@@ -50,7 +55,42 @@ class ( Functor m, Applicative m, Monad m
     out :: Text -> m ()
     out x = outAll [x]
 
--- listener instance: no InputT
+class ClientOutput m => ClientInput m where
+    askChar     :: Text -> m (Maybe Char)
+    withParam   :: Text -> (Text -> m ()) -> m ()
+
+-- *** Real console input and output
+
+consoleInput :: InputT (ReaderT ClientState IO) ()
+consoleInput = withInterrupt loop
+    where
+        loop = handle interrupt (inputLoop loop)
+        interrupt Interrupt = do
+            chan <- view clientReceiveChan
+            mline <- liftIO $ atomically $ tryReadTChan chan
+            maybe loop (\line -> out line >> interrupt Interrupt) mline
+
+instance ClientOutput (InputT (ReaderT ClientState IO)) where
+    outAll = mapM_ (outputStrLn . unpack)
+instance ClientInput (InputT (ReaderT ClientState IO)) where
+    askChar = getInputChar . unpack
+    withParam prompt ma =
+        uninterrupted $ do
+            line <- getInputLine (unpack prompt) <&> fmap pack
+            maybe (return ()) ma line
+      where
+        uninterrupted f = do
+            ivar <- view clientCanInterrupt
+            (liftIO (swapMVar ivar False) >> f) `finally`
+                -- throw interrupt to print stuff from queue after the action.
+                (liftIO (swapMVar ivar True)
+                >> view clientMainThread >>= liftIO . (`throwTo` Interrupt))
+instance MonadReader ClientState (InputT (ReaderT ClientState IO)) where
+    ask = lift ask
+    local _ _ = error "local not implemented"
+
+-- *** Real listener instance
+
 instance ClientOutput (ReaderT ClientState IO) where
     -- Print to main thread's haskeline via a chan from any thread.
     outAll xs = do
@@ -59,25 +99,6 @@ instance ClientOutput (ReaderT ClientState IO) where
 
         interrupt <- rview clientCanInterrupt
         when interrupt $ view clientMainThread >>= liftIO . (`throwTo` Interrupt)
-
-class ClientOutput m => ClientInput m where
-    askParam :: Text -> m (Maybe Text)
-    askChar :: Text -> m (Maybe Char)
-
-instance ClientInput (InputT (ReaderT ClientState IO)) where
-    askParam prompt = getInputLine (unpack prompt) <&> fmap pack
-    askChar = getInputChar . unpack
-
--- UI instance: InputT and state access
-instance ClientOutput (InputT (ReaderT ClientState IO)) where
-    outAll = mapM_ (outputStrLn . unpack)
-
-instance MonadReader ClientState (InputT (ReaderT ClientState IO)) where
-    ask = lift ask
-    local _ _ = error "local not implemented"
-
-type Client a = ClientOutput m => m a
-type UI     a = ClientInput m => m a
 
 -- * Helpers
 
@@ -90,27 +111,21 @@ rswap l a = view l >>= liftIO . (`swapMVar` a)
 rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
 rmodify l f = view l >>= liftIO . (`modifyMVar_` f)
 
-askParam' :: ClientInput m => Text -> (Text -> m ()) -> m ()
-askParam' prompt f = askParam prompt >>= maybe (return ()) f
-
-uninterrupted :: ClientInput m => m a -> m a
-uninterrupted f = do
-    ivar <- view clientCanInterrupt
-    (liftIO (swapMVar ivar False) >> f) `finally`
-        -- throw interrupt to print stuff from queue after the action.
-        (liftIO (swapMVar ivar True)
-        >> view clientMainThread >>= liftIO . (`throwTo` Interrupt))
-
 -- * App
 
+-- | Run client with console IO.
 clientMain :: Maybe Handle -> IO ()
-clientMain mhandle = WS.runClient "localhost" 9160 "/" $ clientApp input listener
+clientMain mhandle = clientMain' input listener
     where
         listener    = runReaderT clientReceiver
         input state = flip runReaderT state $ runInputTBehavior
             (maybe defaultBehavior useFileHandle mhandle)
             defaultSettings
             consoleInput
+
+-- | Run client with given IO functions.
+clientMain' :: (ClientState -> IO ()) -> (ClientState -> IO ()) -> IO ()
+clientMain' input = WS.runClient "localhost" 9160 "/" . clientApp input
 
 clientApp :: (ClientState -> IO ()) -- ^ Input loop
           -> (ClientState -> IO ()) -- ^ Server listener
@@ -121,7 +136,6 @@ clientApp input listener conn = do
     ident <- liftM pack $ replicateM 5 $ randomRIO ('a', 'z')
 
     state <- newClientState conn ident
-    putStrLn "Connected to server. Type ? for a list of available commands."
 
     -- Start server listener
     listenerDone <- newEmptyMVar 
@@ -136,17 +150,7 @@ clientApp input listener conn = do
     -- cleanup
     WS.sendClose conn (PartServer "Bye")
     _ <- killThread listenerThread >> takeMVar listenerDone
-    putStrLn "Exited cleanly"
-
-consoleInput :: InputT (ReaderT ClientState IO) ()
-consoleInput = withInterrupt loop
-    where
-        loop = handle interrupt (inputLoop loop)
-
-        interrupt Interrupt = do
-            chan <- view clientReceiveChan
-            mline <- liftIO $ atomically $ tryReadTChan chan
-            maybe loop (\line -> out line >> interrupt Interrupt) mline
+    return ()
 
 -- * User input
 
@@ -161,16 +165,16 @@ inputLoop loop = do
 inputHandler :: ClientInput m => Char -> m ()
 inputHandler '?' = printHelp
 inputHandler '!' = printStatus
-inputHandler ' ' = uninterrupted chatMessage
+inputHandler ' ' = chatMessage
 inputHandler  x  = do
     inGame <- rview clientGame
     if isJust inGame then gameHandler x else loungeHandler x
     where
         loungeHandler 'n' = printUsers
         loungeHandler 'g' = printGames
-        loungeHandler 'c' = uninterrupted createGame
-        loungeHandler 'j' = uninterrupted joinGame
-        loungeHandler 'r' = uninterrupted rawCommand
+        loungeHandler 'c' = createGame
+        loungeHandler 'j' = joinGame
+        loungeHandler 'r' = rawCommand
         loungeHandler  _  = unknownCommand
 
         gameHandler 'p' = undefined
@@ -239,27 +243,27 @@ printStatus = do
         Just _  -> out $ "In game n." <> tshow gameWait
 
 chatMessage :: ClientInput m => m ()
-chatMessage = askParam' "say: " send
+chatMessage = withParam "say: " send
     where
         send ""  = return ()
         send msg = emit $ Message "" msg
 
 createGame :: ClientInput m => m ()
-createGame = askParam' "Game name: " $ \name ->
+createGame = withParam "Game name: " $ \name ->
         let name' = T.dropWhileEnd (== ' ') $ T.dropWhile (== ' ') name
             in case name' of
                  "" -> out "Name cannot be empty"
                  _  -> emit $ CreateGame name'
 
 joinGame :: ClientInput m => m ()
-joinGame = printGames >> askParam' "join game: " go
+joinGame = printGames >> withParam "join game: " go
     where
         go str = case readMay str of
             Nothing -> out $ "NaN: " <> str
             Just n  -> emit $ JoinGame n ""
 
 rawCommand :: ClientInput m => m ()
-rawCommand = askParam' "send command: " go
+rawCommand = withParam "send command: " go
     where
         go str = case readMay str of
             Nothing -> out "Command not recognized"
@@ -267,8 +271,9 @@ rawCommand = askParam' "send command: " go
 
 -- * Server listener
 
-clientReceiver :: ReaderT ClientState IO ()
+clientReceiver :: ClientOutput m => m ()
 clientReceiver = do
+    out "Connected to server. Type ? for help."
     conn <- view clientConn
     forever $ liftIO (WS.receiveData conn) >>= clientEventHandler
 
