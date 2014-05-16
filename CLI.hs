@@ -23,7 +23,7 @@ data ClientState = ClientState
                  , _clientNick         :: Text
                  , _clientMainThread   :: ThreadId
                  , _clientLounge       :: MVar Lounge
-                 , _clientGame         :: MVar (Maybe (RiichiPlayer, [Nick]))
+                 , _clientGame         :: MVar (Maybe (GamePlayer Nick))
                  , _clientReceiveChan  :: TChan Text
                  , _clientCanInterrupt :: MVar Bool
                  , _clientWaiting      :: MVar Int
@@ -202,8 +202,8 @@ shortStatus = do
 
 discardTile :: ClientInput m => Int -> Bool -> m ()
 discardTile n riichi = do
-    game <- rview clientGame <&>  (^._1) . (^?! _Just)
-    let tiles = game^.riichiHand.handConcealed ++ maybeToList (game^.riichiHand.handPick)
+    game <- rview clientGame <&> (^?! _Just)
+    let tiles = game^.playerMyHand.handConcealed ++ maybeToList (game^.playerMyHand.handPick)
     case tiles ^? traversed.index n of
         Nothing   -> out $ "No tile at index " <> tshow n
         Just tile -> emit $ GameAction $ ($ tile) $ if riichi then TurnRiichi else TurnDiscard
@@ -353,9 +353,9 @@ startGame = do
 
 printGameState :: Client ()
 printGameState = do
-    Just (game, nicks) <- rview clientGame
-    let public = game ^. riichiPublic
-    undefined
+    Just game <- rview clientGame
+    let public = game ^. playerPublic
+    out $ pshow game
 
 ppGame :: Int -> (Text, Set Nick) -> Text
 ppGame n (name,nicks) = mconcat ["(", tshow n, ") ", name, " [", ppNicks nicks, "]"]

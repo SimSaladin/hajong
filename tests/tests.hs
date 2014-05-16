@@ -8,6 +8,7 @@ import Control.Applicative
 import Control.Monad.State  (StateT(..), evalStateT)
 import Control.Monad.Reader (ReaderT(..), runReaderT)
 import Data.Knob
+import Data.Maybe (fromJust)
 import System.IO (IOMode(..))
 import System.IO.Silently
 import System.IO.Temp
@@ -80,6 +81,11 @@ prettyPrintHUnit = testGroup "PrettyPrint HUnit"
 
     , testCase "DiscardPileFront" $ DiscardPileFront souTiles `pshowAssert`
             "                 \n         S9 S8 S7\nS6 S5 S4 S3 S2 S1"
+
+    , testCase "Complete game"  $ do
+        game <- newGameServer "test game" & gsAddPlayer ("Dummy player" :: Text) & fromJust . gsNewGame . fromJust
+        let Just pstate = gsPlayerLookup game (Player 0)
+        pstate `pshowAssert` ""
     ]
 
 prettyPrintQC :: TestTree
@@ -121,8 +127,8 @@ pshowAssert x expected = pshow x == expected @? (unpack . unlines)
     , "Value: " <> tshow x
     ]
 
-souTiles :: [Tile]
-souTiles = map (flip Sou False) [Ii .. Chuu]
+souTiles :: [(Tile, Maybe Player)]
+souTiles = map (flip (,) Nothing . flip Sou False) [Ii .. Chuu]
 
 -- * Client
 
@@ -217,3 +223,6 @@ instance Arbitrary Mentsu where
              return $ Shuntsu (tile : map (setTileNumber tile) [succ n, succ (succ n)]) True
         ]
 
+
+instance Arbitrary Player where
+    arbitrary = elements defaultPlayers
