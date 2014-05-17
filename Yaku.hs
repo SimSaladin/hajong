@@ -6,6 +6,8 @@ import qualified Data.List as L
 
 type CompleteHand = [Mentsu]
 
+-- * Mentsu splitting
+
 -- [ [ [ Mentsu ] ] ] -> [CompleteHand] : [[Mentsu]]
 -- ^ ^ ^ possibility
 -- | \ list of possible within group
@@ -65,13 +67,17 @@ data Yaku = Yaku
           , _yakuOpen :: Maybe Int
           }
 
-data YakuBuilder next = YakuPart [Tile] Mentsu next
-                      | YakuMatch Int
+data YakuChecker next = YakuMentsu Mentsu next
+                      | YakuProperty () next -- todo
+                      | YakuMatches
                       | YakuNot
 
--- instance Functor YakuBuilder where
---     fmap f (YakuPart tiles mentsu next) = YakuPart tiles mentsu (f next)
---     fmap f                            x = x
+instance Functor YakuChecker where
+    fmap f (YakuMentsu mentsu next) = YakuMentsu mentsu (f next)
+    fmap f (YakuProperty p next)    = YakuProperty p (f next)
+    fmap f x                        = x
+
+type AYaku = Free YakuChecker
 
 -- list plausible yaku combinations
 getYaku :: [Tile] -> [[Yaku]]

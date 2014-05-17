@@ -17,29 +17,25 @@ data Tile = Man Number Bool
           | Sou Number Bool
           | Sangen Sangenpai
           | Kaze Kazehai
-          deriving (Show, Read, Eq)
-
-instance Ord Tile where
-    compare (Man x _) (Man y _)   = compare x y
-    compare (Pin x _) (Pin y _)   = compare x y
-    compare (Sou x _) (Sou y _)   = compare x y
-    compare (Kaze x) (Kaze y)     = compare x y
-    compare (Sangen x) (Sangen y) = compare x y
-    compare (Man _ _) _           = LT
-    compare (Pin _ _) (Man _ _)   = GT
-    compare (Pin _ _) _           = LT
-    compare (Sou _ _) (Man _ _)   = GT
-    compare (Sou _ _) (Pin _ _)   = GT
-    compare (Sou _ _) _           = LT
-    compare (Kaze _) (Sangen _)   = LT
-    compare (Kaze _) _            = GT
-    compare (Sangen _) _          = GT
+          deriving (Show, Read, Eq, Ord)
 
 data Mentsu = Shuntsu { mentsuPai :: [Tile], mentsuOpen :: Bool }  -- straight
             | Koutsu  { mentsuPai :: [Tile], mentsuOpen :: Bool } -- triplet
             | Kantsu  { mentsuPai :: [Tile], mentsuOpen :: Bool } -- quadret
             | Jantou  { mentsuPai :: [Tile], mentsuOpen :: Bool } -- pair
-            deriving (Show, Read, Eq)
+            deriving (Show, Read, Eq, Ord)
+
+koutsu :: [Tile] -> Mentsu
+koutsu = flip Koutsu False
+
+kantsu :: [Tile] -> Mentsu
+kantsu = flip Kantsu False
+
+jantou :: [Tile] -> Mentsu
+jantou = flip Jantou False
+
+shuntsu :: [Tile] -> Mentsu
+shuntsu = flip Shuntsu False
 
 riichiTiles :: [Tile]
 riichiTiles = join . replicate 4 $ 

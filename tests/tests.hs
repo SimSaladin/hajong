@@ -168,18 +168,29 @@ fullState = (secret, public)
 yakuTests :: TestTree
 yakuTests = testGroup "Yaku and mentsu" 
     [ testCase "M1-M1-M1 is koutsu" $ mentsuAssert "M1 M1 M1" [[koutsu $ pread "M1 M1 M1"]]
+
     , testProperty "Any triplet is koutsu" $ \t ->
-        let tiles = (replicate 3 t) in mentsuAre tiles [[koutsu tiles]]
+        let tiles = replicate 3 t
+            in mentsuAre tiles [[koutsu tiles]]
+
     , testProperty "Any quadret is koutsu and kantsu" $ \t ->
-        let tiles = (replicate 4 t) in mentsuAre tiles [[koutsu $ drop 1 tiles, kantsu tiles]]
+        let tiles = replicate 4 t
+            in mentsuAre tiles [[kantsu tiles], replicate 2 (jantou $ take 2 tiles)]
+
+    , testProperty "Any a, a+1, a+2 sequence (for a <= 7) of tiles is a single shuntsu" $ \tile ->
+        let tiles = [tile, fromJust (tileSucc tile), fromJust (tileSucc tile >>= tileSucc)]
+            in tileSuited tile && tileNumber tile <= Chii
+                ==> mentsuAre tiles [[shuntsu tiles]]
+
+    , testProperty "Two koutsu, different suit" $ \(t, r) ->
+        let tiles = replicate 3 t ; riles = replicate 3 r
+            in not (compareSuit t r)
+                ==> mentsuAre (tiles ++ riles) [[koutsu tiles, koutsu riles]]
     ]
 
 mentsuAre :: [Tile] -> [[Mentsu]] -> Property
-mentsuAre tiles expected = calculated === expected
+mentsuAre tiles expected = sort (map sort calculated) === sort (map sort expected)
     where calculated = getMentsu tiles
-
-koutsu = flip Koutsu False
-kantsu = flip Kantsu False
 
 mentsuAssert :: Text -> [[Mentsu]] -> Assertion
 mentsuAssert txt xs =
