@@ -13,24 +13,20 @@ type CompleteHand = [Mentsu]
 
 mentsuSearch :: [Tile] -> [CompleteHand]
 mentsuSearch =
-    mapMaybe isComplete . buildVariations 
-    . map (map fst . getMentsu) 
-    . groupBy compareSuit 
-    . sort
+    mapMaybe isComplete . buildVariations . map getMentsu . groupBy compareSuit . sort
 
 buildVariations :: [[[Mentsu]]] -> [CompleteHand]
 buildVariations = go
     where go (x : xs) = x >>= (`map` go xs) . (++)
           go []       = []
 
-getMentsu :: [Tile] -> [([Mentsu], [Tile])] -- (mentsu, leftovers)
-getMentsu tiles = go ([], tiles)
+-- | This gets only total mentsu: no orphan tiles are left in the result.
+getMentsu :: [Tile] -> [[Mentsu]]
+getMentsu tiles = map fst $ go ([], tiles)
     where 
-        go :: ([Mentsu], [Tile]) -> [([Mentsu], [Tile])]
+        go :: ([Mentsu], [Tile]) -> [([Mentsu], [Tile])] -- (mentsu, leftovers)
         go (done, xs@(a:b:es)) = let
 
-            s             = tileSucc a
-            t             = tileSucc b
             takingJantou  = if a == b then go (Jantou [a,b] False : done, es) ++ takingKoutsu else []
             takingKoutsu  = case es of
                 (c:es') | c == a      -> go (Koutsu [a,b,c] False : done, es') ++ takingKantsu
@@ -40,9 +36,13 @@ getMentsu tiles = go ([], tiles)
                 (c:d:es') | c == d    -> go (Kantsu [a,b,c,d] False : done, es')
                           | otherwise -> []
                 _                     -> []
-            takingShuntsu = if tileSuited a && s `elem` xs && t `elem` xs 
-                               then go (Shuntsu [a,s,t] False : done, xs L.\\ [a,s,t])
-                               else []
+            takingShuntsu = case (tileSucc a, tileSucc a >>= tileSucc) of
+                (Just r, Just s)
+                    | tileSuited a && r `elem` xs && s `elem` xs -> 
+                        go (Shuntsu [a,r,s] False : done, xs L.\\ [a,r,s])
+                    | otherwise -> []
+                _ -> []
+
             in takingJantou ++ takingShuntsu
 
         go (done, []) = [(done, [])]

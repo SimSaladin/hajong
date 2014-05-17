@@ -4,13 +4,13 @@ import ClassyPrelude
 
 
 data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
-            deriving (Show, Read, Eq, Ord, Enum)
+            deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 data Sangenpai = Haku | Hatsu | Chun
-               deriving (Show, Read, Eq, Ord, Enum)
+               deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 data Kazehai = Ton | Nan | Shaa | Pei
-             deriving (Show, Read, Eq, Ord, Enum)
+             deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 data Tile = Man Number Bool
           | Pin Number Bool
@@ -74,7 +74,12 @@ compareSuit (Sangen _) (Sangen _) = True
 compareSuit (Kaze _) (Kaze _)     = True
 compareSuit _ _                   = False
 
-tileSucc :: Tile -> Tile
-tileSucc (Kaze kaze)     = Kaze (succ kaze)
-tileSucc (Sangen sangen) = Sangen (succ sangen)
-tileSucc tile            = setTileNumber tile $ succ $ tileNumber tile
+tileSucc :: Tile -> Maybe Tile
+tileSucc (Kaze kaze)
+                | kaze == maxBound           = Nothing
+                | otherwise                  = Just $ Kaze (succ kaze)
+tileSucc (Sangen sangen)
+               | sangen == maxBound          = Nothing
+               | otherwise                   = Just $ Sangen (succ sangen)
+tileSucc tile  | tileNumber tile == maxBound = Nothing
+               | otherwise                   = Just $ setTileNumber tile $ succ $ tileNumber tile

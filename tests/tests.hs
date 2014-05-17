@@ -18,6 +18,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 import qualified Test.QuickCheck.Property as Q
+import qualified Data.List as L
 
 import CLI
 import Tiles
@@ -166,9 +167,24 @@ fullState = (secret, public)
 
 yakuTests :: TestTree
 yakuTests = testGroup "Yaku and mentsu" 
-    [ testCase "M1-M1-M1 is koutsu" $ let tiles = pread "M1 M1 M1"
-        in mentsuSearch tiles @?= [Koutsu tiles False]
+    [ testCase "M1-M1-M1 is koutsu" $ mentsuAssert "M1 M1 M1" [[koutsu $ pread "M1 M1 M1"]]
+    , testProperty "Any triplet is koutsu" $ \t ->
+        let tiles = (replicate 3 t) in mentsuAre tiles [[koutsu tiles]]
+    , testProperty "Any quadret is koutsu and kantsu" $ \t ->
+        let tiles = (replicate 4 t) in mentsuAre tiles [[koutsu $ drop 1 tiles, kantsu tiles]]
     ]
+
+mentsuAre :: [Tile] -> [[Mentsu]] -> Property
+mentsuAre tiles expected = calculated === expected
+    where calculated = getMentsu tiles
+
+koutsu = flip Koutsu False
+kantsu = flip Kantsu False
+
+mentsuAssert :: Text -> [[Mentsu]] -> Assertion
+mentsuAssert txt xs =
+        let tiles = pread txt
+            in getMentsu tiles @?= xs
 
 
 -- * Client
