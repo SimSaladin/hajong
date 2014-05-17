@@ -7,10 +7,10 @@ data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
             deriving (Show, Read, Eq, Ord, Enum)
 
 data Sangenpai = Haku | Hatsu | Chun
-               deriving (Show, Read, Eq, Enum)
+               deriving (Show, Read, Eq, Ord, Enum)
 
 data Kazehai = Ton | Nan | Shaa | Pei
-             deriving (Show, Read, Eq, Enum)
+             deriving (Show, Read, Eq, Ord, Enum)
 
 data Tile = Man Number Bool
           | Pin Number Bool

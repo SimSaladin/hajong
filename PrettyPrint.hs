@@ -15,14 +15,75 @@ class PrettyPrint x where
 class PrettyRead x where
     pread :: Text -> x
 
+-- * Functions
+ 
+breakGamePlayer :: GamePlayer Text -> [(Player, Maybe Text, Points, HandPublic)]
+breakGamePlayer pstate = zipWith (\(player, mnick, points) (_, hand) -> (player, mnick, points, hand))
+      (_playerPlayers pstate)
+      (itoList $ _playerPublicHands pstate)
+
+-- | "pushToPlace src (y, x) dest" puts src start at row y and column x in
+-- dest character matrix. dest is possibly grown in both directions in
+-- order to fit src to it.
+pushToPlace :: Text -> (Int, Int)-> [Text] -> [Text]
+pushToPlace text (y, x) = goy y
+    where
+        goy 0 texts         = zipWith gox (srcs ++ repeat "") (texts ++ replicate (length srcs - length texts) "")
+        goy y' (txt : txts) = txt : goy (y' - 1) txts
+        goy y' _            = ""  : goy (y' - 1) []
+
+        srcs = lines text
+
+        gox src dest = let (a, b) = splitAt x dest & _1%~justifyLeft x ' '
+                                                   & _2%~snd.splitAt (length src)
+                           in a <> src <> b
+
+-- | In order mine-right-front-left
+mapPositions :: (PrettyPrint (PosMine x), PrettyPrint (PosRight x), PrettyPrint (PosLeft x), PrettyPrint (PosFront x))
+             => [x] -> [Text]
+mapPositions = zipWith ($)
+    [ pshow . PosMine
+    , pshow . PosRight
+    , pshow . PosFront
+    , pshow . PosLeft ]
+
+discardHelper :: (Text -> Text) -> [[(Tile, Maybe Player)]] -> Text
+discardHelper f = intercalate "\n" . map (f . unwords . map (pshow . fst))
+
+-- | helper function for discard pretty printers
+discardSplit :: [a] -> [[a]]
+discardSplit = (\(xs, x) -> xs ++ [x]) . over _2 join . splitAt 2 . L.chunksOf 6
+
+-- | Nick and points justified
+pinfoNickPoints :: Int -> PInfo -> Text
+pinfoNickPoints n (_, nick, points, _) = intercalate "\n" $ map (justifyRight n ' ')
+    [ pshow (PNick nick), pshow (PPoints points) ]
+
+-- * Related types 
+
+type PInfo = (Player, Maybe Text, Points, HandPublic)
+
+newtype PPoints = PPoints Int
+
+newtype PNick = PNick (Maybe Text)
+
 type Discards = [(Tile, Maybe Player)]
 
+-- * Positional
+-- | Pos-wrappers are used to indicate the position of an object in the
+-- game table.
 newtype PosMine a  = PosMine { posMine :: a } deriving (Show, Read)
 newtype PosFront a = PosFront { posFront :: a } deriving (Show, Read)
 newtype PosLeft a  = PosLeft { posLeft :: a } deriving (Show, Read)
 newtype PosRight a = PosRight { posRight :: a } deriving (Show, Read)
 
--- Player
+----------------------------------------------------------
+
+
+-- Instances
+
+
+-- Player Info
 
 instance PrettyPrint (GamePlayer Text) where
     pshow = do
@@ -38,8 +99,9 @@ instance PrettyPrint (GamePlayer Text) where
         let [dmine, dright, dfront, dleft]             = mapPositions (players ^.. each._4.handDiscards)
             [openMine, openRight, openFront, openLeft] = map pshow (players ^.. each._4.handOpen)
             [infoMine, infoRight, infoFront, infoLeft] = mapPositions (players ^.. each)
+            [_, handRight, handFront, handLeft]        = mapPositions (players ^.. each._4.handOpen.to (OtherConceal . (*3) . length))
 
-        return $ unlines $ replicate 26 (justifyRight 46 ' ' "")
+        return $ unlines $ []
                 & pushToPlace dora      (12, 24) 
                 & pushToPlace wallCount (10, 24)
                 & pushToPlace dmine     (15, 22) 
@@ -53,68 +115,30 @@ instance PrettyPrint (GamePlayer Text) where
                 & pushToPlace openLeft  (16, 1 )
                 & pushToPlace infoMine  (23, 9 )
                 & pushToPlace infoRight (7 , 51)
-                & pushToPlace infoFront (3 , 17)
+                & pushToPlace infoFront (2 , 17)
                 & pushToPlace infoLeft  (6 , 2 )
- 
-breakGamePlayer :: GamePlayer Text -> [(Player, Maybe Text, Points, HandPublic)]
-breakGamePlayer pstate = zipWith (\(player, mnick, points) (_, hand) -> (player, mnick, points, hand))
-      (_playerPlayers pstate)
-      (itoList $ _playerPublicHands pstate)
-
--- |
-pushToPlace :: Text -> (Int, Int)-> [Text] -> [Text]
-pushToPlace text (y, x) = goy y
-    where
-        goy 0 texts         = zipWith gox (lines text ++ repeat "") texts
-        goy y' (txt : txts) = txt : goy (y' - 1) txts
-        goy y' _            = ""  : goy (y' - 1) []
-
-        gox src dest = let (a, b) = splitAt x dest
-                           (_, c) = splitAt (length src) b
-                           in a <> src <> c
-
--- | In order mine-right-front-left
-mapPositions :: (PrettyPrint (PosMine x), PrettyPrint (PosRight x), PrettyPrint (PosLeft x), PrettyPrint (PosFront x))
-             => [x] -> [Text]
-mapPositions = zipWith ($)
-    [ pshow . PosMine
-    , pshow . PosRight
-    , pshow . PosFront
-    , pshow . PosLeft ]
-
--- Player Info
-
-type PInfo = (Player, Maybe Text, Points, HandPublic)
+                & pushToPlace handRight (6 , 11)
+                & pushToPlace handFront (4 , 17)
+                & pushToPlace handLeft  (7 , 49)
 
 instance PrettyPrint (PosMine PInfo) where
-    pshow (PosMine (player, mnick, points, _)) =
-        pshow player
-        <> "  " <> pshow (PNick mnick)
-        <> "  " <> pshow (PPoints points)
+    pshow (PosMine info) = let player = pshow (info^._1)
+                               in player <> drop (length player) (pinfoNickPoints 28 info)
 
-instance PrettyPrint (PosLeft PInfo) where
-    pshow (PosLeft (player, mnick, points, _)) =
-        pshow player
-        <> "\n\n " <> pshow (PNick mnick)
-        <> "\n\n " <> pshow (PPoints points)
-
-instance PrettyPrint (PosRight PInfo) where
-    pshow (PosRight (player, mnick, points, _)) =
-        justifyRight 9 ' ' (pshow player)
-        <> "\n\n" <> pshow (PNick mnick)
-        <> "\n\n" <> pshow (PPoints points)
-
-instance PrettyPrint (PosFront PInfo) where
-    pshow (PosFront info) = pshow (PosMine info)
-
-
-newtype PPoints = PPoints Int
-newtype PNick = PNick (Maybe Text)
+instance PrettyPrint (PosLeft PInfo)  where pshow (PosLeft info)  = pshow (info^._1) <> "\n\n" <> pinfoNickPoints 8 info
+instance PrettyPrint (PosRight PInfo) where pshow (PosRight info) = pshow (info^._1) <> "\n\n" <> pinfoNickPoints 8 info
+instance PrettyPrint (PosFront PInfo) where pshow (PosFront info) = pshow (PosMine info)
 
 instance PrettyPrint PPoints    where pshow (PPoints points) = "(" <> tshow points <> ")"
-instance PrettyPrint PNick      where pshow (PNick mnick) = fromMaybe "<nobody>" mnick
-instance PrettyPrint Player     where pshow (Player n) = tshow n -- TODO this should be the kaze
+instance PrettyPrint PNick      where pshow (PNick mnick)    = fromMaybe "<nobody>" mnick
+instance PrettyPrint Player     where pshow (Player kaze)    = tshow kaze <> " (" <> take 1 (pshow $ Kaze kaze) <> ")"
 
+newtype OtherConceal = OtherConceal  Int
+
+instance PrettyPrint (PosMine  OtherConceal) where pshow (PosMine (OtherConceal _))  = error "No PrettyPrint for (OtherConceael PosMine)"
+instance PrettyPrint (PosRight OtherConceal) where pshow (PosRight (OtherConceal n)) = intersperse '\n' $ replicate n '|'
+instance PrettyPrint (PosLeft  OtherConceal) where pshow (PosLeft (OtherConceal n))  = intersperse '\n' $ replicate n '|'
+instance PrettyPrint (PosFront OtherConceal) where pshow (PosFront (OtherConceal n)) = mconcat (replicate n "_ " :: [Text])
 
 -- Hand
 
@@ -144,13 +168,6 @@ instance PrettyPrint (PosRight Discards) where pshow (PosRight tiles) = discardH
 instance PrettyPrint (PosFront Discards) where pshow (PosFront tiles) = discardHelper (justifyRight (6*3-1) ' ') $ reverse $ reverse <$> discardSplit tiles
 --        $ filter (isn't _Nothing . view _2) -- plant this to indicate
 --        shouts
-
-discardHelper :: (Text -> Text) -> [[(Tile, Maybe Player)]] -> Text
-discardHelper f = intercalate "\n" . map (f . unwords . map (pshow . fst))
-
--- | helper function for discard pretty printers
-discardSplit :: [a] -> [[a]]
-discardSplit = (\(xs, x) -> xs ++ [x]) . over _2 join . splitAt 2 . L.chunksOf 6
 
 -- Tile
 

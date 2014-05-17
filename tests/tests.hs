@@ -77,12 +77,12 @@ prettyPrintHUnit = testGroup "PrettyPrint HUnit"
 
     , testCase "Complete game"  $ do
         game <- newGameServer "test game" & gsAddPlayer ("Dummy player" :: Text) & fromJust . gsNewGame . fromJust
-        let Just pstate = gsPlayerLookup game (Player 0)
+        let Just pstate = gsPlayerLookup game (Player Ton)
         pstate `pshowAssert` ""
 
     , testCase "Full print" $ do
         let game = newGameServer "test game" & gsAddPlayer ("Dummy player" :: Text) & set gameState (Just fullState) . fromJust
-            Just playerState = gsPlayerLookup game (Player 0)
+            Just playerState = gsPlayerLookup game (Player Ton)
 
         playerState `pshowAssert` "<state ref>"
     ]
@@ -142,8 +142,8 @@ fullState = (secret, public)
             { _riichiDora          = take 5 $ drop 60 riichiTiles
             , _riichiWallTilesLeft = 10
             , _riichiRound         = Pei
-            , _riichiDealer        = Player 0
-            , _riichiTurn          = Player 0
+            , _riichiDealer        = Player Ton
+            , _riichiTurn          = Player Ton
             , _riichiPoints        = mapFromList $ zip defaultPlayers (repeat 25000)
             , _riichiEvents        = []
             }

@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, NoImplicitPrelude, TemplateHaskell, OverloadedStrings, FlexibleContexts, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ConstraintKinds, NoImplicitPrelude, TemplateHaskell, OverloadedStrings, FlexibleContexts, GeneralizedNewtypeDeriving, StandaloneDeriving #-}
 module Riichi where
 
 import ClassyPrelude
@@ -25,7 +25,8 @@ data GameServer playerID = GameServer
                    , _gameState :: Maybe RiichiState -- maybe in running game
                    }
 
-newtype Player = Player Int deriving (Show, Read, Eq, Ord, Enum)
+newtype Player = Player Kazehai deriving (Show, Read, Eq, Ord)
+deriving instance Enum Player
 
 type RiichiPlayers playerID = [(Player, Maybe playerID, Points)]
 
@@ -104,7 +105,7 @@ makeLenses ''HandPublic
 makeLenses ''Hand
 
 defaultPlayers :: [Player]
-defaultPlayers = [Player 0, Player 1, Player 2, Player 3]
+defaultPlayers = [Player Ton .. Player Pei]
 
 -- * GameMonad
 
@@ -171,8 +172,8 @@ newGame = RiichiPublic
     { _riichiDora          = []
     , _riichiWallTilesLeft = 0
     , _riichiRound         = Ton
-    , _riichiDealer        = Player 0
-    , _riichiTurn          = Player 0
+    , _riichiDealer        = Player Ton
+    , _riichiTurn          = Player Ton
     , _riichiPoints        = Map.fromList $ zip defaultPlayers (repeat 25000)
     , _riichiEvents        = []
     }
