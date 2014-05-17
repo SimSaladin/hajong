@@ -1,0 +1,32 @@
+    mm-mm-mm
+    mm-mm-mm                                    mm-mm-mm
+    mm-mm-mm    N       Player1                 mm-mm-mm-mm
+    mm-mm-mm-mm _ _ _ _ _ _ _ _ _ _ _ _ _       mm-mm-mm-mm
+                                                mm-mm-mm
+ E        |    XX XX XX XX XX XX XX XX      XX  |
+          |          XX XX XX XX XX XX      XX  | W
+          |          XX XX XX XX XX XX      XX  |
+          |  XX XX XX                 XX XX XX  |  
+  Player3 |  XX XX XX  (NN)           XX XX XX  | Player4
+          |  XX XX XX                 XX XX XX  |  
+  (25000) |  XX XX XX Do Ra He Re ..  XX XX XX  | (25000)
+          |  XX XX XX                 XX XX XX  |  
+          |  XX XX XX                 XX XX XX  |  
+          |  XX      XX XX XX XX XX XX          |
+   mm-mm-mm  XX      XX XX XX XX XX XX          |
+   mm-mm-mm  XX      XX XX XX XX XX XX XX XX XX |
+   mm-mm-mm
+mm-mm-mm-mm
+
+   01 02 03 04 05 06 07 08 09 10 11 12 13 : 14  mm-mm-mm-mm
+           S Player3      (25000)               mm-mm-mm
+                                                mm-mm-mm
+                                                mm-mm-mm
+
+    
+
+s:  - mentsu (ankan, open)
+    - discard pile
+    - dead wall (NN)
+    - Dora indicators
+    - player avatars, points, seat winds

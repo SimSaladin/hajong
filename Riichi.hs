@@ -43,10 +43,11 @@ data RiichiSecret = RiichiSecret
 
 data RiichiPublic = RiichiPublic
                  { _riichiDora :: [Tile]
+                 , _riichiWallTilesLeft :: Int
                  , _riichiRound :: Kazehai
                  , _riichiDealer :: Player
-                 , _riichiPoints :: Map Player Points
                  , _riichiTurn :: Player
+                 , _riichiPoints :: Map Player Points
                  , _riichiEvents :: [Either Shout TurnAction]
                  } deriving (Show, Read)
 
@@ -62,7 +63,7 @@ data RoundEvent = RoundAction Player TurnAction
                 | RoundRon Player [Player] -- From, who?
                 | RoundDraw [Player] -- tenpai players
 
--- * Public data types
+-- * Player-specific
 
 -- | State of single player
 data GamePlayer playerID = GamePlayer
@@ -167,18 +168,20 @@ newRiichiState = liftM (`setSecret` newGame) newSecret
 -- | Four-player riichi game
 newGame :: RiichiPublic
 newGame = RiichiPublic
-    { _riichiDora   = []
-    , _riichiRound  = Ton
-    , _riichiDealer = Player 0
-    , _riichiTurn   = Player 0
-    , _riichiPoints = Map.fromList $ zip defaultPlayers (repeat 25000)
-    , _riichiEvents = []
+    { _riichiDora          = []
+    , _riichiWallTilesLeft = 0
+    , _riichiRound         = Ton
+    , _riichiDealer        = Player 0
+    , _riichiTurn          = Player 0
+    , _riichiPoints        = Map.fromList $ zip defaultPlayers (repeat 25000)
+    , _riichiEvents        = []
     }
 
 setSecret :: RiichiSecret -> RiichiPublic -> RiichiState
 setSecret secret public =
-    (secret & set riichiWanpai wanpai', public & set riichiDora [dora])
-    where
+    ( secret & set riichiWanpai wanpai'
+    , public & set riichiDora [dora] & set riichiWallTilesLeft (secret ^. riichiWall.to length)
+    ) where
         (dora : wanpai') = secret ^. riichiWanpai
 
 newSecret :: IO RiichiSecret

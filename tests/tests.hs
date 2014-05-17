@@ -70,22 +70,21 @@ prettyPrintHUnit = testGroup "PrettyPrint HUnit"
     , testCase "Show and read Hand" $
         "M3-M3-M3" `preadAssert` Koutsu [Man San False, Man San False, Man San False] True
 
-    , testCase "DiscardPileOwn"   $ DiscardPileOwn   souTiles `pshowAssert`
-            "S1 S2 S3 S4 S5 S6\nS7 S8 S9         \n                 "
-
-    , testCase "DiscardPileLeft"  $ DiscardPileLeft  souTiles `pshowAssert`
-            "   S7 S1\n   S8 S2\n   S9 S3\n      S4\n      S5\n      S6"
-
-    , testCase "DiscardPileRight" $ DiscardPileRight souTiles `pshowAssert`
-            "S6      \nS5      \nS4      \nS3 S9   \nS2 S8   \nS1 S7   "
-
-    , testCase "DiscardPileFront" $ DiscardPileFront souTiles `pshowAssert`
-            "                 \n         S9 S8 S7\nS6 S5 S4 S3 S2 S1"
+    , testCase "PosMine Discards"  $ PosMine   souTiles `pshowAssert` "S1 S2 S3 S4 S5 S6\nS7 S8 S9         \n                 "
+    , testCase "PosLeft Discards"  $ PosLeft   souTiles `pshowAssert` "   S7 S1\n   S8 S2\n   S9 S3\n      S4\n      S5\n      S6"
+    , testCase "PosRight Discards" $ PosRight  souTiles `pshowAssert` "S6      \nS5      \nS4      \nS3 S9   \nS2 S8   \nS1 S7   "
+    , testCase "PosFront Discards" $ PosFront  souTiles `pshowAssert` "                 \n         S9 S8 S7\nS6 S5 S4 S3 S2 S1"
 
     , testCase "Complete game"  $ do
         game <- newGameServer "test game" & gsAddPlayer ("Dummy player" :: Text) & fromJust . gsNewGame . fromJust
         let Just pstate = gsPlayerLookup game (Player 0)
         pstate `pshowAssert` ""
+
+    , testCase "Full print" $ do
+        let game = newGameServer "test game" & gsAddPlayer ("Dummy player" :: Text) & set gameState (Just fullState) . fromJust
+            Just playerState = gsPlayerLookup game (Player 0)
+
+        playerState `pshowAssert` "<state ref>"
     ]
 
 prettyPrintQC :: TestTree
@@ -93,10 +92,10 @@ prettyPrintQC = testGroup "PrettyPrint QC"
     [ testProperty "pread . pshow === id (Hand)"    (preadPshowEquals :: Hand -> Bool)
     , testProperty "pread . pshow === id (Mentsu)"  (preadPshowEquals :: Mentsu -> Bool)
     , testProperty "length (pshow Tile) == 2"       ((== 2) . length . pshow :: Tile -> Bool)
-    , testProperty "Pretty discards (own)" $ liftA2 propAllInfixOf (pshow . DiscardPileOwn) (map pshow)
-    , testProperty "Pretty discards (left)" $ liftA2 propAllInfixOf (pshow . DiscardPileLeft) (map pshow)
-    , testProperty "Pretty discards (right)" $ liftA2 propAllInfixOf (pshow . DiscardPileRight) (map pshow)
-    , testProperty "Pretty discards (front)" $ liftA2 propAllInfixOf (pshow . DiscardPileFront) (map pshow)
+    , testProperty "Pretty discards (own)"   $ liftA2 propAllInfixOf (pshow . PosMine)  (map pshow :: Discards -> [Text])
+    , testProperty "Pretty discards (left)"  $ liftA2 propAllInfixOf (pshow . PosLeft)  (map pshow :: Discards -> [Text])
+    , testProperty "Pretty discards (right)" $ liftA2 propAllInfixOf (pshow . PosRight) (map pshow :: Discards -> [Text])
+    , testProperty "Pretty discards (front)" $ liftA2 propAllInfixOf (pshow . PosFront) (map pshow :: Discards -> [Text])
     ]
 
 -- | pread . show == id
@@ -129,6 +128,31 @@ pshowAssert x expected = pshow x == expected @? (unpack . unlines)
 
 souTiles :: [(Tile, Maybe Player)]
 souTiles = map (flip (,) Nothing . flip Sou False) [Ii .. Chuu]
+
+fullState :: RiichiState
+fullState = (secret, public)
+    where
+        secret                     = RiichiSecret
+            { _riichiWall          = riichiTiles
+            , _riichiWanpai        = take 14 riichiTiles
+            , _riichiHands         = mapFromList $ zip defaultPlayers (repeat fullHand)
+            }
+
+        public                     = RiichiPublic
+            { _riichiDora          = take 5 $ drop 60 riichiTiles
+            , _riichiWallTilesLeft = 10
+            , _riichiRound         = Pei
+            , _riichiDealer        = Player 0
+            , _riichiTurn          = Player 0
+            , _riichiPoints        = mapFromList $ zip defaultPlayers (repeat 25000)
+            , _riichiEvents        = []
+            }
+        
+        fullHand = initHand (take 13 riichiTiles)
+            & set (handPublic.handDiscards) souTiles
+            . set (handPublic.handOpen) [mentsu, mentsu, mentsu, mentsu]
+ 
+        mentsu = Koutsu (replicate 3 $ pread "M3") True
 
 -- * Client
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 module PrettyPrint where
 
 import ClassyPrelude
@@ -15,84 +15,122 @@ class PrettyPrint x where
 class PrettyRead x where
     pread :: Text -> x
 
--- Discard pile position
-newtype DiscardPileOwn   = DiscardPileOwn [(Tile, Maybe Player)] deriving (Show, Read, Eq)
-newtype DiscardPileLeft  = DiscardPileLeft [(Tile, Maybe Player)] deriving (Show, Read, Eq)
-newtype DiscardPileRight = DiscardPileRight [(Tile, Maybe Player)] deriving (Show, Read, Eq)
-newtype DiscardPileFront = DiscardPileFront [(Tile, Maybe Player)] deriving (Show, Read, Eq)
+type Discards = [(Tile, Maybe Player)]
+
+newtype PosMine a  = PosMine { posMine :: a } deriving (Show, Read)
+newtype PosFront a = PosFront { posFront :: a } deriving (Show, Read)
+newtype PosLeft a  = PosLeft { posLeft :: a } deriving (Show, Read)
+newtype PosRight a = PosRight { posRight :: a } deriving (Show, Read)
 
 -- Player
 
 instance PrettyPrint (GamePlayer Text) where
-    pshow pstate =
-        let me      = _playerPlayer pstate
-            _east   = pstate ^. playerPublic.riichiDealer
-            
-            players = take 4
-                $ dropWhile (^. _1.to (/= me))
-                $ cycle
-                $ breakGamePlayer pstate
+    pshow = do
+        dora      <- view $ playerPublic.riichiDora.to pshow
+        concealed <- view $ playerMyHand.to pshow
+        wallCount <- view $ playerPublic.riichiWallTilesLeft.to (\x -> "(" <> tshow x <> ")")
 
-            discards = zipWith ($) [ pshow . DiscardPileOwn, pshow . DiscardPileRight
-                                   , pshow . DiscardPileFront, pshow . DiscardPileLeft
-                                   ] (players ^.. each._4.handDiscards)
-            in unlines discards
-                           
+        -- rotate players to right positions
+        me      <- view playerPlayer
+        players <- let magic = take 4 . dropWhile (^. _1.to (/= me)) . cycle . breakGamePlayer
+                       in view $ to magic
+
+        let [dmine, dright, dfront, dleft]             = mapPositions (players ^.. each._4.handDiscards)
+            [openMine, openRight, openFront, openLeft] = map pshow (players ^.. each._4.handOpen)
+            [infoMine, infoRight, infoFront, infoLeft] = mapPositions (players ^.. each)
+
+        return $ unlines $ replicate 26 (justifyRight 46 ' ' "")
+                & pushToPlace dora      (12, 24) 
+                & pushToPlace wallCount (10, 24)
+                & pushToPlace dmine     (15, 22) 
+                & pushToPlace dleft     (9 , 14) 
+                & pushToPlace dfront    (6 , 22) -- TODO fails if discards go over 6*3
+                & pushToPlace dright    (9 , 39) --  here too
+                & pushToPlace concealed (21, 4 ) 
+                & pushToPlace openMine  (21, 49)
+                & pushToPlace openRight (2 , 49)
+                & pushToPlace openFront (1 , 5 )
+                & pushToPlace openLeft  (16, 1 )
+                & pushToPlace infoMine  (23, 9 )
+                & pushToPlace infoRight (7 , 51)
+                & pushToPlace infoFront (3 , 17)
+                & pushToPlace infoLeft  (6 , 2 )
+ 
 breakGamePlayer :: GamePlayer Text -> [(Player, Maybe Text, Points, HandPublic)]
 breakGamePlayer pstate = zipWith (\(player, mnick, points) (_, hand) -> (player, mnick, points, hand))
       (_playerPlayers pstate)
       (itoList $ _playerPublicHands pstate)
 
---      [front player]      [right player]
--- [left player] [discards]
---      [me player]
---
---  0-      mm-mm-mm
---  |       mm-mm-mm                                                mm-mm-mm
---  |       mm-mm-mm    N       Player1                             mm-mm-mm-mm
---  3-----  mm-mm-mm-mm _ _ _ _ _ _ _ _ _ _ _ _ _                   mm-mm-mm-mm
---  |                                                               mm-mm-mm
---  5--- E        |        XX XX XX XX XX XX XX XX      XX          |
---  |             |              XX XX XX XX XX XX      XX          | W
---  7---          |              XX XX XX XX XX XX      XX          |
---  8--           |      XX XX XX                 XX XX XX          |  
---  9---  Player3 |      XX XX XX  (NN)           XX XX XX          | Player4
---  |             |      XX XX XX                 XX XX XX          |  
---  |     (25000) |      XX XX XX Do Ra He Re ..  XX XX XX          | (25000)
---  |             |      XX XX XX                 XX XX XX          |  
---  |             |      XX XX XX                 XX XX XX          |  
---  14--          |      XX XX XX                 XX XX XX          |  
---  15--          |      XX      XX XX XX XX XX XX                  |
---  |      mm-mm-mm      XX      XX XX XX XX XX XX                  |
---  17---  mm-mm-mm      XX      XX XX XX XX XX XX XX XX XX         |
---  |      mm-mm-mm      12----1920------>                          46-------10
---  |   mm-mm-mm-mm
---  |   0--------10                  
---  21--      01 02 03 04 05 06 07 08 09 10 11 12 13   14
---  |                                         mm-mm-mm-mm
---  |              S Player3      (25000)     mm-mm-mm
---  |                                         mm-mm-mm
---  25-----------                             mm-mm-mm
---
--- 0        
---
---  Parts:  - mentsu (ankan, open)
---          - discard pile
---          - dead wall (NN)
---          - Dora indicators
---          - player avatars, points, seat winds
+-- |
+pushToPlace :: Text -> (Int, Int)-> [Text] -> [Text]
+pushToPlace text (y, x) = goy y
+    where
+        goy 0 texts         = zipWith gox (lines text ++ repeat "") texts
+        goy y' (txt : txts) = txt : goy (y' - 1) txts
+        goy y' _            = ""  : goy (y' - 1) []
+
+        gox src dest = let (a, b) = splitAt x dest
+                           (_, c) = splitAt (length src) b
+                           in a <> src <> c
+
+-- | In order mine-right-front-left
+mapPositions :: (PrettyPrint (PosMine x), PrettyPrint (PosRight x), PrettyPrint (PosLeft x), PrettyPrint (PosFront x))
+             => [x] -> [Text]
+mapPositions = zipWith ($)
+    [ pshow . PosMine
+    , pshow . PosRight
+    , pshow . PosFront
+    , pshow . PosLeft ]
+
+-- Player Info
+
+type PInfo = (Player, Maybe Text, Points, HandPublic)
+
+instance PrettyPrint (PosMine PInfo) where
+    pshow (PosMine (player, mnick, points, _)) =
+        pshow player
+        <> "  " <> pshow (PNick mnick)
+        <> "  " <> pshow (PPoints points)
+
+instance PrettyPrint (PosLeft PInfo) where
+    pshow (PosLeft (player, mnick, points, _)) =
+        pshow player
+        <> "\n\n " <> pshow (PNick mnick)
+        <> "\n\n " <> pshow (PPoints points)
+
+instance PrettyPrint (PosRight PInfo) where
+    pshow (PosRight (player, mnick, points, _)) =
+        justifyRight 9 ' ' (pshow player)
+        <> "\n\n" <> pshow (PNick mnick)
+        <> "\n\n" <> pshow (PPoints points)
+
+instance PrettyPrint (PosFront PInfo) where
+    pshow (PosFront info) = pshow (PosMine info)
+
+
+newtype PPoints = PPoints Int
+newtype PNick = PNick (Maybe Text)
+
+instance PrettyPrint PPoints    where pshow (PPoints points) = "(" <> tshow points <> ")"
+instance PrettyPrint PNick      where pshow (PNick mnick) = fromMaybe "<nobody>" mnick
+instance PrettyPrint Player     where pshow (Player n) = tshow n -- TODO this should be the kaze
+
 
 -- Hand
 
 -- | Own hand
 instance PrettyPrint Hand where
-    pshow = (\conc tsumo -> conc <> " : " <> tsumo)
-        <$> view (handConcealed.to pshow)
-        <*> view (handPick.to (maybe "" pshow))
+    pshow = do
+        concealed   <- view handConcealed
+        mpick       <- view handPick
+        return $ pshow concealed <> maybe "" (\p -> " | " <> pshow p) mpick
 
 -- | Public hand
 instance PrettyPrint HandPublic where
-    pshow = undefined
+    pshow = do
+        -- FIXME 
+        tilenum <- view (handOpen.to length) <&> (13 -) . (*3)
+        return $ unwords $ replicate tilenum "_"
 
 -- Note: this is not really useful
 instance PrettyRead Hand where
@@ -100,29 +138,19 @@ instance PrettyRead Hand where
 
 -- Discards
 
-instance PrettyPrint DiscardPileOwn where
-    pshow (DiscardPileOwn tiles) =
-        intercalate "\n" $ map (justifyLeft (6 * 3 - 1) ' ' . unwords)
-        . discardSplit $ map fst $ filter (isn't _Nothing . view _2) tiles
+instance PrettyPrint (PosMine  Discards) where pshow (PosMine  tiles) = discardHelper (justifyLeft (6*3-1)   ' ') $ discardSplit tiles
+instance PrettyPrint (PosLeft  Discards) where pshow (PosLeft  tiles) = discardHelper (justifyRight 8       ' ') $ transpose $ reverse $ discardSplit tiles
+instance PrettyPrint (PosRight Discards) where pshow (PosRight tiles) = discardHelper (justifyLeft 8        ' ') $ reverse $ transpose $ discardSplit tiles
+instance PrettyPrint (PosFront Discards) where pshow (PosFront tiles) = discardHelper (justifyRight (6*3-1) ' ') $ reverse $ reverse <$> discardSplit tiles
+--        $ filter (isn't _Nothing . view _2) -- plant this to indicate
+--        shouts
 
-instance PrettyPrint DiscardPileLeft where
-    pshow (DiscardPileLeft tiles) =
-        intercalate "\n" $ map (justifyRight 8 ' ' . unwords)
-        $ transpose $ reverse $ discardSplit $ map fst $ filter (isn't _Nothing . view _2) tiles
-
-instance PrettyPrint DiscardPileRight where
-    pshow (DiscardPileRight tiles) =
-        intercalate "\n" $ map (justifyLeft 8 ' ' . unwords)
-        $ reverse $ transpose $ discardSplit $ map fst $ filter (isn't _Nothing . view _2) tiles
-
-instance PrettyPrint DiscardPileFront where
-    pshow (DiscardPileFront tiles) =
-        intercalate "\n" $ map (justifyRight (6 * 3 - 1) ' ' . unwords)
-        $ reverse $ reverse <$> discardSplit $ map fst $ filter (isn't _Nothing . view _2) tiles
+discardHelper :: (Text -> Text) -> [[(Tile, Maybe Player)]] -> Text
+discardHelper f = intercalate "\n" . map (f . unwords . map (pshow . fst))
 
 -- | helper function for discard pretty printers
-discardSplit :: [Tile] -> [[Text]]
-discardSplit = (\(xs, x) -> xs ++ [x]) . over _2 join . splitAt 2 . L.chunksOf 6 . map pshow
+discardSplit :: [a] -> [[a]]
+discardSplit = (\(xs, x) -> xs ++ [x]) . over _2 join . splitAt 2 . L.chunksOf 6
 
 -- Tile
 
