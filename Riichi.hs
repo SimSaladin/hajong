@@ -7,6 +7,7 @@ import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.State
+import Control.Monad.RWS
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import System.Random.Shuffle
@@ -116,8 +117,10 @@ type GameMonad m = ( MonadReader RiichiPublic m
                    , MonadError Text m
                    )
 
-liftE :: GameMonad m => (a -> m b) -> Either Text a -> m b
-liftE = either throwError
+type GameMonad' = RWST RiichiPublic RoundEvent RiichiSecret (Either Text)
+
+liftE :: GameMonad m => Either Text a -> m a
+liftE = either throwError return
 
 handOf' :: GameMonad m => Player -> m Hand
 handOf' player = use (handOf player) >>= maybe (throwError "Player not found") return
@@ -127,12 +130,21 @@ handOf :: Functor f => Player -> (Maybe Hand -> f (Maybe Hand)) -> RiichiSecret 
 handOf player = riichiHands.at player
 
 
--- * Game state
+-- * Game
 
 newGameServer :: Text -> GameServer a
 newGameServer name = GameServer players name Nothing
     where
         players = zip3 defaultPlayers (repeat Nothing) (repeat 25000)
+
+-- | Run a GameMonad' action on a RiichiState
+gsAction' ::  GameMonad' a -> RiichiState -> Either Text (a, RiichiSecret, RoundEvent)
+gsAction' m (secret, public) = runRWST m public secret
+
+-- | Return the action to create a new game in the server state, unless
+-- a game is still running (gameState ~ Just)
+gsNewGame :: GameServer a -> Maybe (IO (GameServer a))
+gsNewGame gs = maybe (Just $ newRiichiState <&> flip (set gameState) gs . Just) (const Nothing) (_gameState gs)
 
 -- | Nothing if game full
 gsAddPlayer :: Eq a => a -> GameServer a -> Maybe (GameServer a)
@@ -154,14 +166,32 @@ gsPlayerLookup game player = game^.gameState^?_Just.to build
             <*> pure (game^.gamePlayers)
             <*> view (_1.riichiHands.at player.to fromJust)
 
--- | Return the action to create a new game in the server state, unless
--- a game is still running (gameState ~ Just)
-gsNewGame :: GameServer a -> Maybe (IO (GameServer a))
-gsNewGame gs = maybe (Just $ newRiichiState <&> flip (set gameState) gs . Just) (const Nothing) (_gameState gs)
+-- ** GameMonad operations
 
+-- | Apply an action on current player's turn
+runTurn :: GameMonad m => TurnAction -> m ()
+runTurn action = do
+    player <- view riichiTurn
+    hand <- use (handOf player) >>= maybe (throwError "Hand of current player not found") return
+
+    case action of
+        TurnRiichi tile           -> liftE (setRiichi tile hand) >>= (handOf player ?=)
+        TurnDiscard tile          -> liftE (discard tile hand)   >>= (handOf player ?=)
+        TurnDraw dead Nothing     -> undefined
+        TurnDraw _ _              -> throwError "Draw action cannot specify the tile"
+        TurnAnkan tile            -> undefined
+        TurnShouted shout shouter -> undefined
+
+    tell $ RoundAction player action -- here only if no error was thrown
 
 
 -- * Deal state
+
+-- | Advance the game to next round
+nextRound :: RiichiState -> IO RiichiState
+nextRound (_, public) = do
+    secret <- newSecret
+    return $ setSecret secret $ public & set riichiTurn (public ^. riichiDealer)
 
 newRiichiState :: IO RiichiState
 newRiichiState = liftM (`setSecret` newGame) newSecret
@@ -198,38 +228,14 @@ newSecret = liftM dealTiles $ shuffleM riichiTiles
                 (wanpai, wall)          = splitAt 14 xs
 
 
--- * Game operations
-
--- | Advance the game to next round
-nextRound :: RiichiState -> IO RiichiState
-nextRound (_, public) = do
-    secret <- newSecret
-    return $ setSecret secret $ public & set riichiTurn (public ^. riichiDealer)
-
--- | Apply an action on current player's turn
-runTurn :: GameMonad m => TurnAction -> m ()
-runTurn action = do
-    player <- view riichiTurn
-    hand <- use (handOf player) >>= maybe (throwError "Hand of current player not found") return
-
-    case action of
-        TurnRiichi tile         -> liftE (handOf player ?=) $ setRiichi tile hand
-        TurnDiscard tile        -> liftE (handOf player ?=) $ discard tile hand
-        TurnDraw dead Nothing   -> undefined
-        TurnDraw _ _            -> throwError "Draw action cannot specify the tile"
-        TurnAnkan tile          -> undefined
-        TurnShouted shout shouter -> undefined
-
-    tell $ RoundAction player action -- here only if no error was thrown
-
-
 -- * Hand operations
 
+-- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
 initHand tiles = Hand tiles Nothing Nothing $ HandPublic [] [] False
 
--- | Discard a tile; returns Left err if discard is not possible due to the
--- tile not being in the hand, or due to riichi.
+-- | Discard a tile; returns Left if discard is not possible due to the
+-- tile 1) not being in the hand or 2) due to riichi restriction.
 discard :: Tile -> Hand -> Either Text Hand
 discard tile hand
     | hand ^. handPick == Just tile = Right $ hand & set handPick Nothing . setDiscard
@@ -241,6 +247,7 @@ discard tile hand
         (xs, ys) = break (== tile) (_handConcealed hand)
         setDiscard = over (handPublic.handDiscards) (++ [(tile, Nothing)])
 
+-- | Left for 1) already in riichi or 2) not tenpai.
 setRiichi :: Tile -> Hand -> Either Text Hand
 setRiichi tile hand
     | hand ^. handPublic.handRiichi = Left "Already in riichi"

@@ -24,6 +24,7 @@ import Tiles
 import Server
 import Riichi
 import PrettyPrint
+import Yaku
 
 main :: IO ()
 main = do
@@ -36,12 +37,12 @@ main = do
 
 tests :: TestTree
 tests = testGroup "Hajong tests"
-    [ clientTests, prettyPrintQC, prettyPrintHUnit, gameTests ]
+    [ clientTests, prettyPrintQC, prettyPrintHUnit, gameTests, yakuTests ]
 
 -- * Game
 
 gameTests :: TestTree
-gameTests = testGroup "Pure game state tests"
+gameTests = testGroup "Game state tests (pure)"
     [ testCase "New game initialized right" $ do
         (secret, public) <- newRiichiState
 
@@ -56,6 +57,14 @@ gameTests = testGroup "Pure game state tests"
     , testCase "Typical mentsu tenpai"    undefined
     , testCase "Chiitoitsu tenpai"                            undefined
 
+    , testCase "A deal can be made after 4 players join"  $ do
+        let game = newGameServer "test game"
+                & fromJust . gsAddPlayer ("Dummy 1" :: Text)
+                & fromJust . gsAddPlayer "Dummy 2"
+                & fromJust . gsAddPlayer "Dummy 3"
+                & fromJust . gsAddPlayer "Dummy 4"
+                & gsNewGame
+        assertBool "game was nothing" (isJust game)
     ]
 
 -- | PrettyPrint
@@ -75,16 +84,11 @@ prettyPrintHUnit = testGroup "PrettyPrint HUnit"
     , testCase "PosRight Discards" $ PosRight  souTiles `pshowAssert` "S6      \nS5      \nS4      \nS3 S9   \nS2 S8   \nS1 S7   "
     , testCase "PosFront Discards" $ PosFront  souTiles `pshowAssert` "                 \n         S9 S8 S7\nS6 S5 S4 S3 S2 S1"
 
-    , testCase "Complete game"  $ do
-        game <- newGameServer "test game" & gsAddPlayer ("Dummy player" :: Text) & fromJust . gsNewGame . fromJust
-        let Just pstate = gsPlayerLookup game (Player Ton)
-        pstate `pshowAssert` ""
-
-    , testCase "Full print" $ do
+    , testGroup "Filled game contains characters" $
         let game = newGameServer "test game" & gsAddPlayer ("Dummy player" :: Text) & set gameState (Just fullState) . fromJust
             Just playerState = gsPlayerLookup game (Player Ton)
+            in pshow playerState `hunitAllInfixOf` ["|", "_", "(", ")", "(25000)" ]
 
-        playerState `pshowAssert` "<state ref>"
     ]
 
 prettyPrintQC :: TestTree
@@ -101,6 +105,10 @@ prettyPrintQC = testGroup "PrettyPrint QC"
 -- | pread . show == id
 preadPshowEquals :: (Eq x, PrettyPrint x, PrettyRead x) => x -> Bool
 preadPshowEquals = liftA2 (==) id (pread . pshow)
+
+hunitAllInfixOf :: Text -> [Text] -> [TestTree]
+hunitAllInfixOf res exp =
+   flip map exp $ \x -> testCase ("Contains " <> unpack x) $ assertBool (unpack x <> " was not found") $ x `isInfixOf` res
 
 propAllInfixOf :: Text -> [Text] -> Property
 propAllInfixOf result xs = conjoin $ flip map xs $
@@ -154,6 +162,15 @@ fullState = (secret, public)
  
         mentsu = Koutsu (replicate 3 $ pread "M3") True
 
+-- * Yaku
+
+yakuTests :: TestTree
+yakuTests = testGroup "Yaku and mentsu" 
+    [ testCase "M1-M1-M1 is koutsu" $ let tiles = pread "M1 M1 M1"
+        in mentsuSearch tiles @?= [Koutsu tiles False]
+    ]
+
+
 -- * Client
 
 -- | Tests for client side
@@ -181,7 +198,7 @@ clientCLIGameTests :: TestTree
 clientCLIGameTests = testGroup "CLI In-Game unit tests"
     [ testCase "joining bogus game raises error"                      $ runClient ["j","-1" ] =~ "[error]"
     , testCase "joining game works (NOTE: requires game 0 on server)" $ runClient ["j","0"]   =~ "Joined the game"
-    , testCase "game starts when 4 clients have joined" $ return ()
+    , testCase "game starts when 4 clients have joined" undefined
     ]
 
 type ClientInputDummy = StateT (MVar Text, TChan Text) (ReaderT ClientState IO)
@@ -246,7 +263,6 @@ instance Arbitrary Mentsu where
              let n = tileNumber tile
              return $ Shuntsu (tile : map (setTileNumber tile) [succ n, succ (succ n)]) True
         ]
-
 
 instance Arbitrary Player where
     arbitrary = elements defaultPlayers

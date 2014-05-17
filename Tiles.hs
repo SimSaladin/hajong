@@ -19,6 +19,22 @@ data Tile = Man Number Bool
           | Kaze Kazehai
           deriving (Show, Read, Eq)
 
+instance Ord Tile where
+    compare (Man x _) (Man y _)   = compare x y
+    compare (Pin x _) (Pin y _)   = compare x y
+    compare (Sou x _) (Sou y _)   = compare x y
+    compare (Kaze x) (Kaze y)     = compare x y
+    compare (Sangen x) (Sangen y) = compare x y
+    compare (Man _ _) _           = LT
+    compare (Pin _ _) (Man _ _)   = GT
+    compare (Pin _ _) _           = LT
+    compare (Sou _ _) (Man _ _)   = GT
+    compare (Sou _ _) (Pin _ _)   = GT
+    compare (Sou _ _) _           = LT
+    compare (Kaze _) (Sangen _)   = LT
+    compare (Kaze _) _            = GT
+    compare (Sangen _) _          = GT
+
 data Mentsu = Shuntsu { mentsuPai :: [Tile], mentsuOpen :: Bool }  -- straight
             | Koutsu  { mentsuPai :: [Tile], mentsuOpen :: Bool } -- triplet
             | Kantsu  { mentsuPai :: [Tile], mentsuOpen :: Bool } -- quadret
@@ -49,3 +65,16 @@ setTileNumber (Man _ r) n = Man n r
 setTileNumber (Pin _ r) n = Pin n r
 setTileNumber (Sou _ r) n = Sou n r
 setTileNumber _         _ = error "Not suited tile"
+
+compareSuit :: Tile -> Tile -> Bool
+compareSuit (Man _ _) (Man _ _)   = True
+compareSuit (Pin _ _) (Pin _ _)   = True
+compareSuit (Sou _ _) (Sou _ _)   = True
+compareSuit (Sangen _) (Sangen _) = True
+compareSuit (Kaze _) (Kaze _)     = True
+compareSuit _ _                   = False
+
+tileSucc :: Tile -> Tile
+tileSucc (Kaze kaze)     = Kaze (succ kaze)
+tileSucc (Sangen sangen) = Sangen (succ sangen)
+tileSucc tile            = setTileNumber tile $ succ $ tileNumber tile
