@@ -1,7 +1,10 @@
+{-# LANGUAGE DeriveFunctor #-}
 module Yaku where
 
 import ClassyPrelude
 import Tiles
+import Control.Applicative
+import Control.Monad.Free
 import qualified Data.List as L
 
 type CompleteHand = [Mentsu]
@@ -62,105 +65,253 @@ isJantou _ = False
 
 -- * Yaku
 
-data Yaku = Yaku 
-          { _yakuConcealed :: Int
-          , _yakuOpen :: Maybe Int
-          }
-
-data YakuChecker next = YakuMentsu Mentsu next
-                      | YakuProperty () next -- todo
+data YakuChecker next = YakuMentsu MentsuKind TileKind next -- tile kind about first tile. As optimization put these before tile-dependant checks
+                      | YakuMentsu' MentsuKind TileKind (Tile -> next)
+                      | YakuStateful (YakuInfo -> next)
+                      | YakuHandConcealed next
+                      | YakuHandOpen next
+                      | YakuProperty () next -- todo: property of hand
                       | YakuMatches
                       | YakuNot
+                      deriving (Functor)
 
-instance Functor YakuChecker where
-    fmap f (YakuMentsu mentsu next) = YakuMentsu mentsu (f next)
-    fmap f (YakuProperty p next)    = YakuProperty p (f next)
-    fmap f x                        = x
+type Yaku = Free YakuChecker
 
-type AYaku = Free YakuChecker
+data YakuInfo = YakuInfo
+              { yakuRoundKaze :: Kazehai
+              , yakuPlayerKaze :: Kazehai
+              }
 
--- list plausible yaku combinations
-getYaku :: [Tile] -> [[Yaku]]
-getYaku _ = undefined
+data MentsuKind = MentsuJantou
+                | MentsuAny      -- Note: NOT jantou
+                | MentsuShuntsu
+                | MentsuKoutsu
+                | MentsuKantsu
+                | MentsuKoutsuKantsu
 
--- * Hand-Tile-based
+type TileKind = (Bool, Tile) -> Bool
 
-yakuPinfu :: Yaku
-yakuPinfu = undefined
+concealedHand :: Yaku ()
+concealedHand = liftF $ YakuHandConcealed ()
 
-yakuTanyao :: Yaku
-yakuTanyao = undefined
+openHand :: Yaku ()
+openHand = liftF $ YakuHandOpen ()
 
-yakuIipeikou :: Yaku
-yakuIipeikou = undefined
+yakuMatch :: Yaku ()
+yakuMatch = liftF YakuMatches
 
-yakuFanpai :: Yaku
-yakuFanpai = undefined
+anyKoutsu, anyKantsu, anyShuntsu, anyJantou, anyMentsu, anyKoutsuKantsu :: TileKind -> Yaku ()
+anyKoutsu  tkind = liftF $ YakuMentsu MentsuKoutsu  tkind ()
+anyShuntsu tkind = liftF $ YakuMentsu MentsuShuntsu tkind ()
+anyKantsu  tkind = liftF $ YakuMentsu MentsuKantsu  tkind ()
+anyJantou  tkind = liftF $ YakuMentsu MentsuJantou  tkind ()
+anyMentsu  tkind = liftF $ YakuMentsu MentsuAny     tkind ()
+anyKoutsuKantsu  tkind = liftF $ YakuMentsu MentsuKoutsuKantsu tkind ()
 
-yakuSanshokuDoujin :: Yaku
-yakuSanshokuDoujin = undefined
+anyShuntsu' :: TileKind -> Yaku Tile
+anyShuntsu' tkind = liftF $ YakuMentsu' MentsuShuntsu tkind id
 
-yakuIttsuu :: Yaku
-yakuIttsuu = undefined
+anyMentsu' :: TileKind -> Yaku Tile
+anyMentsu' tkind = liftF $ YakuMentsu' MentsuAny tkind id
 
-yakuChanta :: Yaku
-yakuChanta = undefined
+anyKoutsuKantsu' :: TileKind -> Yaku Tile
+anyKoutsuKantsu' tkind = liftF $ YakuMentsu' MentsuKoutsuKantsu tkind id
 
-yakuHonroutou :: Yaku
-yakuHonroutou = undefined
+yakuState :: Yaku YakuInfo
+yakuState = liftF (YakuStateful id)
 
-yakuToitoi :: Yaku
-yakuToitoi = undefined
+terminal, honor, sangenpai, suited, anyTile :: TileKind
+terminal  (_, tile      ) = tileSuited tile && liftA2 (||) (== Ii) (== Chuu) (tileNumber tile)
+honor     (_, Kaze _    ) = True
+honor     (_, Sangen _  ) = True
+honor     (_, _         ) = False
+sangenpai (_, Sangen _  ) = True
+sangenpai (_, _         ) = False
+suited    (_, Kaze _    ) = False
+suited    (_, Sangen _  ) = False
+suited    (_, _         ) = True
+anyTile   (_, _         ) = True
+concealed (open, _      ) = not open
 
-yakuSanankou :: Yaku
-yakuSanankou = undefined
+sameTile :: Tile -> TileKind
+sameTile  this (_, that) = this == that
 
-yakuSanKantsu :: Yaku
-yakuSanKantsu = undefined
+sameNumber :: Tile -> TileKind
+sameNumber  this (_, that) = tileNumber this == tileNumber that
 
-yakuSanshokuDoukou :: Yaku
-yakuSanshokuDoukou = undefined
+ofNumber :: Number -> TileKind
+ofNumber n (_, that) = tileNumber that == n
 
-yakuChiitoitsu :: Yaku
+sameSuit :: Tile -> TileKind
+sameSuit this (_, that) = compareSuit this that
+
+(&.) :: TileKind -> TileKind -> TileKind
+a &. b = \t -> a t && b t
+infixl 1 &.
+
+(|.) :: TileKind -> TileKind -> TileKind
+a |. b = \t -> a t || b t
+infixl 1 |.
+
+allMentsuOfKind :: TileKind -> Yaku ()
+allMentsuOfKind tkind = do
+    replicateM_ 4 $ anyMentsu tkind
+    anyJantou tkind
+
+-- ** Shuntsu
+
+yakuPinfu :: Yaku Int
+yakuPinfu = do
+    concealedHand
+    replicateM_ 4 (anyShuntsu suited)
+    anyJantou suited
+    return 1
+
+yakuIipeikou :: Yaku Int
+yakuIipeikou = do
+    concealedHand
+    tile <- anyShuntsu' anyTile
+    anyShuntsu (sameTile tile)
+    return 1
+
+yakuRyanpeikou :: Yaku Int
+yakuRyanpeikou = do
+    concealedHand
+    yakuIipeikou
+    yakuIipeikou
+    return 3
+
+yakuSanshokuDoujin :: Yaku Int
+yakuSanshokuDoujin = do
+    tile  <- anyShuntsu' anyTile
+    tile' <- anyShuntsu' (f tile)
+    anyShuntsu (f tile' &. f tile)
+
+    -- TODO degrade -1 when open
+    return 2
+    where
+        f tile = sameNumber tile &. not.sameSuit tile
+
+yakuIttsuu :: Yaku Int
+yakuIttsuu = do
+    tile <- anyShuntsu' (ofNumber Ii)
+    anyShuntsu (sameSuit tile &. ofNumber Suu)
+    anyShuntsu (sameSuit tile &. ofNumber Chii)
+    -- TODO degrade -1 when open
+    return 2
+
+-- ** Koutsu or Kantsu
+
+-- NOTE this does not combine with chanta
+yakuHonroutou :: Yaku Int
+yakuHonroutou = do
+    replicateM_ 4 $ anyKoutsuKantsu (terminal |. honor) 
+    anyJantou (terminal |. honor)
+    return 2
+
+yakuToitoi :: Yaku Int
+yakuToitoi = do
+    replicateM_ 4 $ anyKoutsuKantsu anyTile
+    return 2
+
+yakuSanankou :: Yaku Int
+yakuSanankou = do
+    replicateM_ 3 $ anyKoutsuKantsu concealed
+    return 2
+
+yakuSanKantsu :: Yaku Int
+yakuSanKantsu = do
+    replicateM_ 3 $ anyKantsu anyTile
+    return 2
+
+yakuSanshokuDoukou :: Yaku Int
+yakuSanshokuDoukou = do
+    tile <- anyKoutsuKantsu' anyTile
+    replicateM_ 2 $ anyKoutsuKantsu (sameNumber tile)
+    return 2
+
+yakuShouSangen :: Yaku Int
+yakuShouSangen = do
+    anyKoutsuKantsu sangen
+    anyKoutsuKantsu sangen
+    anyJantou sangen
+    anyMentsu (not . sangen)
+    return 2
+
+-- ** Tile kind based
+
+yakuFanpai :: Yaku Int
+yakuFanpai = do
+    info <- yakuState
+    let roundTile = Kaze $ yakuRoundKaze info
+        playerKaze = Kaze $ yakuPlayerKaze info
+    tile <- anyMentsu' (sangenpai |. sameTile roundTile |. sameTile playerKaze)
+    return $ if roundTile == playerKaze && roundTile == tile
+        then 2
+        else 1
+
+yakuTanyao :: Yaku Int
+yakuTanyao = do
+    concealedHand
+    allMentsuOfKind suited
+    return 1
+
+yakuKuitan :: Yaku Int
+yakuKuitan = do
+    openHand
+    allMentsuOfKind suited
+    return 1
+
+yakuChanta :: Yaku Int
+yakuChanta = do
+    allMentsuOfKind (terminal |. honor) -- TODO this does not notice 7-8-9 Shuntsu!
+    return 2
+
+yakuHonitsu :: Yaku Int
+yakuHonitsu = do
+    anyMentsuJantou honor
+    anyMentsu
+    return 3 -- TODO degrades -1 when hand open
+
+yakuJunchan :: Yaku Int
+yakuJunchan = do
+    allMentsuOfKind terminal -- TODO this does not notice 7-8-9 shuntsu
+    return 3 -- TODO degrades -1 when open
+
+yakuChinitsu :: Yaku Int
+yakuChinitsu = do
+    tile <- anyMentsu suited
+    replicateM_ 3 (anyMentsu $ sameSuit tile)
+    anyJantou (sameSuit tile)
+    return 6 -- TODO degrades -1 when open
+
+-- ** Special
+
+yakuChiitoitsu :: Yaku ()
 yakuChiitoitsu = undefined
 
-yakuShouSangen :: Yaku
-yakuShouSangen = undefined
+-- ** Unrelated to mentsu
 
-yakuHonitsu :: Yaku
-yakuHonitsu = undefined
-
-yakuJunchan :: Yaku
-yakuJunchan = undefined
-
-yakuRyanpeikou :: Yaku
-yakuRyanpeikou = undefined
-
-yakuChinitsu :: Yaku
-yakuChinitsu = undefined
-
--- ** Other
-
-yakuMenzenTsumo :: Yaku
+yakuMenzenTsumo :: Yaku ()
 yakuMenzenTsumo = undefined
 
-yakuRiichi :: Yaku
+yakuRiichi :: Yaku ()
 yakuRiichi = undefined
 
-yakuIppatsu :: Yaku
+yakuIppatsu :: Yaku ()
 yakuIppatsu = undefined
 
-yakuDoubleRiichi :: Yaku
+yakuDoubleRiichi :: Yaku ()
 yakuDoubleRiichi = undefined
 
-yakuHouteiRaoyui :: Yaku
+yakuHouteiRaoyui :: Yaku ()
 yakuHouteiRaoyui = undefined
 
-yakuRinshanKaihou :: Yaku
+yakuRinshanKaihou :: Yaku ()
 yakuRinshanKaihou = undefined
 
-yakuChankan :: Yaku
+yakuChankan :: Yaku ()
 yakuChankan = undefined
 
-yakuNagashiMangan :: Yaku
+yakuNagashiMangan :: Yaku ()
 yakuNagashiMangan = undefined

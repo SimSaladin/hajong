@@ -36,6 +36,7 @@ library
                      , random
                      , split
                      , either
+                     , free
 
   extensions:          NoImplicitPrelude, TemplateHaskell, OverloadedStrings
   default-language:    Haskell2010
