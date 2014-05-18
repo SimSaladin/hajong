@@ -3,18 +3,12 @@ module Yaku where
 
 import ClassyPrelude
 import Tiles
-import Control.Applicative
 import Control.Monad.Free
 import qualified Data.List as L
 
+-- * Mentsu
+
 type CompleteHand = [Mentsu]
-
--- * Mentsu splitting
-
--- [ [ [ Mentsu ] ] ] -> [CompleteHand] : [[Mentsu]]
--- ^ ^ ^ possibility
--- | \ list of possible within group
--- \ groups
 
 mentsuSearch :: [Tile] -> [CompleteHand]
 mentsuSearch =
@@ -63,19 +57,16 @@ isJantou :: Mentsu -> Bool
 isJantou (Jantou{}) = True
 isJantou _ = False
 
--- * Yaku
-
-data YakuChecker next = YakuMentsu MentsuKind TileKind next -- tile kind about first tile. As optimization put these before tile-dependant checks
-                      | YakuMentsu' MentsuKind TileKind (Tile -> next)
-                      | YakuStateful (YakuInfo -> next)
-                      | YakuHandConcealed next
-                      | YakuHandOpen next
-                      | YakuProperty () next -- todo: property of hand
-                      | YakuMatches
-                      | YakuNot
-                      deriving (Functor)
+-- * YakuChecker
 
 type Yaku = Free YakuChecker
+
+data YakuChecker next = YakuMentsu MentsuKind MentsuProp next -- tile kind about first tile. As optimization put these before tile-dependant checks
+                      | YakuMentsu' MentsuKind MentsuProp (Tile -> next)
+                      | YakuStateful (YakuInfo -> next)
+                      | YakuHandConcealed (Maybe (Bool, next))
+                      | YakuHandOpen next
+                      deriving (Functor)
 
 data YakuInfo = YakuInfo
               { yakuRoundKaze :: Kazehai
@@ -84,81 +75,112 @@ data YakuInfo = YakuInfo
 
 data MentsuKind = MentsuJantou
                 | MentsuAny      -- Note: NOT jantou
+                | MentsuAnyJantou
                 | MentsuShuntsu
                 | MentsuKoutsu
                 | MentsuKantsu
                 | MentsuKoutsuKantsu
 
-type TileKind = (Bool, Tile) -> Bool
+-- * Functions
+
+concealedHandDegrade :: Yaku ()
+concealedHandDegrade = liftF $ YakuHandConcealed (Just (True, ()))
 
 concealedHand :: Yaku ()
-concealedHand = liftF $ YakuHandConcealed ()
+concealedHand = liftF $ YakuHandConcealed (Just (False, ()))
 
 openHand :: Yaku ()
-openHand = liftF $ YakuHandOpen ()
-
-yakuMatch :: Yaku ()
-yakuMatch = liftF YakuMatches
-
-anyKoutsu, anyKantsu, anyShuntsu, anyJantou, anyMentsu, anyKoutsuKantsu :: TileKind -> Yaku ()
-anyKoutsu  tkind = liftF $ YakuMentsu MentsuKoutsu  tkind ()
-anyShuntsu tkind = liftF $ YakuMentsu MentsuShuntsu tkind ()
-anyKantsu  tkind = liftF $ YakuMentsu MentsuKantsu  tkind ()
-anyJantou  tkind = liftF $ YakuMentsu MentsuJantou  tkind ()
-anyMentsu  tkind = liftF $ YakuMentsu MentsuAny     tkind ()
-anyKoutsuKantsu  tkind = liftF $ YakuMentsu MentsuKoutsuKantsu tkind ()
-
-anyShuntsu' :: TileKind -> Yaku Tile
-anyShuntsu' tkind = liftF $ YakuMentsu' MentsuShuntsu tkind id
-
-anyMentsu' :: TileKind -> Yaku Tile
-anyMentsu' tkind = liftF $ YakuMentsu' MentsuAny tkind id
-
-anyKoutsuKantsu' :: TileKind -> Yaku Tile
-anyKoutsuKantsu' tkind = liftF $ YakuMentsu' MentsuKoutsuKantsu tkind id
+openHand = liftF $ YakuHandConcealed Nothing
 
 yakuState :: Yaku YakuInfo
 yakuState = liftF (YakuStateful id)
 
-terminal, honor, sangenpai, suited, anyTile :: TileKind
-terminal  (_, tile      ) = tileSuited tile && liftA2 (||) (== Ii) (== Chuu) (tileNumber tile)
-honor     (_, Kaze _    ) = True
-honor     (_, Sangen _  ) = True
-honor     (_, _         ) = False
-sangenpai (_, Sangen _  ) = True
-sangenpai (_, _         ) = False
-suited    (_, Kaze _    ) = False
-suited    (_, Sangen _  ) = False
-suited    (_, _         ) = True
-anyTile   (_, _         ) = True
-concealed (open, _      ) = not open
+anyKoutsu, anyKantsu, anyShuntsu, anyJantou, anyMentsu, anyKoutsuKantsu, anyMentsuJantou :: MentsuProp -> Yaku ()
+anyKoutsu  tkind       = liftF $ YakuMentsu MentsuKoutsu  tkind ()
+anyShuntsu tkind       = liftF $ YakuMentsu MentsuShuntsu tkind ()
+anyKantsu  tkind       = liftF $ YakuMentsu MentsuKantsu  tkind ()
+anyJantou  tkind       = liftF $ YakuMentsu MentsuJantou  tkind ()
+anyMentsu  tkind       = liftF $ YakuMentsu MentsuAny     tkind ()
+anyKoutsuKantsu  tkind = liftF $ YakuMentsu MentsuKoutsuKantsu tkind ()
+anyMentsuJantou tkind  = liftF $ YakuMentsu MentsuAnyJantou tkind ()
 
-sameTile :: Tile -> TileKind
-sameTile  this (_, that) = this == that
+anyShuntsu', anyKoutsuKantsu', anyMentsu', anyMentsuJantou' :: MentsuProp -> Yaku Tile
+anyKoutsuKantsu' tkind = liftF $ YakuMentsu' MentsuKoutsuKantsu tkind id
+anyShuntsu' tkind      = liftF $ YakuMentsu' MentsuShuntsu tkind id
+anyMentsu' tkind       = liftF $ YakuMentsu' MentsuAny tkind id
+anyMentsuJantou' tkind = liftF $ YakuMentsu' MentsuAnyJantou tkind id
 
-sameNumber :: Tile -> TileKind
-sameNumber  this (_, that) = tileNumber this == tileNumber that
+-- * MentsuProps
 
-ofNumber :: Number -> TileKind
-ofNumber n (_, that) = tileNumber that == n
+data MentsuProp = TileTerminal
+                | TileSameAs Tile
+                | TileSuited
+                | TileSameSuit Tile
+                | TileSameNumber Tile
+                | TileNumber Number
+                | TileHonor
+                | TileSangenpai
+                | TileAnd MentsuProp MentsuProp
+                | TileOr MentsuProp MentsuProp
+                | TileNot MentsuProp
+                | TileConcealed
+                | TileAny
 
-sameSuit :: Tile -> TileKind
-sameSuit this (_, that) = compareSuit this that
+ofTileType :: MentsuProp -> Mentsu -> Bool
+ofTileType TileTerminal Shuntsu{mentsuPai = (x:_) } = tileNumber x == Ii || tileNumber x == Chii
+ofTileType tt mentsu = let firstTile = unsafeHead $ mentsuPai mentsu
+    in case tt of
+        TileTerminal        -> tileTerminal firstTile
+        TileSameAs tile     -> firstTile == tile
+        TileSuited          -> tileSuited firstTile
+        TileSameSuit tile   -> compareSuit tile firstTile
+        TileSameNumber tile -> tileNumber tile      == tileNumber firstTile
+        TileNumber n        -> tileNumber firstTile == n
+        TileHonor           -> not $ tileSuited firstTile
+        TileSangenpai       -> tileSangenpai firstTile
+        TileAnd x y         -> ofTileType x mentsu && ofTileType y mentsu
+        TileOr x y          -> ofTileType x mentsu || ofTileType y mentsu
+        TileNot x           -> not $ ofTileType x mentsu
+        TileConcealed       -> not $ mentsuOpen mentsu
+        TileAny             -> True
 
-(&.) :: TileKind -> TileKind -> TileKind
-a &. b = \t -> a t && b t
-infixl 1 &.
+terminal, honor, sangenpai, suited, anyTile, concealed :: MentsuProp
+terminal  = TileTerminal
+honor     = TileHonor
+sangenpai = TileSangenpai
+suited    = TileSuited
+anyTile   = TileAny
+concealed = TileConcealed
 
-(|.) :: TileKind -> TileKind -> TileKind
-a |. b = \t -> a t || b t
-infixl 1 |.
+sameTile, sameNumber, sameSuit :: Tile -> MentsuProp
+sameTile = TileSameAs
+sameNumber = TileSameNumber
+sameSuit = TileSameSuit
 
-allMentsuOfKind :: TileKind -> Yaku ()
+ofNumber :: Number -> MentsuProp
+ofNumber = TileNumber
+
+(&.), (|.) :: MentsuProp -> MentsuProp -> MentsuProp
+(&.) = TileAnd
+(|.) = TileOr
+infixl 1 &., |.
+
+propNot :: MentsuProp -> MentsuProp
+propNot = TileNot
+
+allMentsuOfKind :: MentsuProp -> Yaku ()
 allMentsuOfKind tkind = do
     replicateM_ 4 $ anyMentsu tkind
     anyJantou tkind
 
--- ** Shuntsu
+-- ** Special
+
+yakuChiitoitsu :: Yaku ()
+yakuChiitoitsu = undefined
+
+-- ** 4 + 1
+
+-- *** Shuntsu
 
 yakuPinfu :: Yaku Int
 yakuPinfu = do
@@ -175,32 +197,27 @@ yakuIipeikou = do
     return 1
 
 yakuRyanpeikou :: Yaku Int
-yakuRyanpeikou = do
-    concealedHand
-    yakuIipeikou
-    yakuIipeikou
-    return 3
+yakuRyanpeikou = concealedHand >> yakuIipeikou >> yakuIipeikou >> return 3
 
 yakuSanshokuDoujin :: Yaku Int
 yakuSanshokuDoujin = do
+    concealedHandDegrade
     tile  <- anyShuntsu' anyTile
     tile' <- anyShuntsu' (f tile)
     anyShuntsu (f tile' &. f tile)
-
-    -- TODO degrade -1 when open
     return 2
     where
-        f tile = sameNumber tile &. not.sameSuit tile
+        f tile = sameNumber tile &. propNot (sameSuit tile)
 
 yakuIttsuu :: Yaku Int
 yakuIttsuu = do
+    concealedHandDegrade
     tile <- anyShuntsu' (ofNumber Ii)
     anyShuntsu (sameSuit tile &. ofNumber Suu)
     anyShuntsu (sameSuit tile &. ofNumber Chii)
-    -- TODO degrade -1 when open
     return 2
 
--- ** Koutsu or Kantsu
+-- *** Koutsu or Kantsu
 
 -- NOTE this does not combine with chanta
 yakuHonroutou :: Yaku Int
@@ -232,13 +249,13 @@ yakuSanshokuDoukou = do
 
 yakuShouSangen :: Yaku Int
 yakuShouSangen = do
-    anyKoutsuKantsu sangen
-    anyKoutsuKantsu sangen
-    anyJantou sangen
-    anyMentsu (not . sangen)
+    anyKoutsuKantsu sangenpai
+    anyKoutsuKantsu sangenpai
+    anyJantou sangenpai
+    anyMentsu (propNot sangenpai)
     return 2
 
--- ** Tile kind based
+-- *** Tile kind based
 
 yakuFanpai :: Yaku Int
 yakuFanpai = do
@@ -263,34 +280,34 @@ yakuKuitan = do
     return 1
 
 yakuChanta :: Yaku Int
-yakuChanta = do
-    allMentsuOfKind (terminal |. honor) -- TODO this does not notice 7-8-9 Shuntsu!
+yakuChanta = do -- TODO this does not notice 7-8-9 Shuntsu!
+    anyShuntsu terminal
+    replicateM_ 4 $ anyMentsuJantou (terminal |. honor)
     return 2
 
 yakuHonitsu :: Yaku Int
 yakuHonitsu = do
+    concealedHandDegrade
     anyMentsuJantou honor
-    anyMentsu
-    return 3 -- TODO degrades -1 when hand open
+    tile <- anyMentsuJantou' suited
+    replicateM_ 3 $ anyMentsuJantou (honor |. sameSuit tile)
+    return 3
 
 yakuJunchan :: Yaku Int
 yakuJunchan = do
+    concealedHandDegrade
     allMentsuOfKind terminal -- TODO this does not notice 7-8-9 shuntsu
-    return 3 -- TODO degrades -1 when open
+    return 3
 
 yakuChinitsu :: Yaku Int
 yakuChinitsu = do
-    tile <- anyMentsu suited
+    concealedHandDegrade
+    tile <- anyMentsu' suited
     replicateM_ 3 (anyMentsu $ sameSuit tile)
     anyJantou (sameSuit tile)
-    return 6 -- TODO degrades -1 when open
+    return 6
 
--- ** Special
-
-yakuChiitoitsu :: Yaku ()
-yakuChiitoitsu = undefined
-
--- ** Unrelated to mentsu
+-- *** Unrelated to mentsu
 
 yakuMenzenTsumo :: Yaku ()
 yakuMenzenTsumo = undefined

@@ -1,6 +1,7 @@
 module Tiles where
 
 import ClassyPrelude
+import Control.Applicative
 
 
 data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
@@ -56,6 +57,10 @@ tileNumber (Pin n _) = n
 tileNumber (Sou n _) = n
 tileNumber _         = error "Not suited tile"
 
+tileSangenpai :: Tile -> Bool
+tileSangenpai (Sangen _) = True
+tileSangenpai _          = False
+
 setTileNumber :: Tile -> Number -> Tile
 setTileNumber (Man _ r) n = Man n r
 setTileNumber (Pin _ r) n = Pin n r
@@ -69,6 +74,9 @@ compareSuit (Sou _ _) (Sou _ _)   = True
 compareSuit (Sangen _) (Sangen _) = True
 compareSuit (Kaze _) (Kaze _)     = True
 compareSuit _ _                   = False
+
+tileTerminal :: Tile -> Bool
+tileTerminal tile = tileSuited tile && liftA2 (||) (== Ii) (== Chuu) (tileNumber tile)
 
 tileSucc :: Tile -> Maybe Tile
 tileSucc (Kaze kaze)
