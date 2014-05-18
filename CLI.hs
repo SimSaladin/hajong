@@ -64,11 +64,11 @@ class ClientOutput m => ClientInput m where
 consoleInput :: InputT (ReaderT ClientState IO) ()
 consoleInput = withInterrupt loop
     where
-        loop = handle interrupt (inputLoop loop)
-        interrupt Interrupt = do
+        loop = handleInterrupt interrupt (inputLoop loop)
+        interrupt = do
             chan <- view clientReceiveChan
             mline <- liftIO $ atomically $ tryReadTChan chan
-            maybe loop (\line -> out line >> interrupt Interrupt) mline
+            maybe loop (\line -> out line >> interrupt) mline
 
 instance ClientOutput (InputT (ReaderT ClientState IO)) where
     outAll = mapM_ (outputStrLn . unpack)
@@ -100,16 +100,6 @@ instance ClientOutput (ReaderT ClientState IO) where
         interrupt <- rview clientCanInterrupt
         when interrupt $ view clientMainThread >>= liftIO . (`throwTo` Interrupt)
 
--- * Helpers
-
-rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
-rview l = view l >>= liftIO . readMVar
-
-rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
-rswap l a = view l >>= liftIO . (`swapMVar` a)
-
-rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
-rmodify l f = view l >>= liftIO . (`modifyMVar_` f)
 
 -- * App
 
@@ -138,19 +128,21 @@ clientApp input listener conn = do
     state <- newClientState conn ident
 
     -- Start server listener
-    listenerDone <- newEmptyMVar 
-    listenerThread <- listener state `forkFinally` const (putMVar listenerDone ())
+    listenerMVar <- newEmptyMVar 
+    listenerThread <- (takeMVar listenerMVar >> listener state) `forkFinally` const (putMVar listenerMVar ())
 
     -- Tell we have joined
     unicast conn (JoinServer ident)
 
-    -- Run input loop
-    input state
+    -- Run input loop; the mvar is used to prevent listener from throwing
+    -- interrupts before input can handle them.
+    putMVar listenerMVar () >> input state
 
     -- cleanup
     WS.sendClose conn (PartServer "Bye")
-    _ <- killThread listenerThread >> takeMVar listenerDone
+    _ <- killThread listenerThread >> takeMVar listenerMVar
     return ()
+
 
 -- * User input
 
@@ -269,6 +261,7 @@ rawCommand = withParam "send command: " go
             Nothing -> out "Command not recognized"
             Just cmd -> emit cmd
 
+
 -- * Server listener
 
 clientReceiver :: ClientOutput m => m ()
@@ -278,15 +271,17 @@ clientReceiver = do
     forever $ liftIO (WS.receiveData conn) >>= clientEventHandler
 
 clientEventHandler :: Event -> Client ()
-clientEventHandler (JoinServer nick)   = nickJoined nick
-clientEventHandler (PartServer nick)   = nickParted nick
-clientEventHandler (LoungeInfo lounge) = rswap clientLounge lounge >> printLounge
-clientEventHandler (StartGame gstate)  = rswap clientGame (Just gstate) >> startGame
-clientEventHandler (JoinGame n nick)   = handleJoinGame n nick 
-clientEventHandler (NewGame info)      = gameCreated info
-clientEventHandler (Message sayer msg) = out $ "<" <> sayer <> "> " <> msg
-clientEventHandler (Invalid err)       = out $ "[error] " <> err
-clientEventHandler x                   = out $ "Unhandled event: " <> tshow x
+clientEventHandler ev = case ev of
+    JoinServer nick   -> nickJoined nick
+    PartServer nick   -> nickParted nick
+    LoungeInfo lounge -> rswap clientLounge lounge >> printLounge
+    NewGame info      -> gameCreated info
+    StartGame gstate  -> rswap clientGame (Just gstate) >> startGame
+    JoinGame n nick   -> handleJoinGame n nick 
+    GameAction ta     -> handleTurnAction ta
+    GameShout shout   -> handleGameShout shout
+    Message sayer msg -> out $ "<" <> sayer <> "> " <> msg
+    Invalid err       -> out $ "[error] " <> err
 
 nickJoined :: Text -> Client ()
 nickJoined nick = do
@@ -331,6 +326,19 @@ handleJoinGame n nick = do
                 out $ "Joined the game (" <> tshow n <> "). " <> countInfo
         else out $ nick <> " joined game (" <> tshow n <> "). " <> countInfo
 
+handleTurnAction :: TurnAction -> Client ()
+handleTurnAction ta = undefined
+
+handleGameShout :: Shout -> Client ()
+handleGameShout shout = undefined
+
+-- * Printing
+
+startGame :: Client ()
+startGame = do
+    out "Entering game!"
+    printGameState
+
 printUsers :: Client ()
 printUsers = do
     lounge <- view clientLounge >>= liftIO . readMVar
@@ -346,16 +354,13 @@ printGames = do
 printLounge :: Client ()
 printLounge = printUsers >> printGames
 
-startGame :: Client ()
-startGame = do
-    out "Entering game!"
-    printGameState
-
 printGameState :: Client ()
 printGameState = do
     Just game <- rview clientGame
     let public = game ^. playerPublic
     out $ pshow game
+
+-- * PP
 
 ppGame :: Int -> (Text, Set Nick) -> Text
 ppGame n (name,nicks) = mconcat ["(", tshow n, ") ", name, " [", ppNicks nicks, "]"]
@@ -364,3 +369,15 @@ ppNicks :: Set Nick -> Text
 ppNicks nicks = case setToList nicks of
             [] -> ""
             (x:xs) -> foldl' (\a b -> a <> ", " <> b) x xs
+
+
+-- * Helpers
+
+rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
+rview l = view l >>= liftIO . readMVar
+
+rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
+rswap l a = view l >>= liftIO . (`swapMVar` a)
+
+rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
+rmodify l f = view l >>= liftIO . (`modifyMVar_` f)

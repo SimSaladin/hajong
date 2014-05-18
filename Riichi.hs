@@ -1,8 +1,6 @@
-{-# LANGUAGE ConstraintKinds, NoImplicitPrelude, TemplateHaskell, OverloadedStrings, FlexibleContexts, GeneralizedNewtypeDeriving, StandaloneDeriving #-}
 module Riichi where
 
 import ClassyPrelude
-import Control.Lens
 import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.Writer
@@ -11,113 +9,23 @@ import Control.Monad.RWS
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import System.Random.Shuffle
-import Tiles
 
-if' :: Bool -> t -> t -> t
-if' cond th el = if cond then th else el
-
-
--- * Game types
-
--- | Server-side state
-data GameServer playerID = GameServer
-                   { _gamePlayers :: RiichiPlayers playerID
-                   , _gameName :: Text
-                   , _gameState :: Maybe RiichiState -- maybe in running game
-                   }
-
-newtype Player = Player Kazehai deriving (Show, Read, Eq, Ord)
-deriving instance Enum Player
-
-type RiichiPlayers playerID = [(Player, Maybe playerID, Points)]
-
-type Points = Int
-
--- * Single riichi deal types
-
-type RiichiState = (RiichiSecret, RiichiPublic)
-
-data RiichiSecret = RiichiSecret
-                 { _riichiWall :: [Tile]
-                 , _riichiWanpai :: [Tile]
-                 , _riichiHands :: Map Player Hand
-                 } deriving (Show, Read)
-
-data RiichiPublic = RiichiPublic
-                 { _riichiDora :: [Tile]
-                 , _riichiWallTilesLeft :: Int
-                 , _riichiRound :: Kazehai
-                 , _riichiDealer :: Player
-                 , _riichiTurn :: Player
-                 , _riichiPoints :: Map Player Points
-                 , _riichiEvents :: [Either Shout TurnAction]
-                 } deriving (Show, Read)
-
-data TurnAction = TurnRiichi Tile
-                | TurnDiscard Tile
-                | TurnDraw Bool (Maybe Tile)
-                | TurnAnkan Tile
-                | TurnShouted Shout Player -- shout [by who]
-                deriving (Show, Read)
-
-data RoundEvent = RoundAction Player TurnAction
-                | RoundTsumo Player
-                | RoundRon Player [Player] -- From, who?
-                | RoundDraw [Player] -- tenpai players
-
--- * Player-specific
-
--- | State of single player
-data GamePlayer playerID = GamePlayer
-                  { _playerPlayer :: Player
-                  , _playerPublic :: RiichiPublic
-                  , _playerPublicHands :: Map Player HandPublic
-                  , _playerPlayers :: RiichiPlayers playerID
-                  , _playerMyHand :: Hand
-                  } deriving (Show, Read)
-
--- * Hands' types
-
-data Shout = Pon | Kan | Chi | Ron
-           deriving (Show, Read, Eq)
-
-data HandPublic = HandPublic
-                { _handOpen :: [Mentsu]
-                , _handDiscards :: [(Tile, Maybe Player)]
-                , _handRiichi :: Bool
-                } deriving (Show, Read, Eq)
-
-data Hand = Hand
-          { _handConcealed :: [Tile]
-          , _handPick :: Maybe Tile
-          , _handFuriten :: Maybe Bool -- ^ Just (temporary?)
-          , _handPublic :: HandPublic
-          } deriving (Show, Read, Eq)
-
-
--- * Utility
-
--- * Lenses
-makeLenses ''GameServer
-makeLenses ''GamePlayer
-makeLenses ''RiichiSecret
-makeLenses ''RiichiPublic
-makeLenses ''HandPublic
-makeLenses ''Hand
-
-defaultPlayers :: [Player]
-defaultPlayers = [Player Ton .. Player Pei]
-
--- * GameMonad
+import GameTypes
 
 -- | Context of game and deal flow.
 type GameMonad m = ( MonadReader RiichiPublic m
                    , MonadState RiichiSecret m
-                   , MonadWriter RoundEvent m
+                   , MonadWriter [RoundEvent] m
                    , MonadError Text m
                    )
 
-type GameMonad' = RWST RiichiPublic RoundEvent RiichiSecret (Either Text)
+type GameMonad' = RWST RiichiPublic [RoundEvent] RiichiSecret (Either Text)
+
+-- | Run a GameMonad' action on a RiichiState (specialized)
+gsAction' ::  GameMonad' a -> GameServer pid -> Either Text (a, RiichiSecret, [RoundEvent])
+gsAction' m gs = case _gameState gs of
+    Just (secret, public) -> runRWST m public secret
+    Nothing               -> Left "No deal"
 
 liftE :: GameMonad m => Either Text a -> m a
 liftE = either throwError return
@@ -125,21 +33,15 @@ liftE = either throwError return
 handOf' :: GameMonad m => Player -> m Hand
 handOf' player = use (handOf player) >>= maybe (throwError "Player not found") return
 
--- | huh?
-handOf :: Functor f => Player -> (Maybe Hand -> f (Maybe Hand)) -> RiichiSecret -> f RiichiSecret
-handOf player = riichiHands.at player
+defaultPlayers :: [Player]
+defaultPlayers = [Player Ton .. Player Pei]
 
-
--- * Game
+-- * GameServer
 
 newGameServer :: Text -> GameServer a
 newGameServer name = GameServer players name Nothing
     where
         players = zip3 defaultPlayers (repeat Nothing) (repeat 25000)
-
--- | Run a GameMonad' action on a RiichiState
-gsAction' ::  GameMonad' a -> RiichiState -> Either Text (a, RiichiSecret, RoundEvent)
-gsAction' m (secret, public) = runRWST m public secret
 
 -- | Return the action to create a new game in the server state, unless
 -- a game is still running (gameState ~ Just)
@@ -166,7 +68,7 @@ gsPlayerLookup game player = game^.gameState^?_Just.to build
             <*> pure (game^.gamePlayers)
             <*> view (_1.riichiHands.at player.to fromJust)
 
--- ** GameMonad operations
+-- * Game logic
 
 -- | Apply an action on current player's turn
 runTurn :: GameMonad m => TurnAction -> m ()
@@ -182,8 +84,7 @@ runTurn action = do
         TurnAnkan tile            -> undefined
         TurnShouted shout shouter -> undefined
 
-    tell $ RoundAction player action -- here only if no error was thrown
-
+    tell [ RoundAction player action] -- only if no error was thrown
 
 -- * Deal state
 
@@ -226,33 +127,3 @@ newSecret = liftM dealTiles $ shuffleM riichiTiles
                 (hands, xs)             = splitAt (13 * 4) tiles
                 ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
                 (wanpai, wall)          = splitAt 14 xs
-
-
--- * Hand operations
-
--- | A hand that contains provided tiles in starting position
-initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing $ HandPublic [] [] False
-
--- | Discard a tile; returns Left if discard is not possible due to the
--- tile 1) not being in the hand or 2) due to riichi restriction.
-discard :: Tile -> Hand -> Either Text Hand
-discard tile hand
-    | hand ^. handPick == Just tile = Right $ hand & set handPick Nothing . setDiscard
-    | hand ^. handPublic.handRiichi = Left "Cannot change wait in riichi"
-    | otherwise                     = case ys of
-        []      -> Left "Tile not in hand"
-        (_:ys') -> Right $ hand & set handConcealed (xs ++ ys') . setDiscard
-    where
-        (xs, ys) = break (== tile) (_handConcealed hand)
-        setDiscard = over (handPublic.handDiscards) (++ [(tile, Nothing)])
-
--- | Left for 1) already in riichi or 2) not tenpai.
-setRiichi :: Tile -> Hand -> Either Text Hand
-setRiichi tile hand
-    | hand ^. handPublic.handRiichi = Left "Already in riichi"
-    | tenpai hand                   = Right $ set (handPublic.handRiichi) True hand
-    | otherwise                     = Left "Not in tenpai"
-
-tenpai :: Hand -> Bool
-tenpai hand = True -- TODO implement
