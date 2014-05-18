@@ -282,6 +282,7 @@ clientEventHandler ev = case ev of
     GameShout shout   -> handleGameShout shout
     Message sayer msg -> out $ "<" <> sayer <> "> " <> msg
     Invalid err       -> out $ "[error] " <> err
+    x                 -> out $ "Received an unhandled event: " <> tshow x
 
 nickJoined :: Text -> Client ()
 nickJoined nick = do

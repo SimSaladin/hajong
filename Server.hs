@@ -41,6 +41,7 @@ data Event = JoinServer Text -- ^ Nick
            | StartGame (GamePlayer Nick)
            | JoinGame Int Text -- ^ Game lounge
            | GameAction TurnAction
+           | GameEvents [TurnEvent]
            | GameShout Shout
            | Invalid Text
            deriving (Show, Read)
@@ -244,21 +245,26 @@ serverJoinGame n = do
 -- found, otherwise info from game server.
 handleGameAction :: TurnAction -> Server ()
 handleGameAction turnAction = do
-    Client nick conn <- viewClient
+    client@(Client nick conn) <- viewClient
 
     res <- withSSAtomic $ \var -> runEitherT $ do
-        state             <- lift $ readTVar var
-        gid               <- maybeToEitherT "Not in a game"        $ state ^? gameId nick
-        deal              <- maybeToEitherT "Game is not on-going" $ state ^. gameAt gid
-        (_,secret,events) <- hoistEither $ gsAction' (runTurn turnAction) deal & _Left %~ ("Game error: " <>)
+        state              <- lift $ readTVar var
+        gid                <- maybeToEitherT "Not in a game"        $ state ^? gameId nick
+        deal               <- maybeToEitherT "Game is not on-going" $ state ^. gameAt gid
+
+        let [(player,_,_)] = filter (^._2.to (== Just client)) $ _gamePlayers deal
+
+        (playerEvents,secret,events) <- hoistEither $ gsAction' (runTurn player turnAction) deal & _Left %~ ("Game error: " <>)
 
         lift $ writeTVar var $ state & gameAt gid._Just.gameState._Just._1 .~ secret
-        return (gid, state, events)
+        return (playerEvents, gid, state, events)
 
     either (unicast conn . Invalid) broadcastEvents res
     where
-        broadcastEvents (gid, state, events) =
-            multicast gid undefined state
+        broadcastEvents (playerEvents, gid, state, events) = do
+            Client _ conn <- viewClient
+            unicast conn (GameEvents playerEvents)
+            multicast gid (GameEvents events) state
 
 
 -- * Helpers

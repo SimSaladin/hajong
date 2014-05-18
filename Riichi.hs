@@ -70,10 +70,9 @@ gsPlayerLookup game player = game^.gameState^?_Just.to build
 
 -- * Game logic
 
--- | Apply an action on current player's turn
-runTurn :: GameMonad m => TurnAction -> m ()
-runTurn action = do
-    player <- view riichiTurn
+runTurn :: GameMonad m => Player -> TurnAction -> m [RoundEvent]
+runTurn player action = do
+    turnPlayer <- view riichiTurn
     hand <- use (handOf player) >>= maybe (throwError "Hand of current player not found") return
 
     case action of
@@ -84,7 +83,7 @@ runTurn action = do
         TurnAnkan tile            -> undefined
         TurnShouted shout shouter -> undefined
 
-    tell [ RoundAction player action] -- only if no error was thrown
+    tell [RoundAction player action]
 
 -- * Deal state
 
