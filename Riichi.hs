@@ -70,20 +70,34 @@ gsPlayerLookup game player = game^.gameState^?_Just.to build
 
 -- * Game logic
 
-runTurn :: GameMonad m => Player -> TurnAction -> m [RoundEvent]
+runTurn :: GameMonad m => Player -> TurnAction -> m ()
 runTurn player action = do
     turnPlayer <- view riichiTurn
-    hand <- use (handOf player) >>= maybe (throwError "Hand of current player not found") return
+    when (turnPlayer /= player) $ throwError "Not your turn"
+
+    hand <- use (handOf player) >>= maybe (throwError "Hand of current player not found (shouldn't happen?)") return
 
     case action of
         TurnRiichi tile           -> liftE (setRiichi tile hand) >>= (handOf player ?=)
         TurnDiscard tile          -> liftE (discard tile hand)   >>= (handOf player ?=)
-        TurnDraw dead Nothing     -> undefined
-        TurnDraw _ _              -> throwError "Draw action cannot specify the tile"
-        TurnAnkan tile            -> undefined
+        TurnAnkan tile            -> liftE (doAnkan tile hand) >>= (handOf player ?=)
         TurnShouted shout shouter -> undefined
+        TurnDraw False Nothing    -> drawWall hand >>= (handOf player ?=)
+        TurnDraw _ _              -> throwError "Draw action cannot specify the tile"
+
+    Just hand' <- use (handOf player)
+    when (hand /= hand') $ tell [RoundPrivateHand player hand]
+    when (_handPublic  hand /= _handPublic hand') $ tell [RoundPublicHand player $ _handPublic hand']
 
     tell [RoundAction player action]
+
+drawWall :: GameMonad m => Hand -> m Hand
+drawWall hand = do
+    wall <- use riichiWall
+    case wall of
+        (x:xs) -> do riichiWall .= xs
+                     return $ set handPick (Just x) hand
+        _ -> throwError "No tiles left"
 
 -- * Deal state
 

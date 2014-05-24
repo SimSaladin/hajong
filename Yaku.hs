@@ -8,48 +8,63 @@ import qualified Data.List as L
 
 -- * Mentsu
 
+type Mentsus = [Mentsu]
 type CompleteHand = [Mentsu]
 
-mentsuSearch :: [Tile] -> [CompleteHand]
-mentsuSearch =
-    mapMaybe isComplete . buildVariations . map getMentsu . groupBy compareSuit . sort
+handComplete :: Mentsus -> [Tile] -> Bool
+handComplete mentsu = not . null .
+    mapMaybe (isComplete . (mentsu ++)) . mentsuSearch
 
-buildVariations :: [[[Mentsu]]] -> [CompleteHand]
+mentsuSearch :: [Tile] -> [Mentsus]
+mentsuSearch =
+    buildVariations . map getMentsu .
+    groupBy compareSuit . sort
+
+buildVariations :: [[Mentsus]] -> [Mentsus]
 buildVariations = go
     where go (x : xs) = x >>= (`map` go xs) . (++)
           go []       = []
 
 -- | This gets only total mentsu: no orphan tiles are left in the result.
-getMentsu :: [Tile] -> [[Mentsu]]
+getMentsu :: [Tile] -> [Mentsus]
 getMentsu tiles = map fst $ go ([], tiles)
     where 
         go :: ([Mentsu], [Tile]) -> [([Mentsu], [Tile])] -- (mentsu, leftovers)
         go (done, xs@(a:b:es)) = let
 
-            takingJantou  = if a == b then go (Jantou [a,b] False : done, es) ++ takingKoutsu else []
+            takingJantou  = if a == b then go (Jantou [a,b] Nothing : done, es) ++ takingKoutsu else []
             takingKoutsu  = case es of
-                (c:es') | c == a      -> go (Koutsu [a,b,c] False : done, es') ++ takingKantsu
+                (c:es') | c == a      -> go (Koutsu [a,b,c] Nothing : done, es') ++ takingKantsu
                         | otherwise   -> []
                 _                     -> []
             takingKantsu  = case es of
-                (c:d:es') | c == d    -> go (Kantsu [a,b,c,d] False : done, es')
+                (c:d:es') | c == d    -> go (Kantsu [a,b,c,d] Nothing : done, es')
                           | otherwise -> []
                 _                     -> []
-            takingShuntsu = case (tileSucc a, tileSucc a >>= tileSucc) of
-                (Just r, Just s)
-                    | tileSuited a && r `elem` xs && s `elem` xs -> 
-                        go (Shuntsu [a,r,s] False : done, xs L.\\ [a,r,s])
-                    | otherwise -> []
-                _ -> []
-
+            takingShuntsu = case shuntsuOf a xs of
+                Just ment   -> go (ment : done, xs L.\\ mentsuPai ment)
+                Nothing     -> []
             in takingJantou ++ takingShuntsu
 
         go (done, []) = [(done, [])]
         go (_,  _)    = [] -- branch cannot be complete with one orphan tile
 
-isComplete :: [Mentsu] -> Maybe CompleteHand
+shuntsuOf :: Tile -> [Tile] -> Maybe Mentsu
+shuntsuOf a xs = do
+    r <- tileSucc a
+    s <- tileSucc r
+    guard (tileSuited a && r `elem` xs && s `elem` xs)
+    return $ Shuntsu [a,r,s] Nothing
+
+isShuntsu :: [Tile] -> Bool
+isShuntsu xs = case sort xs of
+    (x:y:z:[]) -> tileSuited x && Just y == tileSucc x && Just z == tileSucc y
+    _ -> False
+
+isComplete :: Mentsus -> Maybe CompleteHand
 isComplete xs = do
-    guard $ (== 1) $ length $ filter isJantou xs
+    guard $ length xs == 5
+    guard $ length (filter isJantou xs) == 1
     return xs
 
 -- | Documentation for 'isJantou'
@@ -141,7 +156,7 @@ ofTileType tt mentsu = let firstTile = unsafeHead $ mentsuPai mentsu
         TileAnd x y         -> ofTileType x mentsu && ofTileType y mentsu
         TileOr x y          -> ofTileType x mentsu || ofTileType y mentsu
         TileNot x           -> not $ ofTileType x mentsu
-        TileConcealed       -> not $ mentsuOpen mentsu
+        TileConcealed       -> isNothing $ mentsuOpen mentsu
         TileAny             -> True
 
 terminal, honor, sangenpai, suited, anyTile, concealed :: MentsuProp

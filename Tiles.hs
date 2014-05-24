@@ -3,6 +3,8 @@ module Tiles where
 import ClassyPrelude
 import Control.Applicative
 
+newtype Player = Player Kazehai deriving (Show, Read, Eq, Ord)
+deriving instance Enum Player
 
 data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
             deriving (Show, Read, Eq, Ord, Enum, Bounded)
@@ -20,23 +22,29 @@ data Tile = Man Number Bool
           | Kaze Kazehai
           deriving (Show, Read, Eq, Ord)
 
-data Mentsu = Shuntsu { mentsuPai :: [Tile], mentsuOpen :: Bool }  -- straight
-            | Koutsu  { mentsuPai :: [Tile], mentsuOpen :: Bool } -- triplet
-            | Kantsu  { mentsuPai :: [Tile], mentsuOpen :: Bool } -- quadret
-            | Jantou  { mentsuPai :: [Tile], mentsuOpen :: Bool } -- pair
+data Mentsu = Shuntsu { mentsuPai :: [Tile], mentsuOpen :: Maybe Player }  -- straight
+            | Koutsu  { mentsuPai :: [Tile], mentsuOpen :: Maybe Player } -- triplet
+            | Kantsu  { mentsuPai :: [Tile], mentsuOpen :: Maybe Player } -- quadret
+            | Jantou  { mentsuPai :: [Tile], mentsuOpen :: Maybe Player } -- pair
             deriving (Show, Read, Eq, Ord)
 
+data Shout = Pon
+           | Kan
+           | Chi (Tile, Tile)
+           | Ron
+           deriving (Show, Read, Eq)
+
 koutsu :: [Tile] -> Mentsu
-koutsu = flip Koutsu False
+koutsu = flip Koutsu Nothing
 
 kantsu :: [Tile] -> Mentsu
-kantsu = flip Kantsu False
+kantsu = flip Kantsu Nothing
 
 jantou :: [Tile] -> Mentsu
-jantou = flip Jantou False
+jantou = flip Jantou Nothing
 
 shuntsu :: [Tile] -> Mentsu
-shuntsu = flip Shuntsu False
+shuntsu = flip Shuntsu Nothing
 
 riichiTiles :: [Tile]
 riichiTiles = join . replicate 4 $ 

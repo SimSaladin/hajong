@@ -12,14 +12,13 @@ module Hand where
 import ClassyPrelude
 import Control.Lens
 import Tiles
-
-newtype Player = Player Kazehai deriving (Show, Read, Eq, Ord)
-deriving instance Enum Player
+import Yaku
 
 data HandPublic = HandPublic
                 { _handOpen :: [Mentsu]
                 , _handDiscards :: [(Tile, Maybe Player)]
                 , _handRiichi :: Bool
+                , _handTurnDiscard :: Maybe Tile
                 } deriving (Show, Read, Eq)
 
 data Hand = Hand
@@ -34,7 +33,7 @@ makeLenses ''Hand
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing $ HandPublic [] [] False
+initHand tiles = Hand tiles Nothing Nothing $ HandPublic [] [] False Nothing
 
 -- | Discard a tile; returns Left if discard is not possible due to the
 -- tile 1) not being in the hand or 2) due to riichi restriction.
@@ -58,3 +57,40 @@ setRiichi tile hand
 
 tenpai :: Hand -> Bool
 tenpai hand = True -- TODO implement
+
+doAnkan :: Tile -> Hand -> Either Text Hand
+doAnkan tile hand = case len of
+                        4 -> Right $ handConcealed %~ filter (/= tile) $ hand
+                        3   | hand ^. handPick == Just tile -> Right
+                                $ handPick .~ Nothing
+                                $ handConcealed %~ filter (/= tile)
+                                $ hand
+                            | otherwise -> Left "Cannot ankan"
+                        _ -> Left "Cannot ankan"
+    where len = length (hand^.handConcealed^..folded.filtered (== tile))
+
+doShout :: Shout -> Player -> Hand -> Either Text (Hand, Player -> Hand -> Maybe (Either () Mentsu))
+doShout shout shouter hand =
+    case hand ^. handPublic.handTurnDiscard of
+        Nothing   -> Left "Player hasn't even discarded yet"
+        Just tile -> Right
+            ( (handPublic.handTurnDiscard .~ Nothing)
+            . (handPublic.handDiscards %~ (<> [(tile, Just shouter)])) $ hand
+            , toShout shout tile
+            )
+
+toShout :: Shout -> Tile -> Player -> Hand -> Maybe (Either () Mentsu) -- Left stands for complete with ron
+toShout shout tile player hand =
+    case shout of
+        Pon | fc tile == 2 -> Just $ Right $ Koutsu [tile,tile,tile] (Just player)
+            | otherwise    -> Nothing
+        Kan | fc tile == 3 -> Just $ Right $ Kantsu [tile,tile,tile,tile] (Just player)
+            | otherwise    -> Nothing
+        Ron | handComplete (hand^.handPublic.handOpen) (tile : hand^.handConcealed) -> Just $ Left ()
+            | otherwise              -> Nothing
+        Chi (x, y)
+            | isShuntsu [tile,x,y] && fc x > 0 && fc y > 0 -> Just $ Right $ Shuntsu (sort [tile,x,y]) (Just player)
+            | otherwise                                    -> Nothing
+    where
+        fc t = length $ hand^.handConcealed^..folded.filtered (== t)
+        
