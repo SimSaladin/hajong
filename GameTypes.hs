@@ -60,11 +60,11 @@ data TurnAction = TurnRiichi Tile
                 deriving (Show, Read)
 
 data RoundEvent = RoundAction Player TurnAction
-                | RoundPrivateHand Player Hand
                 | RoundPublicHand Player HandPublic
                 | RoundTsumo Player
                 | RoundRon Player [Player] -- From, who?
                 | RoundDraw [Player] -- tenpai players
+                deriving (Show, Read)
 
 -- * Player-specific
 

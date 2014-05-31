@@ -3,7 +3,7 @@ module PrettyPrint where
 
 import ClassyPrelude
 import Control.Lens
-import Tiles
+import GameTypes
 import Riichi
 import Data.List (transpose, cycle)
 import Data.Text (splitOn, chunksOf, justifyLeft, justifyRight)
@@ -97,9 +97,9 @@ instance PrettyPrint (GamePlayer Text) where
                        in view $ to magic
 
         let [dmine, dright, dfront, dleft]             = mapPositions (players ^.. each._4.handDiscards)
-            [openMine, openRight, openFront, openLeft] = map pshow (players ^.. each._4.handOpen)
             [infoMine, infoRight, infoFront, infoLeft] = mapPositions (players ^.. each)
-            [_, handRight, handFront, handLeft]        = mapPositions (players ^.. each._4.handOpen.to (OtherConceal . (*3) . length))
+            [_, handRight, handFront, handLeft]        = mapPositions (players ^.. each._4.handOpen.to (OtherConceal . (\o -> 13 - o * 3) . length))
+            [openMine, openRight, openFront, openLeft] = map pshow    (players ^.. each._4.handOpen)
 
         return $ unlines $ []
                 & pushToPlace dora      (12, 24) 
@@ -234,10 +234,10 @@ instance PrettyPrint Mentsu where
 instance PrettyRead Mentsu where
     pread input = case pread <$> splitOn "-" input of
         tiles@(x:y:_)
-            | length tiles == 4           -> Kantsu tiles True
-            | length tiles == 3 && x == y -> Koutsu tiles True
-            | length tiles == 3           -> Shuntsu tiles True
-            | length tiles == 2 && x == y -> Jantou tiles True
+            | length tiles == 4           -> Kantsu tiles Nothing
+            | length tiles == 3 && x == y -> Koutsu tiles Nothing
+            | length tiles == 3           -> Shuntsu tiles Nothing
+            | length tiles == 2 && x == y -> Jantou tiles Nothing
             | otherwise -> error "pread: no parse"
         _ -> error "pread: no parse"
 

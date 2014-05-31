@@ -18,7 +18,7 @@ data HandPublic = HandPublic
                 { _handOpen :: [Mentsu]
                 , _handDiscards :: [(Tile, Maybe Player)]
                 , _handRiichi :: Bool
-                , _handTurnDiscard :: Maybe Tile
+                , _handTurnDiscard :: Maybe (Tile, UTCTime)
                 } deriving (Show, Read, Eq)
 
 data Hand = Hand
@@ -72,8 +72,8 @@ doAnkan tile hand = case len of
 doShout :: Shout -> Player -> Hand -> Either Text (Hand, Player -> Hand -> Maybe (Either () Mentsu))
 doShout shout shouter hand =
     case hand ^. handPublic.handTurnDiscard of
-        Nothing   -> Left "Player hasn't even discarded yet"
-        Just tile -> Right
+        Nothing            -> Left "Player has no recent discard"
+        Just (tile, _time) -> Right
             ( (handPublic.handTurnDiscard .~ Nothing)
             . (handPublic.handDiscards %~ (<> [(tile, Just shouter)])) $ hand
             , toShout shout tile

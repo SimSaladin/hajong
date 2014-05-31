@@ -41,7 +41,8 @@ data Event = JoinServer Text -- ^ Nick
            | StartGame (GamePlayer Nick)
            | JoinGame Int Text -- ^ Game lounge
            | GameAction TurnAction
-           | GameEvents [TurnEvent]
+           | GameEvents [RoundEvent]
+           | GameHandChanged Hand
            | GameShout Shout
            | Invalid Text
            deriving (Show, Read)
@@ -217,29 +218,41 @@ serverJoinGame n = do
         state <- lift $ readTVar var
         when (state^.serverLounge.to (not . member client)) (left "Already in a game. You cannot join multiple games")
 
-        gs  <- maybe (left "Game not found") return (state^.serverGames.at n)
-            >>= maybe (left "Game is full") return . gsAddPlayer client
+        gs <- maybeToEitherT "Game not found" $ state^.serverGames.at n
 
         when (Just client `elem` (gs^.gamePlayers^..(each._2))) $ left "Already in the game"
 
-        let newState = state & set (serverGames.at n.traversed) gs
+        gs' <- maybeToEitherT "Game is full" $ gsAddPlayer client gs
+
+        let newState = state & set (serverGames.at n.traversed) gs'
                              . over serverLounge (deleteSet client)
         lift $ writeTVar var newState
-        return newState
+        return (newState, advanceGameState gs')
+
     either (unicast conn . Invalid) (handleComm nick) res
     where
-        handleComm nick state = do
+        handleComm nick (state, advance) = do
             broadcast (JoinGame n nick) state  -- join confirmation
-            maybeGameStart state
+            res <- advance
+            case res of
+                Just gs -> withSSAtomic $ \var ->
+                    modifyTVar var $ set (serverGames.at n) $ Just gs
+                Nothing -> return ()
 
-        maybeGameStart state =
-            let Just gs = state^.serverGames.at n
-                handlePlayer (player, Just (Client _ conn'), _) = unicast conn'
-                    $ StartGame $ gsPlayerLookup gs player ^?! _Just
-                    & over (playerPlayers.each._2._Just) getNick
-                handlePlayer (_,_,_)                            = return ()
-            in when (gs^.gamePlayers & find (isn't _Just.view _2) & isNothing) $
-                mapM_ handlePlayer (gs^.gamePlayers)
+
+-- | Documentation for 'advanceGameState'
+advanceGameState :: GameServer Client -> Server (Maybe (GameServer Client))
+advanceGameState gs = case gsNewGame gs of
+    Just gsIO -> do
+        gs <- liftIO gsIO
+        let handlePlayer (player, Just (Client _ conn), _) = unicast conn
+                $ StartGame
+                $ playerPlayers.each._2._Just %~ getNick -- drop conn
+                $ gsPlayerLookup gs player ^?! _Just
+            handlePlayer (_,_,_) = error "The impossible happened"
+        mapM_ handlePlayer (gs^.gamePlayers)
+        return $ Just gs
+    Nothing -> return Nothing -- XXX: turn advancements
 
 -- | Do stuff on received TurnAction: notify of illegal event if game not
 -- found, otherwise info from game server.
@@ -254,16 +267,18 @@ handleGameAction turnAction = do
 
         let [(player,_,_)] = filter (^._2.to (== Just client)) $ _gamePlayers deal
 
-        (playerEvents,secret,events) <- hoistEither $ gsAction' (runTurn player turnAction) deal & _Left %~ ("Game error: " <>)
+        (mhand, secret, events) <- hoistEither
+            $ _Left %~ ("Game error: " <>)
+            $ gsAction' (runTurn player turnAction) deal
 
         lift $ writeTVar var $ state & gameAt gid._Just.gameState._Just._1 .~ secret
-        return (playerEvents, gid, state, events)
+        return (mhand, gid, state, events)
 
     either (unicast conn . Invalid) broadcastEvents res
     where
-        broadcastEvents (playerEvents, gid, state, events) = do
+        broadcastEvents (mhand, gid, state, events) = do
             Client _ conn <- viewClient
-            unicast conn (GameEvents playerEvents)
+            maybe (return ()) (unicast conn . GameHandChanged) mhand
             multicast gid (GameEvents events) state
 
 

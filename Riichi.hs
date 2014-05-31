@@ -7,6 +7,7 @@ import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.RWS
 import qualified Data.Map as Map
+import qualified Data.List as L
 import Data.Maybe (fromJust)
 import System.Random.Shuffle
 
@@ -46,7 +47,13 @@ newGameServer name = GameServer players name Nothing
 -- | Return the action to create a new game in the server state, unless
 -- a game is still running (gameState ~ Just)
 gsNewGame :: GameServer a -> Maybe (IO (GameServer a))
-gsNewGame gs = maybe (Just $ newRiichiState <&> flip (set gameState) gs . Just) (const Nothing) (_gameState gs)
+gsNewGame gs = do
+    -- all player seats occupied
+    guard (gs^.gamePlayers & find (isn't _Just.view _2) & isNothing)
+
+    case _gameState gs of
+        Nothing -> return $ (\rs -> gs & set gameState (Just rs)) <$> newRiichiState
+        Just _ -> undefined -- TODO Check if round is over?
 
 -- | Nothing if game full
 gsAddPlayer :: Eq a => a -> GameServer a -> Maybe (GameServer a)
@@ -70,26 +77,42 @@ gsPlayerLookup game player = game^.gameState^?_Just.to build
 
 -- * Game logic
 
-runTurn :: GameMonad m => Player -> TurnAction -> m ()
+runTurn :: GameMonad m => Player -> TurnAction -> m (Maybe Hand)
 runTurn player action = do
     turnPlayer <- view riichiTurn
     when (turnPlayer /= player) $ throwError "Not your turn"
 
     hand <- use (handOf player) >>= maybe (throwError "Hand of current player not found (shouldn't happen?)") return
-
-    case action of
-        TurnRiichi tile           -> liftE (setRiichi tile hand) >>= (handOf player ?=)
-        TurnDiscard tile          -> liftE (discard tile hand)   >>= (handOf player ?=)
-        TurnAnkan tile            -> liftE (doAnkan tile hand) >>= (handOf player ?=)
-        TurnShouted shout shouter -> undefined
-        TurnDraw False Nothing    -> drawWall hand >>= (handOf player ?=)
+    newHand <- case action of
+        TurnRiichi tile           -> liftE (setRiichi tile hand)
+        TurnDiscard tile          -> liftE (discard tile hand)
+        TurnAnkan tile            -> liftE (doAnkan tile hand)
+        TurnShouted shout shouter -> liftE (doShout shout player hand) >>= processShout player shouter
+        TurnDraw False Nothing    -> drawWall hand
+        TurnDraw True  Nothing    -> drawDeadWall hand
         TurnDraw _ _              -> throwError "Draw action cannot specify the tile"
 
-    Just hand' <- use (handOf player)
-    when (hand /= hand') $ tell [RoundPrivateHand player hand]
-    when (_handPublic  hand /= _handPublic hand') $ tell [RoundPublicHand player $ _handPublic hand']
+    handOf player ?= newHand
 
-    tell [RoundAction player action]
+    Just hand' <- use (handOf player)
+    tell [RoundAction player action] -- TODO hide private
+    when (_handPublic hand /= _handPublic hand') $ tell [RoundPublicHand player $ _handPublic hand']
+
+    return $ if hand /= hand' then Just hand else Nothing
+
+processShout :: GameMonad m => Player -> Player -> (Hand, Player -> Hand -> Maybe (Either () Mentsu)) -> m Hand
+processShout turnPlayer shouter (turnHand, f) = do
+    hand <- use (handOf shouter) >>= maybe (throwError "Hand not fonud") return
+    case f shouter hand of
+        Nothing             -> throwError "Shout would be invalid"
+        Just (Left ())      -> tell [RoundRon turnPlayer [shouter]]
+        Just (Right mentsu) -> do
+            let newHand = hand & over (handPublic.handOpen) (mentsu :)
+                               . over handConcealed
+                               (L.\\ mentsuPai mentsu)
+            handOf shouter ?= newHand
+            tell [RoundPublicHand shouter $ _handPublic hand]
+    return turnHand
 
 drawWall :: GameMonad m => Hand -> m Hand
 drawWall hand = do
@@ -98,6 +121,11 @@ drawWall hand = do
         (x:xs) -> do riichiWall .= xs
                      return $ set handPick (Just x) hand
         _ -> throwError "No tiles left"
+
+drawDeadWall :: GameMonad m => Hand -> m Hand
+drawDeadWall hand = do
+    wall <- use riichiWanpai
+    undefined
 
 -- * Deal state
 

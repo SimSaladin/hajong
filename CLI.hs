@@ -12,6 +12,8 @@ import qualified Data.Text as T
 import           System.Random
 import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
+
+import           GameTypes
 import           Riichi
 import           Server hiding (Client) -- TODO it shouldn't even export this
 import           PrettyPrint
@@ -328,7 +330,13 @@ handleJoinGame n nick = do
         else out $ nick <> " joined game (" <> tshow n <> "). " <> countInfo
 
 handleTurnAction :: TurnAction -> Client ()
-handleTurnAction ta = undefined
+handleTurnAction ta = do
+    case ta of
+        TurnRiichi _          -> undefined
+        TurnDiscard tile      -> undefined
+        TurnDraw dead _       -> undefined
+        TurnAnkan tile        -> undefined
+        TurnShouted shout who -> undefined
 
 handleGameShout :: Shout -> Client ()
 handleGameShout shout = undefined
