@@ -1,6 +1,14 @@
 {-# LANGUAGE RankNTypes, OverloadedStrings, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-
-module CLI where
+------------------------------------------------------------------------------
+-- | 
+-- Module         : Hajong.Client.CLI
+-- Copyright      : (C) 2014 Samuli Thomasson
+-- License        : BSD-style (see the file LICENSE)
+-- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
+-- Stability      : experimental
+-- Portability    : non-portable
+------------------------------------------------------------------------------
+module Hajong.Client.CLI where
 
 import           ClassyPrelude hiding (finally, handle, toLower)
 import           Control.Lens
@@ -13,10 +21,11 @@ import           System.Random
 import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
 
-import           GameTypes
-import           Riichi
-import           Server hiding (Client) -- TODO it shouldn't even export this
-import           PrettyPrint
+import           Hajong.Client.PrettyPrint
+import           Hajong.Server hiding (Client) -- TODO it shouldn't even export this
+
+import           Hajong.Game.Types
+import           Hajong.Game.Mechanics
 
 -- * Client state
 

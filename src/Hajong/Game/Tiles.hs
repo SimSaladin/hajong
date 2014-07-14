@@ -1,4 +1,13 @@
-module Tiles where
+------------------------------------------------------------------------------
+-- | 
+-- Module         : Hajong.Game.Tiles
+-- Copyright      : (C) 2014 Samuli Thomasson
+-- License        : BSD-style (see the file LICENSE)
+-- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
+-- Stability      : experimental
+-- Portability    : non-portable
+------------------------------------------------------------------------------
+module Hajong.Game.Tiles where
 
 import ClassyPrelude
 import Control.Applicative

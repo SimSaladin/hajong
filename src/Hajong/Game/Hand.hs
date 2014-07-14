@@ -1,18 +1,19 @@
 ------------------------------------------------------------------------------
 -- | 
--- Module         : Hand
+-- Module         : Hajong.Game.Hand
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Hand where
+module Hajong.Game.Hand where
 
 import ClassyPrelude
 import Control.Lens
-import Tiles
-import Yaku
+
+import Hajong.Game.Tiles
+import Hajong.Game.Mentsu
 
 data HandPublic = HandPublic
                 { _handOpen :: [Mentsu]
@@ -79,7 +80,8 @@ doShout shout shouter hand =
             , toShout shout tile
             )
 
-toShout :: Shout -> Tile -> Player -> Hand -> Maybe (Either () Mentsu) -- Left stands for complete with ron
+toShout :: Shout -> Tile -> Player -> Hand
+        -> Maybe (Either () Mentsu) -- ^ Left stands for complete with ron
 toShout shout tile player hand =
     case shout of
         Pon | fc tile == 2 -> Just $ Right $ Koutsu [tile,tile,tile] (Just player)

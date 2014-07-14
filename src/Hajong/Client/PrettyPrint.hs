@@ -1,13 +1,23 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-module PrettyPrint where
+------------------------------------------------------------------------------
+-- | 
+-- Module         : Hajong.Client.PrettyPrint
+-- Copyright      : (C) 2014 Samuli Thomasson
+-- License        : BSD-style (see the file LICENSE)
+-- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
+-- Stability      : experimental
+-- Portability    : non-portable
+------------------------------------------------------------------------------
+module Hajong.Client.PrettyPrint where
 
 import ClassyPrelude
 import Control.Lens
-import GameTypes
-import Riichi
 import Data.List (transpose, cycle)
 import Data.Text (splitOn, chunksOf, justifyLeft, justifyRight)
 import qualified Data.List.Split as L (chunksOf)
+
+import Hajong.Game.Types
+import Hajong.Game.Mechanics
 
 class PrettyPrint x where
     pshow :: x -> Text

@@ -1,4 +1,13 @@
-module Riichi where
+------------------------------------------------------------------------------
+-- | 
+-- Module         : Hajong.Game.Mechanics
+-- Copyright      : (C) 2014 Samuli Thomasson
+-- License        : BSD-style (see the file LICENSE)
+-- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
+-- Stability      : experimental
+-- Portability    : non-portable
+------------------------------------------------------------------------------
+module Hajong.Game.Mechanics where
 
 import ClassyPrelude
 import Control.Monad.Error
@@ -11,28 +20,7 @@ import qualified Data.List as L
 import Data.Maybe (fromJust)
 import System.Random.Shuffle
 
-import GameTypes
-
--- | Context of game and deal flow.
-type GameMonad m = ( MonadReader RiichiPublic m
-                   , MonadState RiichiSecret m
-                   , MonadWriter [RoundEvent] m
-                   , MonadError Text m
-                   )
-
-type GameMonad' = RWST RiichiPublic [RoundEvent] RiichiSecret (Either Text)
-
--- | Run a GameMonad' action on a RiichiState (specialized)
-gsAction' ::  GameMonad' a -> GameServer pid -> Either Text (a, RiichiSecret, [RoundEvent])
-gsAction' m gs = case _gameState gs of
-    Just (secret, public) -> runRWST m public secret
-    Nothing               -> Left "No deal"
-
-liftE :: GameMonad m => Either Text a -> m a
-liftE = either throwError return
-
-handOf' :: GameMonad m => Player -> m Hand
-handOf' player = use (handOf player) >>= maybe (throwError "Player not found") return
+import Hajong.Game.Types
 
 defaultPlayers :: [Player]
 defaultPlayers = [Player Ton .. Player Pei]
@@ -55,6 +43,12 @@ gsNewGame gs = do
         Nothing -> return $ (\rs -> gs & set gameState (Just rs)) <$> newRiichiState
         Just _ -> undefined -- TODO Check if round is over?
 
+-- | Execute an action in the "GameServer".
+gsAction ::  RoundM' a -> GameServer pid -> Either Text (a, RiichiSecret, [RoundEvent])
+gsAction m gs = case _gameState gs of
+    Just (secret, public) -> runRWST m public secret
+    Nothing               -> Left "No deal"
+
 -- | Nothing if game full
 gsAddPlayer :: Eq a => a -> GameServer a -> Maybe (GameServer a)
 gsAddPlayer a gs = do
@@ -75,59 +69,7 @@ gsPlayerLookup game player = game^.gameState^?_Just.to build
             <*> pure (game^.gamePlayers)
             <*> view (_1.riichiHands.at player.to fromJust)
 
--- * Game logic
-
-runTurn :: GameMonad m => Player -> TurnAction -> m (Maybe Hand)
-runTurn player action = do
-    turnPlayer <- view riichiTurn
-    when (turnPlayer /= player) $ throwError "Not your turn"
-
-    hand <- use (handOf player) >>= maybe (throwError "Hand of current player not found (shouldn't happen?)") return
-    newHand <- case action of
-        TurnRiichi tile           -> liftE (setRiichi tile hand)
-        TurnDiscard tile          -> liftE (discard tile hand)
-        TurnAnkan tile            -> liftE (doAnkan tile hand)
-        TurnShouted shout shouter -> liftE (doShout shout player hand) >>= processShout player shouter
-        TurnDraw False Nothing    -> drawWall hand
-        TurnDraw True  Nothing    -> drawDeadWall hand
-        TurnDraw _ _              -> throwError "Draw action cannot specify the tile"
-
-    handOf player ?= newHand
-
-    Just hand' <- use (handOf player)
-    tell [RoundAction player action] -- TODO hide private
-    when (_handPublic hand /= _handPublic hand') $ tell [RoundPublicHand player $ _handPublic hand']
-
-    return $ if hand /= hand' then Just hand else Nothing
-
-processShout :: GameMonad m => Player -> Player -> (Hand, Player -> Hand -> Maybe (Either () Mentsu)) -> m Hand
-processShout turnPlayer shouter (turnHand, f) = do
-    hand <- use (handOf shouter) >>= maybe (throwError "Hand not fonud") return
-    case f shouter hand of
-        Nothing             -> throwError "Shout would be invalid"
-        Just (Left ())      -> tell [RoundRon turnPlayer [shouter]]
-        Just (Right mentsu) -> do
-            let newHand = hand & over (handPublic.handOpen) (mentsu :)
-                               . over handConcealed
-                               (L.\\ mentsuPai mentsu)
-            handOf shouter ?= newHand
-            tell [RoundPublicHand shouter $ _handPublic hand]
-    return turnHand
-
-drawWall :: GameMonad m => Hand -> m Hand
-drawWall hand = do
-    wall <- use riichiWall
-    case wall of
-        (x:xs) -> do riichiWall .= xs
-                     return $ set handPick (Just x) hand
-        _ -> throwError "No tiles left"
-
-drawDeadWall :: GameMonad m => Hand -> m Hand
-drawDeadWall hand = do
-    wall <- use riichiWanpai
-    undefined
-
--- * Deal state
+-- * Round state
 
 -- | Advance the game to next round
 nextRound :: RiichiState -> IO RiichiState
@@ -168,3 +110,55 @@ newSecret = liftM dealTiles $ shuffleM riichiTiles
                 (hands, xs)             = splitAt (13 * 4) tiles
                 ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
                 (wanpai, wall)          = splitAt 14 xs
+
+-- * Round events
+
+runTurn :: RoundM m => Player -> TurnAction -> m (Maybe Hand)
+runTurn player action = do
+    turnPlayer <- view riichiTurn
+    when (turnPlayer /= player) $ throwError "Not your turn"
+
+    hand <- use (handOf player) >>= maybe (throwError "Hand of current player not found (shouldn't happen?)") return
+    newHand <- case action of
+        TurnRiichi tile           -> liftE (setRiichi tile hand)
+        TurnDiscard tile          -> liftE (discard tile hand)
+        TurnAnkan tile            -> liftE (doAnkan tile hand)
+        TurnShouted shout shouter -> liftE (doShout shout player hand) >>= processShout player shouter
+        TurnDraw False Nothing    -> drawWall hand
+        TurnDraw True  Nothing    -> drawDeadWall hand
+        TurnDraw _ _              -> throwError "Draw action cannot specify the tile"
+
+    handOf player ?= newHand
+
+    Just hand' <- use (handOf player)
+    tell [RoundAction player action] -- TODO hide private
+    when (_handPublic hand /= _handPublic hand') $ tell [RoundPublicHand player $ _handPublic hand']
+
+    return $ if hand /= hand' then Just hand else Nothing
+
+processShout :: RoundM m => Player -> Player -> (Hand, Player -> Hand -> Maybe (Either () Mentsu)) -> m Hand
+processShout turnPlayer shouter (turnHand, f) = do
+    hand <- use (handOf shouter) >>= maybe (throwError "Hand not fonud") return
+    case f shouter hand of
+        Nothing             -> throwError "Shout would be invalid"
+        Just (Left ())      -> tell [RoundRon turnPlayer [shouter]]
+        Just (Right mentsu) -> do
+            let newHand = hand & over (handPublic.handOpen) (mentsu :)
+                               . over handConcealed
+                               (L.\\ mentsuPai mentsu)
+            handOf shouter ?= newHand
+            tell [RoundPublicHand shouter $ _handPublic hand]
+    return turnHand
+
+drawWall :: RoundM m => Hand -> m Hand
+drawWall hand = do
+    wall <- use riichiWall
+    case wall of
+        (x:xs) -> do riichiWall .= xs
+                     return $ set handPick (Just x) hand
+        _ -> throwError "No tiles left"
+
+drawDeadWall :: RoundM m => Hand -> m Hand
+drawDeadWall hand = do
+    wall <- use riichiWanpai
+    undefined

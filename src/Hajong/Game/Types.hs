@@ -1,25 +1,33 @@
 ------------------------------------------------------------------------------
 -- | 
--- Module         : GameTypes
+-- Module         : Hajong.Game.Types
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module GameTypes
-    ( module Hand
-    , module Tiles
-    , module GameTypes
+module Hajong.Game.Types
+    ( module Hajong.Game.Hand
+    , module Hajong.Game.Tiles
+    , module Hajong.Game.Types
 
     -- * Re-exports
     , module Control.Lens
     ) where
 
 import ClassyPrelude
+import Control.Monad.Error (MonadError, throwError)
+import Control.Monad.Reader (MonadReader)
+import Control.Monad.Writer (MonadWriter)
+import Control.Monad.State (MonadState)
+import Control.Monad.RWS
 import Control.Lens
-import Tiles
-import Hand
+
+import Hajong.Game.Tiles
+import Hajong.Game.Hand
+
+-- * Game
 
 -- | Server-side state
 data GameServer playerID = GameServer
@@ -32,7 +40,16 @@ type RiichiPlayers playerID = [(Player, Maybe playerID, Points)]
 
 type Points = Int
 
--- * Single riichi deal types
+-- * Round
+
+-- | Context of game and deal flow.
+type RoundM m = ( MonadReader RiichiPublic m
+                , MonadState RiichiSecret m
+                , MonadWriter [RoundEvent] m
+                , MonadError Text m
+                )
+
+type RoundM' = RWST RiichiPublic [RoundEvent] RiichiSecret (Either Text)
 
 type RiichiState = (RiichiSecret, RiichiPublic)
 
@@ -66,7 +83,7 @@ data RoundEvent = RoundAction Player TurnAction
                 | RoundDraw [Player] -- tenpai players
                 deriving (Show, Read)
 
--- * Player-specific
+-- * Player wrappers
 
 -- | State of single player
 data GamePlayer playerID = GamePlayer
@@ -91,3 +108,9 @@ handOf player = riichiHands.at player
 
 if' :: Bool -> t -> t -> t
 if' cond th el = if cond then th else el
+
+liftE :: RoundM m => Either Text a -> m a
+liftE = either throwError return
+
+handOf' :: RoundM m => Player -> m Hand
+handOf' player = use (handOf player) >>= maybe (throwError "Player not found") return

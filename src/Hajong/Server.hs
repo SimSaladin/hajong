@@ -1,5 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module Server where
+------------------------------------------------------------------------------
+-- | 
+-- Module         : Hajong.Server
+-- Copyright      : (C) 2014 Samuli Thomasson
+-- License        : BSD-style (see the file LICENSE)
+-- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
+-- Stability      : experimental
+-- Portability    : non-portable
+------------------------------------------------------------------------------
+module Hajong.Server where
 
 import           ClassyPrelude hiding (finally, handle, toLower)
 import           Data.Set (mapMonotonic)
@@ -10,8 +19,8 @@ import           System.Console.Haskeline hiding (throwIO)
 import qualified Network.WebSockets as WS
 import           Control.Monad.Trans.Either
 
-import Riichi
-import GameTypes
+import Hajong.Game.Mechanics
+import Hajong.Game.Types
 
 -- * Types
 
@@ -269,7 +278,7 @@ handleGameAction turnAction = do
 
         (mhand, secret, events) <- hoistEither
             $ _Left %~ ("Game error: " <>)
-            $ gsAction' (runTurn player turnAction) deal
+            $ gsAction (runTurn player turnAction) deal
 
         lift $ writeTVar var $ state & gameAt gid._Just.gameState._Just._1 .~ secret
         return (mhand, gid, state, events)
