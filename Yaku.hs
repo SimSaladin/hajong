@@ -3,10 +3,12 @@ module Yaku where
 
 import ClassyPrelude
 import Tiles
+import Control.Lens
 import Control.Monad.Free
+import Control.Monad.State
 import qualified Data.List as L
 
--- * Mentsu
+-- * Mentsu and complete hands
 
 type Mentsus = [Mentsu]
 type CompleteHand = [Mentsu]
@@ -56,76 +58,130 @@ shuntsuOf a xs = do
     guard (tileSuited a && r `elem` xs && s `elem` xs)
     return $ Shuntsu [a,r,s] Nothing
 
-isShuntsu :: [Tile] -> Bool
-isShuntsu xs = case sort xs of
-    (x:y:z:[]) -> tileSuited x && Just y == tileSucc x && Just z == tileSucc y
-    _ -> False
-
 isComplete :: Mentsus -> Maybe CompleteHand
 isComplete xs = do
     guard $ length xs == 5
     guard $ length (filter isJantou xs) == 1
     return xs
 
--- | Documentation for 'isJantou'
-isJantou :: Mentsu -> Bool
-isJantou (Jantou{}) = True
-isJantou _ = False
+-- ** Checks
 
--- * YakuChecker
+isShuntsu' :: [Tile] -> Bool
+isShuntsu' xs = case sort xs of
+    (x:y:z:[]) -> tileSuited x && Just y == tileSucc x && Just z == tileSucc y
+    _ -> False
+
+-- | Documentation for 'isJantou'
+isJantou, isShuntsu, isKoutsu, isKantsu :: Mentsu -> Bool
+isJantou x
+    | Jantou{} <- x = True
+    | otherwise    = False
+isShuntsu x
+    | Shuntsu{} <- x = True
+    | otherwise     = False
+isKoutsu x
+    | Koutsu{} <- x = True
+    | otherwise    = False
+isKantsu x
+    | Kantsu{} <- x = True
+    | otherwise    = False
+
+
+-- * Yaku
 
 type Yaku = Free YakuChecker
 
-data YakuChecker next = YakuMentsu MentsuKind MentsuProp next -- tile kind about first tile. As optimization put these before tile-dependant checks
-                      | YakuMentsu' MentsuKind MentsuProp (Tile -> next)
+data YakuChecker next = YakuMentsu MentsuProp next
+                      -- ^ Require a simple mentsu property. Requiring this
+                      -- first could allow for simple optimization by
+                      -- removing some repeated checking.
+                      | YakuMentsu' MentsuProp (Tile -> next)
+                      -- ^ Require a mentsu property, but allow upcoming
+                      -- properties depend on the matched tile.
                       | YakuStateful (YakuInfo -> next)
-                      | YakuHandConcealed (Maybe (Bool, next))
+                      -- ^ Depend on game state.
+                      | YakuHandConcealedDegrades next
+                      | YakuHandConcealed next
                       | YakuHandOpen next
                       deriving (Functor)
 
 data YakuInfo = YakuInfo
               { yakuRoundKaze :: Kazehai
               , yakuPlayerKaze :: Kazehai
+              , yakuIsConcealed :: Bool
               }
 
-data MentsuKind = MentsuJantou
-                | MentsuAny      -- Note: NOT jantou
-                | MentsuAnyJantou
-                | MentsuShuntsu
-                | MentsuKoutsu
-                | MentsuKantsu
-                | MentsuKoutsuKantsu
+calculateYaku :: CompleteHand -> [Yaku Int] -- XXX: Well, maybe not so stupid return type
+calculateYaku hand = undefined
 
--- * Functions
+runChecker :: YakuInfo -> CompleteHand -> Yaku Int -> Maybe Int
+runChecker yi hand = fmap fst . (`runStateT` hand) . iterM f
+    where
+        f :: YakuChecker (StateT [Mentsu] Maybe Int) -> StateT [Mentsu] Maybe Int
+        f (YakuMentsu  mp s)            = get >>= lift . findMatch mp >>  putRes >>  s
+        f (YakuMentsu' mp f)            = get >>= lift . findMatch mp >>= putRes >>= f
+        f (YakuStateful f)              = f yi
+        f (YakuHandConcealedDegrades s) = if yakuIsConcealed yi then s else (\x -> x - 1) <$> s
+        f (YakuHandConcealed s)         = if yakuIsConcealed yi then s else lift Nothing
+        f (YakuHandOpen s)              = if yakuIsConcealed yi then lift Nothing else s
 
+        putRes (xs, t) = put xs >> return t
+
+-- | Find a match in a list of mentsu. Returns the matches identifier tile and leftovers.
+findMatch :: MentsuProp -> [Mentsu] -> Maybe ([Mentsu], Tile)
+findMatch _  []   = Nothing
+findMatch mp (x:xs)
+    | matchProp mp x = Just (xs, unsafeHead $ mentsuPai x)
+    | otherwise      = (_1 %~ (x:)) <$> findMatch mp xs
+
+-- * Defining yaku
+
+-- ** Yaku primitives
+
+-- | Value degrades by one if open.
 concealedHandDegrade :: Yaku ()
-concealedHandDegrade = liftF $ YakuHandConcealed (Just (True, ()))
+concealedHandDegrade = liftF $ YakuHandConcealedDegrades ()
 
+-- | Must be concealed
 concealedHand :: Yaku ()
-concealedHand = liftF $ YakuHandConcealed (Just (False, ()))
+concealedHand = liftF $ YakuHandConcealed ()
 
+-- | Must be open
 openHand :: Yaku ()
-openHand = liftF $ YakuHandConcealed Nothing
+openHand = liftF $ YakuHandOpen ()
 
+-- | Yaku that depend on game info. See "YakuInfo".
 yakuState :: Yaku YakuInfo
 yakuState = liftF (YakuStateful id)
 
+-- | Require any mentsu with a property.
 anyKoutsu, anyKantsu, anyShuntsu, anyJantou, anyMentsu, anyKoutsuKantsu, anyMentsuJantou :: MentsuProp -> Yaku ()
-anyKoutsu  tkind       = liftF $ YakuMentsu MentsuKoutsu  tkind ()
-anyShuntsu tkind       = liftF $ YakuMentsu MentsuShuntsu tkind ()
-anyKantsu  tkind       = liftF $ YakuMentsu MentsuKantsu  tkind ()
-anyJantou  tkind       = liftF $ YakuMentsu MentsuJantou  tkind ()
-anyMentsu  tkind       = liftF $ YakuMentsu MentsuAny     tkind ()
-anyKoutsuKantsu  tkind = liftF $ YakuMentsu MentsuKoutsuKantsu tkind ()
-anyMentsuJantou tkind  = liftF $ YakuMentsu MentsuAnyJantou tkind ()
+anyMentsu        tkind = liftF $ YakuMentsu tkind ()
+anyKoutsu        tkind = liftF $ YakuMentsu (MentsuKoutsu       &. tkind) ()
+anyShuntsu       tkind = liftF $ YakuMentsu (MentsuShuntsu      &. tkind) ()
+anyKantsu        tkind = liftF $ YakuMentsu (MentsuKantsu       &. tkind) ()
+anyJantou        tkind = liftF $ YakuMentsu (MentsuJantou       &. tkind) ()
+anyKoutsuKantsu  tkind = liftF $ YakuMentsu (MentsuKoutsuKantsu &. tkind) ()
+anyMentsuJantou  tkind = liftF $ YakuMentsu (MentsuAnyJantou    &. tkind) ()
 
+-- | Require any mentsu with a property. Rest of the definition may depend
+-- on the matched tile.
 anyShuntsu', anyKoutsuKantsu', anyMentsu', anyMentsuJantou' :: MentsuProp -> Yaku Tile
-anyKoutsuKantsu' tkind = liftF $ YakuMentsu' MentsuKoutsuKantsu tkind id
-anyShuntsu' tkind      = liftF $ YakuMentsu' MentsuShuntsu tkind id
-anyMentsu' tkind       = liftF $ YakuMentsu' MentsuAny tkind id
-anyMentsuJantou' tkind = liftF $ YakuMentsu' MentsuAnyJantou tkind id
+anyMentsu'       tkind = liftF $ YakuMentsu' tkind id
+anyKoutsuKantsu' tkind = liftF $ YakuMentsu' (MentsuKoutsuKantsu &. tkind) id
+anyShuntsu'      tkind = liftF $ YakuMentsu' (MentsuShuntsu      &. tkind) id
+anyMentsuJantou' tkind = liftF $ YakuMentsu' (MentsuAnyJantou    &. tkind) id
 
--- * MentsuProps
+-- *** Helpers
+
+-- | Simple yaku helper to require some same property from the four mentsu
+-- and any pair.
+allMentsuOfKind :: MentsuProp -> Yaku ()
+allMentsuOfKind tkind = do
+    replicateM_ 4 $ anyMentsu tkind
+    anyJantou tkind
+
+-- ** Mentsu properties
 
 data MentsuProp = TileTerminal
                 | TileSameAs Tile
@@ -135,36 +191,58 @@ data MentsuProp = TileTerminal
                 | TileNumber Number
                 | TileHonor
                 | TileSangenpai
-                | TileAnd MentsuProp MentsuProp
-                | TileOr MentsuProp MentsuProp
-                | TileNot MentsuProp
+                | TileAnd MentsuProp MentsuProp -- ^ &&
+                | TileOr MentsuProp MentsuProp -- ^ ||
+                | TileNot MentsuProp -- ^ not
                 | TileConcealed
-                | TileAny
+                | MentsuJantou
+                | MentsuAnyJantou
+                | MentsuShuntsu
+                | MentsuKoutsu
+                | MentsuKantsu
+                | MentsuKoutsuKantsu
+                | PropAny -- ^ Match anything
 
-ofTileType :: MentsuProp -> Mentsu -> Bool
-ofTileType TileTerminal Shuntsu{mentsuPai = (x:_) } = tileNumber x == Ii || tileNumber x == Chii
-ofTileType tt mentsu = let firstTile = unsafeHead $ mentsuPai mentsu
-    in case tt of
-        TileTerminal        -> tileTerminal firstTile
-        TileSameAs tile     -> firstTile == tile
-        TileSuited          -> tileSuited firstTile
-        TileSameSuit tile   -> compareSuit tile firstTile
-        TileSameNumber tile -> tileNumber tile      == tileNumber firstTile
-        TileNumber n        -> tileNumber firstTile == n
-        TileHonor           -> not $ tileSuited firstTile
-        TileSangenpai       -> tileSangenpai firstTile
-        TileAnd x y         -> ofTileType x mentsu && ofTileType y mentsu
-        TileOr x y          -> ofTileType x mentsu || ofTileType y mentsu
-        TileNot x           -> not $ ofTileType x mentsu
+-- | Binary combinations of mentsu porperties.
+(&.), (|.) :: MentsuProp -> MentsuProp -> MentsuProp
+(&.) = TileAnd
+(|.) = TileOr
+infixl 1 &., |.
+
+-- | Match a property on a mentsu.
+matchProp :: MentsuProp -> Mentsu -> Bool
+matchProp tt mentsu
+    | (first:_) <- mentsuPai mentsu = case tt of
+        MentsuJantou       | isJantou mentsu       -> True
+        MentsuAnyJantou    | not $ isJantou mentsu -> True
+        MentsuShuntsu      | isShuntsu mentsu      -> True
+        MentsuKoutsu       | isKoutsu mentsu       -> True
+        MentsuKantsu       | isKantsu mentsu       -> True
+        MentsuKoutsuKantsu | isKantsu mentsu || isKoutsu mentsu -> True
+        -- XXX: this is incomplete (shuntsu + terminals etc.)
+        TileTerminal        -> tileTerminal first
+        TileSameAs tile     -> first == tile
+        TileSuited          -> tileSuited first
+        TileSameSuit tile   -> compareSuit tile first
+        TileSameNumber tile -> tileNumber tile      == tileNumber first
+        TileNumber n        -> tileNumber first == n
+        TileHonor           -> not $ tileSuited first
+        TileSangenpai       -> tileSangenpai first
+        TileAnd x y         -> matchProp x mentsu && matchProp y mentsu
+        TileOr x y          -> matchProp x mentsu || matchProp y mentsu
+        TileNot x           -> not $ matchProp x mentsu
         TileConcealed       -> isNothing $ mentsuOpen mentsu
-        TileAny             -> True
+        PropAny             -> True
+        _ -> True
+    | otherwise = error "ofTileType: empty mentsu"
 
+-- | Tile kinds.
 terminal, honor, sangenpai, suited, anyTile, concealed :: MentsuProp
 terminal  = TileTerminal
 honor     = TileHonor
 sangenpai = TileSangenpai
 suited    = TileSuited
-anyTile   = TileAny
+anyTile   = PropAny
 concealed = TileConcealed
 
 sameTile, sameNumber, sameSuit :: Tile -> MentsuProp
@@ -175,27 +253,15 @@ sameSuit = TileSameSuit
 ofNumber :: Number -> MentsuProp
 ofNumber = TileNumber
 
-(&.), (|.) :: MentsuProp -> MentsuProp -> MentsuProp
-(&.) = TileAnd
-(|.) = TileOr
-infixl 1 &., |.
-
+-- | Negation of a MentsuProp.
 propNot :: MentsuProp -> MentsuProp
 propNot = TileNot
 
-allMentsuOfKind :: MentsuProp -> Yaku ()
-allMentsuOfKind tkind = do
-    replicateM_ 4 $ anyMentsu tkind
-    anyJantou tkind
+-- * Default yaku
 
--- ** Special
+-- ** 4 mentsu + 1 jantou
 
-yakuChiitoitsu :: Yaku ()
-yakuChiitoitsu = undefined
-
--- ** 4 + 1
-
--- *** Shuntsu
+-- *** Shuntsu based
 
 yakuPinfu :: Yaku Int
 yakuPinfu = do
@@ -232,7 +298,7 @@ yakuIttsuu = do
     anyShuntsu (sameSuit tile &. ofNumber Chii)
     return 2
 
--- *** Koutsu or Kantsu
+-- *** Koutsu/kantsu based
 
 -- NOTE this does not combine with chanta
 yakuHonroutou :: Yaku Int
@@ -322,7 +388,12 @@ yakuChinitsu = do
     anyJantou (sameSuit tile)
     return 6
 
--- *** Unrelated to mentsu
+-- ** Special
+
+yakuChiitoitsu :: Yaku ()
+yakuChiitoitsu = undefined -- TODO how does this implement?
+
+-- ** Unrelated to mentsu
 
 yakuMenzenTsumo :: Yaku ()
 yakuMenzenTsumo = undefined

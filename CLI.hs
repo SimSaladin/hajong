@@ -18,17 +18,17 @@ import           Riichi
 import           Server hiding (Client) -- TODO it shouldn't even export this
 import           PrettyPrint
 
--- * Types
+-- * Client state
 
 data ClientState = ClientState
                  { _clientConn         :: WS.Connection
                  , _clientNick         :: Text
                  , _clientMainThread   :: ThreadId
                  , _clientLounge       :: MVar Lounge
-                 , _clientGame         :: MVar (Maybe (GamePlayer Nick))
-                 , _clientReceiveChan  :: TChan Text
-                 , _clientCanInterrupt :: MVar Bool
-                 , _clientWaiting      :: MVar Int
+                 , _clientGame         :: MVar (Maybe (GamePlayer Nick)) -- ^ The game state
+                 , _clientReceiveChan  :: TChan Text -- ^ Such chan, wow. (wat)
+                 , _clientCanInterrupt :: MVar Bool -- ^ Huh?
+                 , _clientWaiting      :: MVar Int -- ^ What?
                  }
 
 makeLenses ''ClientState
@@ -42,38 +42,52 @@ newClientState conn nick = ClientState conn nick
     <*> newMVar True
     <*> newMVar (-1)
 
--- ** Typeclass hackery
+-- ** Helpers
+
+rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
+rview l = view l >>= liftIO . readMVar
+
+rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
+rswap l a = view l >>= liftIO . (`swapMVar` a)
+
+rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
+rmodify l f = view l >>= liftIO . (`modifyMVar_` f)
+
+-- * User I/O
 
 type Client a = ClientOutput m => m a
+
 type UI     a = ClientInput m => m a
 
 class ( Functor m, Applicative m, Monad m
       , MonadIO m
       , MonadReader ClientState m
       ) => ClientOutput m where
+
+    -- | Send an event to server.
     emit :: Event -> m ()
     emit ev = view clientConn >>= (`unicast` ev)
-    outAll :: [Text] -> m ()
+
+    -- | Output some text to user.
     out :: Text -> m ()
     out x = outAll [x]
 
+    -- | Output much text to user.
+    outAll :: [Text] -> m ()
+
 class ClientOutput m => ClientInput m where
+    -- | Get a single character
     askChar     :: Text -> m (Maybe Char)
+
+    -- | "withParam msg f" asks a line of input with label "msg" and calls
+    -- f with the input.
     withParam   :: Text -> (Text -> m ()) -> m ()
 
--- *** Real console input and output
-
-consoleInput :: InputT (ReaderT ClientState IO) ()
-consoleInput = withInterrupt loop
-    where
-        loop = handleInterrupt interrupt (inputLoop loop)
-        interrupt = do
-            chan <- view clientReceiveChan
-            mline <- liftIO $ atomically $ tryReadTChan chan
-            maybe loop (\line -> out line >> interrupt) mline
+-- Real console input and output instances
 
 instance ClientOutput (InputT (ReaderT ClientState IO)) where
     outAll = mapM_ (outputStrLn . unpack)
+
 instance ClientInput (InputT (ReaderT ClientState IO)) where
     askChar = getInputChar . unpack
     withParam prompt ma =
@@ -87,11 +101,10 @@ instance ClientInput (InputT (ReaderT ClientState IO)) where
                 -- throw interrupt to print stuff from queue after the action.
                 (liftIO (swapMVar ivar True)
                 >> view clientMainThread >>= liftIO . (`throwTo` Interrupt))
-instance MonadReader ClientState (InputT (ReaderT ClientState IO)) where
-    ask = lift ask
-    local _ _ = error "local not implemented"
 
--- *** Real listener instance
+instance MonadReader ClientState (InputT (ReaderT ClientState IO)) where
+    ask       = lift ask
+    local _ _ = error "local not implemented"
 
 instance ClientOutput (ReaderT ClientState IO) where
     -- Print to main thread's haskeline via a chan from any thread.
@@ -99,9 +112,11 @@ instance ClientOutput (ReaderT ClientState IO) where
         chan <- view clientReceiveChan
         mapM_ (liftIO . atomically . writeTChan chan) xs
 
+        -- When the main thread is interruptible (it has so declared via
+        -- "clientCanInterrupt"), throw it an interrupt so it outputs the
+        -- lines.
         interrupt <- rview clientCanInterrupt
         when interrupt $ view clientMainThread >>= liftIO . (`throwTo` Interrupt)
-
 
 -- * App
 
@@ -148,6 +163,19 @@ clientApp input listener conn = do
 
 -- * User input
 
+consoleInput :: InputT (ReaderT ClientState IO) ()
+consoleInput = withInterrupt loop
+    where
+        -- The interrupt stuff here is necessary to disable output when
+        -- asking for input.
+        loop = handleInterrupt interrupt (inputLoop loop)
+        interrupt = do
+            chan  <- view clientReceiveChan
+            mline <- liftIO $ atomically $ tryReadTChan chan
+            maybe loop (\line -> out line >> interrupt) mline
+
+-- | The main input loop asks for commands (single characters) and executes
+-- the associated commands.
 inputLoop :: ClientInput m => m () -> m ()
 inputLoop loop = do
     minput <- askChar =<< shortStatus
@@ -156,6 +184,7 @@ inputLoop loop = do
         Just 'q'   -> return ()
         Just input -> inputHandler input >> loop
 
+-- | Execute a command based on a character.
 inputHandler :: ClientInput m => Char -> m ()
 inputHandler '?' = printHelp
 inputHandler '!' = printStatus
@@ -171,11 +200,11 @@ inputHandler  x  = do
         loungeHandler 'r' = rawCommand
         loungeHandler  _  = unknownCommand
 
-        gameHandler 'p' = undefined
-        gameHandler 'c' = undefined
-        gameHandler 'k' = undefined
-        gameHandler 'r' = undefined
-        gameHandler 'l' = undefined
+        gameHandler 'p' = undefined -- pon
+        gameHandler 'c' = undefined -- chii
+        gameHandler 'k' = undefined -- (an)kan
+        gameHandler 'r' = undefined -- ron
+        gameHandler 'l' = undefined -- next as a lounge command
         gameHandler  _  = case elemIndex (toLower x) discardKeys of
                               Nothing -> unknownCommand
                               Just n -> discardTile n (isUpper x)
@@ -194,6 +223,24 @@ shortStatus = do
                      else "idle"
     return $ "(" <> status <> ") <" <> nick <> "> "
 
+-- ** Lounge actions
+
+createGame :: ClientInput m => m ()
+createGame = withParam "Game name: " $ \name ->
+        let name' = T.dropWhileEnd (== ' ') $ T.dropWhile (== ' ') name
+            in case name' of
+                 "" -> out "Name cannot be empty"
+                 _  -> emit $ CreateGame name'
+
+joinGame :: ClientInput m => m ()
+joinGame = printGames >> withParam "join game: " go
+    where
+        go str = case readMay str of
+            Nothing -> out $ "NaN: " <> str
+            Just n  -> emit $ JoinGame n ""
+
+-- ** Game actions
+
 discardTile :: ClientInput m => Int -> Bool -> m ()
 discardTile n riichi = do
     game <- rview clientGame <&> (^?! _Just)
@@ -201,6 +248,8 @@ discardTile n riichi = do
     case tiles ^? traversed.index n of
         Nothing   -> out $ "No tile at index " <> tshow n
         Just tile -> emit $ GameAction $ ($ tile) $ if riichi then TurnRiichi else TurnDiscard
+
+-- ** Other actions
 
 printHelp :: ClientInput m => m ()
 printHelp = outAll
@@ -242,26 +291,9 @@ chatMessage = withParam "say: " send
         send ""  = return ()
         send msg = emit $ Message "" msg
 
-createGame :: ClientInput m => m ()
-createGame = withParam "Game name: " $ \name ->
-        let name' = T.dropWhileEnd (== ' ') $ T.dropWhile (== ' ') name
-            in case name' of
-                 "" -> out "Name cannot be empty"
-                 _  -> emit $ CreateGame name'
-
-joinGame :: ClientInput m => m ()
-joinGame = printGames >> withParam "join game: " go
-    where
-        go str = case readMay str of
-            Nothing -> out $ "NaN: " <> str
-            Just n  -> emit $ JoinGame n ""
-
 rawCommand :: ClientInput m => m ()
-rawCommand = withParam "send command: " go
-    where
-        go str = case readMay str of
-            Nothing -> out "Command not recognized"
-            Just cmd -> emit cmd
+rawCommand = withParam "send command: " $
+        maybe (out "Command not recognized") emit . readMay
 
 
 -- * Server listener
@@ -378,15 +410,3 @@ ppNicks :: Set Nick -> Text
 ppNicks nicks = case setToList nicks of
             [] -> ""
             (x:xs) -> foldl' (\a b -> a <> ", " <> b) x xs
-
-
--- * Helpers
-
-rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
-rview l = view l >>= liftIO . readMVar
-
-rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
-rswap l a = view l >>= liftIO . (`swapMVar` a)
-
-rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
-rmodify l f = view l >>= liftIO . (`modifyMVar_` f)

@@ -89,8 +89,8 @@ toShout shout tile player hand =
         Ron | handComplete (hand^.handPublic.handOpen) (tile : hand^.handConcealed) -> Just $ Left ()
             | otherwise              -> Nothing
         Chi (x, y)
-            | isShuntsu [tile,x,y] && fc x > 0 && fc y > 0 -> Just $ Right $ Shuntsu (sort [tile,x,y]) (Just player)
-            | otherwise                                    -> Nothing
+            | isShuntsu' [tile,x,y] && fc x > 0 && fc y > 0 -> Just $ Right $ Shuntsu (sort [tile,x,y]) (Just player)
+            | otherwise                                     -> Nothing
     where
         fc t = length $ hand^.handConcealed^..folded.filtered (== t)
         
