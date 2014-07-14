@@ -27,29 +27,20 @@ import Control.Lens
 import Hajong.Game.Tiles
 import Hajong.Game.Hand
 
--- * Game
-
--- | Server-side state
-data GameServer playerID = GameServer
-                   { _gamePlayers :: RiichiPlayers playerID
-                   , _gameName :: Text
-                   , _gameState :: Maybe RiichiState -- maybe in running game
-                   }
-
 type RiichiPlayers playerID = [(Player, Maybe playerID, Points)]
 
 type Points = Int
 
+-- * Game
+
+-- | Server-side state
+data GameState playerID = GameState
+                   { _gamePlayers :: RiichiPlayers playerID
+                   , _gameName :: Text
+                   , _gameRound :: Maybe RiichiState -- maybe in running game
+                   }
+
 -- * Round
-
--- | Context of game and deal flow.
-type RoundM m = ( MonadReader RiichiPublic m
-                , MonadState RiichiSecret m
-                , MonadWriter [RoundEvent] m
-                , MonadError Text m
-                )
-
-type RoundM' = RWST RiichiPublic [RoundEvent] RiichiSecret (Either Text)
 
 type RiichiState = (RiichiSecret, RiichiPublic)
 
@@ -83,11 +74,22 @@ data RoundEvent = RoundAction Player TurnAction
                 | RoundDraw [Player] -- tenpai players
                 deriving (Show, Read)
 
+-- ** Context
+
+-- | Context of game and deal flow.
+type RoundM m = ( MonadReader RiichiPublic m
+                , MonadState RiichiSecret m
+                , MonadWriter [RoundEvent] m
+                , MonadError Text m
+                )
+
+type RoundM' = RWST RiichiPublic [RoundEvent] RiichiSecret (Either Text)
+
 -- * Player wrappers
 
--- | State of single player
+-- | State of single player. Note that there is no RiichiSecret.
 data GamePlayer playerID = GamePlayer
-                  { _playerPlayer :: Player
+                  { _playerPlayer :: Player -- ^ Me
                   , _playerPublic :: RiichiPublic
                   , _playerPublicHands :: Map Player HandPublic
                   , _playerPlayers :: RiichiPlayers playerID
@@ -96,7 +98,8 @@ data GamePlayer playerID = GamePlayer
 
 -- * Lenses
 
-makeLenses ''GameServer
+-- |
+makeLenses ''GameState
 makeLenses ''GamePlayer
 makeLenses ''RiichiSecret
 makeLenses ''RiichiPublic

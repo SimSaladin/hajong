@@ -22,7 +22,8 @@ import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
 
 import           Hajong.Client.PrettyPrint
-import           Hajong.Server hiding (Client) -- TODO it shouldn't even export this
+import           Hajong.Server (unicast, Lounge(..), Nick, Event(..), loungeNicksIdle, loungeGames)
+                        -- XXX: Put these somewhere common?
 
 import           Hajong.Game.Types
 import           Hajong.Game.Mechanics
@@ -169,7 +170,6 @@ clientApp input listener conn = do
     _ <- killThread listenerThread >> takeMVar listenerMVar
     return ()
 
-
 -- * User input
 
 consoleInput :: InputT (ReaderT ClientState IO) ()
@@ -209,18 +209,16 @@ inputHandler  x  = do
         loungeHandler 'r' = rawCommand
         loungeHandler  _  = unknownCommand
 
-        gameHandler 'p' = undefined -- pon
-        gameHandler 'c' = undefined -- chii
-        gameHandler 'k' = undefined -- (an)kan
-        gameHandler 'r' = undefined -- ron
-        gameHandler 'l' = undefined -- next as a lounge command
-        gameHandler  _  = case elemIndex (toLower x) discardKeys of
-                              Nothing -> unknownCommand
-                              Just n -> discardTile n (isUpper x)
+        gameHandler 'p' = emit $ GameShout Pon
+        gameHandler 'c' = emit $ GameShout $ Chi (undefined ,undefined) -- TODO get the tiles
+        gameHandler 'k' = emit $ GameShout Kan
+        gameHandler 'r' = emit $ GameShout Ron
+        gameHandler 'l' = askChar "" >>= \(Just q) -> loungeHandler q
+        gameHandler  _  = maybe unknownCommand (`discardTile` isUpper x) $ elemIndex (toLower x) discardKeys
 
-        discardKeys = "aoeuidhtns-mwvz"
+        discardKeys     = "aoeuidhtns-mwvz"
 
-        unknownCommand = out $ "Command `" <> pack [x] <> "` not recognized"
+        unknownCommand  = out $ "Command `" <> pack [x] <> "` not recognized"
 
 shortStatus :: ClientOutput m => m Text
 shortStatus = do
@@ -260,40 +258,6 @@ discardTile n riichi = do
 
 -- ** Other actions
 
-printHelp :: ClientInput m => m ()
-printHelp = outAll
-    [ "Every command is initiated by it's first [l]etter"
-    , ""
-    , "Global commands"
-    , "  [?] (help)                 Show this help text"
-    , "  [!] (status)               Show status information"
-    , "  <Space> (message)          Open a line prompt, send with enter."
-    , "  [q]uit                     Close the client"
-    , ""
-    , "Messages are received in lounge or in-game only, corresponding to"
-    , "your location. Use `l ` to send messages to lounge from a game"
-    , ""
-    , "In lounge"
-    , "  [n]ames                    Show idle users"
-    , "  [g]ames                    Show all games and players"
-    , "  [c]reate <name>            Create a new game"
-    , "  [j]oin <name>              Join game"
-    , "  [r]aw <cmd>                Send direct protocol command (for debugging only)"
-    , ""
-    , "In game"
-    , "  [aoeuidhtns-mwvz]          Discard [n]:th tile"
-    , "  [p]on [c]hi [k]an [r]on    Shout a discard or declare kantsu"
-    , "  [l]ounge                   Interpret next letter as a lounge commend"
-    ]
-
-printStatus :: ClientInput m => m ()
-printStatus = do
-    mgame       <- rview clientGame
-    gameWait    <- rview clientWaiting
-    case mgame of
-        Nothing -> out $ "In lounge" <> if gameWait >= 0 then ", ready for game n. " <> tshow gameWait else ""
-        Just _  -> out $ "In game n." <> tshow gameWait
-
 chatMessage :: ClientInput m => m ()
 chatMessage = withParam "say: " send
     where
@@ -303,7 +267,6 @@ chatMessage = withParam "say: " send
 rawCommand :: ClientInput m => m ()
 rawCommand = withParam "send command: " $
         maybe (out "Command not recognized") emit . readMay
-
 
 -- * Server listener
 
@@ -321,11 +284,27 @@ clientEventHandler ev = case ev of
     NewGame info      -> gameCreated info
     StartGame gstate  -> rswap clientGame (Just gstate) >> startGame
     JoinGame n nick   -> handleJoinGame n nick 
-    GameAction ta     -> handleTurnAction ta
+    GameEvents ev     -> mapM_ handleRoundEvent ev
     GameShout shout   -> handleGameShout shout
     Message sayer msg -> out $ "<" <> sayer <> "> " <> msg
     Invalid err       -> out $ "[error] " <> err
-    x                 -> out $ "Received an unhandled event: " <> tshow x
+    -- x                 -> out $ "Received an unhandled event: " <> tshow x
+-- handleTurnAction :: TurnAction -> Client ()
+-- handleTurnAction ta = do
+--     case ta of
+--         TurnRiichi _          -> undefined
+--         TurnDiscard tile      -> undefined
+--         TurnDraw dead _       -> undefined
+--         TurnAnkan tile        -> undefined
+--         TurnShouted shout who -> undefined
+
+handleRoundEvent :: RoundEvent -> Client ()
+handleRoundEvent ev case ev of
+    RoundAction p a ->  undefined
+    RoundPublicHand p hp -> undefined
+    RoundTsumo p -> undefined
+    RoundRon p fps -> undefined
+    RoundDraw tps -> undefined
 
 nickJoined :: Text -> Client ()
 nickJoined nick = do
@@ -370,15 +349,6 @@ handleJoinGame n nick = do
                 out $ "Joined the game (" <> tshow n <> "). " <> countInfo
         else out $ nick <> " joined game (" <> tshow n <> "). " <> countInfo
 
-handleTurnAction :: TurnAction -> Client ()
-handleTurnAction ta = do
-    case ta of
-        TurnRiichi _          -> undefined
-        TurnDiscard tile      -> undefined
-        TurnDraw dead _       -> undefined
-        TurnAnkan tile        -> undefined
-        TurnShouted shout who -> undefined
-
 handleGameShout :: Shout -> Client ()
 handleGameShout shout = undefined
 
@@ -388,6 +358,40 @@ startGame :: Client ()
 startGame = do
     out "Entering game!"
     printGameState
+
+printHelp :: ClientInput m => m ()
+printHelp = outAll
+    [ "Every command is initiated by it's first [l]etter"
+    , ""
+    , "Global commands"
+    , "  [?] (help)                 Show this help text"
+    , "  [!] (status)               Show status information"
+    , "  <Space> (message)          Open a line prompt, send with enter."
+    , "  [q]uit                     Close the client"
+    , ""
+    , "Messages are received in lounge or in-game only, corresponding to"
+    , "your location. Use `l ` to send messages to lounge from a game"
+    , ""
+    , "In lounge"
+    , "  [n]ames                    Show idle users"
+    , "  [g]ames                    Show all games and players"
+    , "  [c]reate <name>            Create a new game"
+    , "  [j]oin <name>              Join game"
+    , "  [r]aw <cmd>                Send direct protocol command (for debugging only)"
+    , ""
+    , "In game"
+    , "  [aoeuidhtns-mwvz]          Discard [n]:th tile"
+    , "  [p]on [c]hi [k]an [r]on    Shout a discard or declare kantsu"
+    , "  [l]ounge                   Interpret next letter as a lounge commend"
+    ]
+
+printStatus :: ClientInput m => m ()
+printStatus = do
+    mgame       <- rview clientGame
+    gameWait    <- rview clientWaiting
+    case mgame of
+        Nothing -> out $ "In lounge" <> if gameWait >= 0 then ", ready for game n. " <> tshow gameWait else ""
+        Just _  -> out $ "In game n." <> tshow gameWait
 
 printUsers :: Client ()
 printUsers = do

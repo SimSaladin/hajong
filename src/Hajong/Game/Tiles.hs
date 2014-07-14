@@ -40,6 +40,9 @@ data Mentsu = Shuntsu { mentsuPai :: [Tile], mentsuOpen :: Maybe Player }  -- st
 data Shout = Pon
            | Kan
            | Chi (Tile, Tile)
+           -- ^ The arguments are the tiles in hand to use. Without them or
+           -- even just one it could be ambigous which tiles were intented
+           -- to be shouted.
            | Ron
            deriving (Show, Read, Eq)
 

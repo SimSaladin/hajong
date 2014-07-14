@@ -1,0 +1,3 @@
+- Implement client in-game actions
+- Split the Event from Hajong.Server into client->server nad server->client
+- Implement Hajong.Client.CLI handleRoundEvent
