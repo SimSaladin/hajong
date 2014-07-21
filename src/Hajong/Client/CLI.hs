@@ -1,9 +1,8 @@
 {-# LANGUAGE RankNTypes, OverloadedStrings, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 
-module CLI where
+module Hajong.Client.CLI where
 
 import           ClassyPrelude hiding (finally, handle, toLower)
-import           Control.Lens
 import           Control.Concurrent (forkFinally, killThread, myThreadId, ThreadId)
 import           Control.Monad.Reader (runReaderT, ReaderT, MonadReader(..))
 import           Data.List (elemIndex)
@@ -13,10 +12,10 @@ import           System.Random
 import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
 
-import           GameTypes
-import           Riichi
-import           Server hiding (Client) -- TODO it shouldn't even export this
-import           PrettyPrint
+---------------------------------------------------------------------
+import           Hajong.Game
+import           Hajong.PrettyPrint
+import           Hajong.Server hiding (Client) -- TODO it shouldn't even export this
 
 -- * Types
 
@@ -44,18 +43,23 @@ newClientState conn nick = ClientState conn nick
 
 -- ** Typeclass hackery
 
+-- | Server side only
 type Client a = ClientOutput m => m a
-type UI     a = ClientInput m => m a
+
+-- | User inpput
+type UI a = ClientInput m => m a
 
 class ( Functor m, Applicative m, Monad m
-      , MonadIO m
-      , MonadReader ClientState m
+      , MonadIO m, MonadReader ClientState m
       ) => ClientOutput m where
+
     emit :: Event -> m ()
     emit ev = view clientConn >>= (`unicast` ev)
-    outAll :: [Text] -> m ()
+
     out :: Text -> m ()
     out x = outAll [x]
+
+    outAll :: [Text] -> m ()
 
 class ClientOutput m => ClientInput m where
     askChar     :: Text -> m (Maybe Char)
@@ -73,7 +77,8 @@ consoleInput = withInterrupt loop
             maybe loop (\line -> out line >> interrupt) mline
 
 instance ClientOutput (InputT (ReaderT ClientState IO)) where
-    outAll = mapM_ (outputStrLn . unpack)
+    outAll = mapM_ (outputStrLn . unpack) -- TODO
+
 instance ClientInput (InputT (ReaderT ClientState IO)) where
     askChar = getInputChar . unpack
     withParam prompt ma =
@@ -87,6 +92,7 @@ instance ClientInput (InputT (ReaderT ClientState IO)) where
                 -- throw interrupt to print stuff from queue after the action.
                 (liftIO (swapMVar ivar True)
                 >> view clientMainThread >>= liftIO . (`throwTo` Interrupt))
+
 instance MonadReader ClientState (InputT (ReaderT ClientState IO)) where
     ask = lift ask
     local _ _ = error "local not implemented"
@@ -177,8 +183,8 @@ inputHandler  x  = do
         gameHandler 'r' = undefined
         gameHandler 'l' = undefined
         gameHandler  _  = case elemIndex (toLower x) discardKeys of
-                              Nothing -> unknownCommand
                               Just n -> discardTile n (isUpper x)
+                              Nothing -> unknownCommand
 
         discardKeys = "aoeuidhtns-mwvz"
 
@@ -331,6 +337,7 @@ handleJoinGame n nick = do
 
 handleTurnAction :: TurnAction -> Client ()
 handleTurnAction ta = do
+    putStrLn $ "TURNACTION: " <> tshow ta
     case ta of
         TurnRiichi _          -> undefined
         TurnDiscard tile      -> undefined

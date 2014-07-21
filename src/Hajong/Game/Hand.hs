@@ -1,35 +1,23 @@
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hand
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
+--
+-- Single player's hand.
 ------------------------------------------------------------------------------
-module Hand where
+module Hajong.Game.Hand where
 
 import ClassyPrelude
 import Control.Lens
-import Tiles
-import Yaku
 
-data HandPublic = HandPublic
-                { _handOpen :: [Mentsu]
-                , _handDiscards :: [(Tile, Maybe Player)]
-                , _handRiichi :: Bool
-                , _handTurnDiscard :: Maybe (Tile, UTCTime)
-                } deriving (Show, Read, Eq)
-
-data Hand = Hand
-          { _handConcealed :: [Tile]
-          , _handPick :: Maybe Tile
-          , _handFuriten :: Maybe Bool -- ^ Just (temporary?)
-          , _handPublic :: HandPublic
-          } deriving (Show, Read, Eq)
-
-makeLenses ''HandPublic
-makeLenses ''Hand
+---------------------------------------------
+import Hajong.Game.Tiles
+import Hajong.Game.Yaku
+import Hajong.Game.Types
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
@@ -93,4 +81,3 @@ toShout shout tile player hand =
             | otherwise                                    -> Nothing
     where
         fc t = length $ hand^.handConcealed^..folded.filtered (== t)
-        

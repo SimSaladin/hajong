@@ -1,13 +1,13 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-module PrettyPrint where
+module Hajong.PrettyPrint where
 
 import ClassyPrelude
-import Control.Lens
-import GameTypes
-import Riichi
 import Data.List (transpose, cycle)
 import Data.Text (splitOn, chunksOf, justifyLeft, justifyRight)
 import qualified Data.List.Split as L (chunksOf)
+
+--------------------------------------------
+import Hajong.Game
 
 class PrettyPrint x where
     pshow :: x -> Text

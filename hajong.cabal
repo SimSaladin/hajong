@@ -16,14 +16,18 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Riichi
-                     , Tiles
-                     , Yaku
-                     , CLI
-                     , Server
-                     , PrettyPrint
-                     , GameTypes
-                     , Hand
+  hs-source-dirs:      src
+
+  exposed-modules:     Hajong.Client.CLI
+                     , Hajong.Game
+                     , Hajong.Game.Round
+                     , Hajong.Game.State
+                     , Hajong.Game.Hand
+                     , Hajong.Game.Tiles
+                     , Hajong.Game.Types
+                     , Hajong.Game.Yaku
+                     , Hajong.PrettyPrint
+                     , Hajong.Server
 
   build-depends:       base                    >=4.6
                      , lens                    >=4.0
@@ -40,7 +44,7 @@ library
                      , either
                      , free
 
-  extensions:          NoImplicitPrelude
+  default-extensions:  NoImplicitPrelude
                      , TemplateHaskell
                      , OverloadedStrings
                      , ConstraintKinds

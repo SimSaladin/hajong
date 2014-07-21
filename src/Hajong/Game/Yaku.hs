@@ -1,10 +1,22 @@
 {-# LANGUAGE DeriveFunctor #-}
-module Yaku where
+------------------------------------------------------------------------------
+-- | 
+-- Module         : Hajong.Game.Yaku
+-- Copyright      : (C) 2014 Samuli Thomasson
+-- License        : BSD-style (see the file LICENSE)
+-- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
+-- Stability      : experimental
+-- Portability    : non-portable
+------------------------------------------------------------------------------
+module Hajong.Game.Yaku where
 
 import ClassyPrelude
-import Tiles
 import Control.Monad.Free
 import qualified Data.List as L
+
+-----------------------------------------
+import Hajong.Game.Tiles
+import Hajong.Game.Types
 
 -- * Mentsu
 

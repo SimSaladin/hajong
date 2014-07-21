@@ -24,6 +24,7 @@ import CLI
 import Tiles
 import Server
 import Riichi
+import GameTypes hiding (cons, snoc, elements)
 import PrettyPrint
 import Yaku
 
@@ -38,34 +39,34 @@ main = do
 
 tests :: TestTree
 tests = testGroup "Hajong tests"
-    [ clientTests, prettyPrintQC, prettyPrintHUnit, gameTests, yakuTests ]
+    [ clientTests
+    , prettyPrintQC
+    , prettyPrintHUnit
+    , gameStateTests
+    , yakuTests
+    ]
 
 -- * Game
 
-gameTests :: TestTree
-gameTests = testGroup "Game state tests (pure)"
+gameStateTests :: TestTree
+gameStateTests = testGroup "Game state tests"
     [ testCase "New game initialized right" $ do
-        (secret, public) <- newRiichiState
+        RiichiState{ _riichiSecret = secret
+                   , _riichiPublic = public
+                   } <- newRiichiState
 
         secret^.riichiWall.to length                         == 136-14-4*13       @? "Wall of 136-14-4*13 tiles"
         secret^.riichiWanpai.to length                       == 13                @? "Wanpai of 13 (+1 dora) tiles"
         secret^.riichiHands ^.. each.handConcealed.to length == [13, 13, 13, 13]  @? "Four hands of 13 tiles"
-
         public^.riichiDora.to length                         == 1                 @? "One dora tile"
         public^.riichiRound == Ton @? "First round was not Ton"
 
+    , testCase "A deal can be done after 4 players join" $ assertBool "game was not initialized" $ isJust readyServerState
+
+    , testCase "Only the player in turn can draw" $ undefined
     , testCase "Discarding a tile in riichi results in error" undefined
     , testCase "Typical mentsu tenpai"    undefined
     , testCase "Chiitoitsu tenpai"                            undefined
-
-    , testCase "A deal can be made after 4 players join"  $ do
-        let game = newGameServer "test game"
-                & fromJust . gsAddPlayer ("Dummy 1" :: Text)
-                & fromJust . gsAddPlayer "Dummy 2"
-                & fromJust . gsAddPlayer "Dummy 3"
-                & fromJust . gsAddPlayer "Dummy 4"
-                & gsNewGame
-        assertBool "game was nothing" (isJust game)
     ]
 
 -- | PrettyPrint
@@ -78,7 +79,7 @@ prettyPrintHUnit = testGroup "PrettyPrint HUnit"
         <> [Sangen Hatsu, Sangen Hatsu])
 
     , testCase "Show and read Hand" $
-        "M3-M3-M3" `preadAssert` Koutsu [Man San False, Man San False, Man San False] True
+        "M3-M3-M3" `preadAssert` Koutsu [Man San False, Man San False, Man San False] Nothing
 
     , testCase "PosMine Discards"  $ PosMine   souTiles `pshowAssert` "S1 S2 S3 S4 S5 S6\nS7 S8 S9         \n                 "
     , testCase "PosLeft Discards"  $ PosLeft   souTiles `pshowAssert` "   S7 S1\n   S8 S2\n   S9 S3\n      S4\n      S5\n      S6"
@@ -102,66 +103,6 @@ prettyPrintQC = testGroup "PrettyPrint QC"
     , testProperty "Pretty discards (right)" $ liftA2 propAllInfixOf (pshow . PosRight) (map pshow :: Discards -> [Text])
     , testProperty "Pretty discards (front)" $ liftA2 propAllInfixOf (pshow . PosFront) (map pshow :: Discards -> [Text])
     ]
-
--- | pread . show == id
-preadPshowEquals :: (Eq x, PrettyPrint x, PrettyRead x) => x -> Bool
-preadPshowEquals = liftA2 (==) id (pread . pshow)
-
-hunitAllInfixOf :: Text -> [Text] -> [TestTree]
-hunitAllInfixOf res exp =
-   flip map exp $ \x -> testCase ("Contains " <> unpack x) $ assertBool (unpack x <> " was not found") $ x `isInfixOf` res
-
-propAllInfixOf :: Text -> [Text] -> Property
-propAllInfixOf result xs = conjoin $ flip map xs $
-    \x -> if x `isInfixOf` result
-              then Q.succeeded
-              else Q.failed { Q.reason = unpack $ x <> " not found in result" }
-
--- | Assert that pread input == expected and input == pshow expected
-preadAssert :: (Show x, Eq x, PrettyRead x, PrettyPrint x) => Text -> x -> Assertion
-preadAssert input expected =
-    let calculated = pread input
-    in (calculated == expected && input == pshow expected) @? (unpack . unlines)
-        [ "Input:         " <> input
-        , "Expected:      " <> tshow expected
-        , "Input read:    " <> tshow calculated
-        , "Expected read: " <> pshow expected
-        ]
-
-pshowAssert :: (Show x, PrettyPrint x) => x -> Text -> Assertion
-pshowAssert x expected = pshow x == expected @? (unpack . unlines)
-    [ "= Read ="    , cons '"' . flip snoc '"' $ pshow x
-    , "= Expected =", cons '"' . flip snoc '"' $ expected
-    , "Value: " <> tshow x
-    ]
-
-souTiles :: [(Tile, Maybe Player)]
-souTiles = map (flip (,) Nothing . flip Sou False) [Ii .. Chuu]
-
-fullState :: RiichiState
-fullState = (secret, public)
-    where
-        secret                     = RiichiSecret
-            { _riichiWall          = riichiTiles
-            , _riichiWanpai        = take 14 riichiTiles
-            , _riichiHands         = mapFromList $ zip defaultPlayers (repeat fullHand)
-            }
-
-        public                     = RiichiPublic
-            { _riichiDora          = take 5 $ drop 60 riichiTiles
-            , _riichiWallTilesLeft = 10
-            , _riichiRound         = Pei
-            , _riichiDealer        = Player Ton
-            , _riichiTurn          = Player Ton
-            , _riichiPoints        = mapFromList $ zip defaultPlayers (repeat 25000)
-            , _riichiEvents        = []
-            }
-        
-        fullHand = initHand (take 13 riichiTiles)
-            & set (handPublic.handDiscards) souTiles
-            . set (handPublic.handOpen) [mentsu, mentsu, mentsu, mentsu]
- 
-        mentsu = Koutsu (replicate 3 $ pread "M3") True
 
 -- * Yaku
 
@@ -196,7 +137,6 @@ mentsuAssert :: Text -> [[Mentsu]] -> Assertion
 mentsuAssert txt xs =
         let tiles = pread txt
             in getMentsu tiles @?= xs
-
 
 -- * Client
 
@@ -271,6 +211,78 @@ startServer = do
     threadDelay 1000000
     return pid
 
+-- * Functions
+
+hunitAllInfixOf :: Text -> [Text] -> [TestTree]
+hunitAllInfixOf res exp =
+   flip map exp $ \x -> testCase ("Contains " <> unpack x) $ assertBool (unpack x <> " was not found") $ x `isInfixOf` res
+
+propAllInfixOf :: Text -> [Text] -> Property
+propAllInfixOf result xs = conjoin $ flip map xs $
+    \x -> if x `isInfixOf` result
+              then Q.succeeded
+              else Q.failed { Q.reason = unpack $ x <> " not found in result" }
+
+-- | pread . show == id
+preadPshowEquals :: (Eq x, PrettyPrint x, PrettyRead x) => x -> Bool
+preadPshowEquals = liftA2 (==) id (pread . pshow)
+
+-- | Assert that pread input == expected and input == pshow expected
+preadAssert :: (Show x, Eq x, PrettyRead x, PrettyPrint x) => Text -> x -> Assertion
+preadAssert input expected =
+    let calculated = pread input
+    in (calculated == expected && input == pshow expected) @? (unpack . unlines)
+        [ "Input:         " <> input
+        , "Expected:      " <> tshow expected
+        , "Input read:    " <> tshow calculated
+        , "Expected read: " <> pshow expected
+        ]
+
+pshowAssert :: (Show x, PrettyPrint x) => x -> Text -> Assertion
+pshowAssert x expected = pshow x == expected @? (unpack . unlines)
+    [ "= Read ="    , cons '"' . flip snoc '"' $ pshow x
+    , "= Expected =", cons '"' . flip snoc '"' $ expected
+    , "Value: " <> tshow x
+    ]
+
+-- * States
+
+souTiles :: [(Tile, Maybe Player)]
+souTiles = map (flip (,) Nothing . flip Sou False) [Ii .. Chuu]
+
+readyServerState :: Maybe (IO (GameServer Text))
+readyServerState = gsNewGame
+    $ fromJust . gsAddPlayer ("Dummy 1" :: Text)
+    $ fromJust . gsAddPlayer "Dummy 2"
+    $ fromJust . gsAddPlayer "Dummy 3"
+    $ fromJust . gsAddPlayer "Dummy 4"
+    $ newGameServer "test game"
+
+-- | A state used to test the pretty printer
+fullState :: RiichiState
+fullState = RiichiState secret public
+    where
+        secret                     = RiichiSecret
+            { _riichiWall          = riichiTiles
+            , _riichiWanpai        = take 14 riichiTiles
+            , _riichiHands         = mapFromList $ zip defaultPlayers (repeat fullHand)
+            }
+
+        public                     = RiichiPublic
+            { _riichiDora          = take 5 $ drop 60 riichiTiles
+            , _riichiWallTilesLeft = 10
+            , _riichiRound         = Pei
+            , _riichiDealer        = Player Ton
+            , _riichiTurn          = Player Ton
+            , _riichiPoints        = mapFromList $ zip defaultPlayers (repeat 25000)
+            , _riichiEvents        = []
+            }
+        
+        fullHand = initHand (take 13 riichiTiles)
+            & set (handPublic.handDiscards) souTiles
+            . set (handPublic.handOpen) [mentsu, mentsu, mentsu, mentsu]
+ 
+        mentsu = Koutsu (replicate 3 $ pread "M3") Nothing
 
 -- * Arbitrary instancees
 
@@ -282,13 +294,13 @@ instance Arbitrary Tile where
 
 instance Arbitrary Mentsu where
     arbitrary = oneof
-        [ arbitrary >>= \tile -> return (Kantsu (replicate 4 tile) True)
-        , arbitrary >>= \tile -> return (Koutsu (replicate 3 tile) True)
-        , arbitrary >>= \tile -> return (Jantou (replicate 2 tile) True)
+        [ arbitrary >>= \tile -> return (Kantsu (replicate 4 tile) Nothing)
+        , arbitrary >>= \tile -> return (Koutsu (replicate 3 tile) Nothing)
+        , arbitrary >>= \tile -> return (Jantou (replicate 2 tile) Nothing)
         , do
              tile <- arbitrary `suchThat` (\tile -> tileSuited tile && tileNumber tile <= Chii)
              let n = tileNumber tile
-             return $ Shuntsu (tile : map (setTileNumber tile) [succ n, succ (succ n)]) True
+             return $ Shuntsu (tile : map (setTileNumber tile) [succ n, succ (succ n)]) Nothing
         ]
 
 instance Arbitrary Player where

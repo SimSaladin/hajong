@@ -1,38 +1,19 @@
-module Tiles where
+------------------------------------------------------------------------------
+-- | 
+-- Module         : Hajong.Game.Tiles
+-- Copyright      : (C) 2014 Samuli Thomasson
+-- License        : BSD-style (see the file LICENSE)
+-- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
+-- Stability      : experimental
+-- Portability    : non-portable
+------------------------------------------------------------------------------
+-- Comparing tiles and melding.
+module Hajong.Game.Tiles where
 
 import ClassyPrelude
 import Control.Applicative
 
-newtype Player = Player Kazehai deriving (Show, Read, Eq, Ord)
-deriving instance Enum Player
-
-data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
-            deriving (Show, Read, Eq, Ord, Enum, Bounded)
-
-data Sangenpai = Haku | Hatsu | Chun
-               deriving (Show, Read, Eq, Ord, Enum, Bounded)
-
-data Kazehai = Ton | Nan | Shaa | Pei
-             deriving (Show, Read, Eq, Ord, Enum, Bounded)
-
-data Tile = Man Number Bool
-          | Pin Number Bool
-          | Sou Number Bool
-          | Sangen Sangenpai
-          | Kaze Kazehai
-          deriving (Show, Read, Eq, Ord)
-
-data Mentsu = Shuntsu { mentsuPai :: [Tile], mentsuOpen :: Maybe Player }  -- straight
-            | Koutsu  { mentsuPai :: [Tile], mentsuOpen :: Maybe Player } -- triplet
-            | Kantsu  { mentsuPai :: [Tile], mentsuOpen :: Maybe Player } -- quadret
-            | Jantou  { mentsuPai :: [Tile], mentsuOpen :: Maybe Player } -- pair
-            deriving (Show, Read, Eq, Ord)
-
-data Shout = Pon
-           | Kan
-           | Chi (Tile, Tile)
-           | Ron
-           deriving (Show, Read, Eq)
+import Hajong.Game.Types
 
 koutsu :: [Tile] -> Mentsu
 koutsu = flip Koutsu Nothing
