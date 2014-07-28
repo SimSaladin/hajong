@@ -1,23 +1,22 @@
 ------------------------------------------------------------------------------
--- |
--- Module         : Hand
+-- Module         : Hajong.Game.Hand
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 --
--- Single player's hand.
+-- A single player's hand.
 ------------------------------------------------------------------------------
 module Hajong.Game.Hand where
 
 import ClassyPrelude
 import Control.Lens
 
----------------------------------------------
-import Hajong.Game.Tiles
-import Hajong.Game.Yaku
 import Hajong.Game.Types
+import Hajong.Game.Tiles
+import Hajong.Game.Mentsu
+import Hajong.Game.Yaku.Standard
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
@@ -67,7 +66,8 @@ doShout shout shouter hand =
             , toShout shout tile
             )
 
-toShout :: Shout -> Tile -> Player -> Hand -> Maybe (Either () Mentsu) -- Left stands for complete with ron
+toShout :: Shout -> Tile -> Player -> Hand
+        -> Maybe (Either () Mentsu) -- ^ Left stands for complete with ron
 toShout shout tile player hand =
     case shout of
         Pon | fc tile == 2 -> Just $ Right $ Koutsu [tile,tile,tile] (Just player)
@@ -77,7 +77,7 @@ toShout shout tile player hand =
         Ron | handComplete (hand^.handPublic.handOpen) (tile : hand^.handConcealed) -> Just $ Left ()
             | otherwise              -> Nothing
         Chi (x, y)
-            | isShuntsu [tile,x,y] && fc x > 0 && fc y > 0 -> Just $ Right $ Shuntsu (sort [tile,x,y]) (Just player)
-            | otherwise                                    -> Nothing
+            | isShuntsu' [tile,x,y] && fc x > 0 && fc y > 0 -> Just $ Right $ Shuntsu (sort [tile,x,y]) (Just player)
+            | otherwise                                     -> Nothing
     where
         fc t = length $ hand^.handConcealed^..folded.filtered (== t)

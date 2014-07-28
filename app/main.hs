@@ -3,6 +3,7 @@ module Main where
 
 import ClassyPrelude
 import qualified Data.Text.IO as T
+
 import Hajong.Server
 import Hajong.Client.CLI
 

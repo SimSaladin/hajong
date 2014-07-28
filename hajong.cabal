@@ -17,16 +17,15 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-
   exposed-modules:     Hajong.Client.CLI
-                     , Hajong.Game
-                     , Hajong.Game.Round
-                     , Hajong.Game.State
+                     , Hajong.Client.PrettyPrint
+                     , Hajong.Game.Yaku.Builder
+                     , Hajong.Game.Yaku.Standard
                      , Hajong.Game.Hand
+                     , Hajong.Game.Mechanics
+                     , Hajong.Game.Mentsu
                      , Hajong.Game.Tiles
                      , Hajong.Game.Types
-                     , Hajong.Game.Yaku
-                     , Hajong.PrettyPrint
                      , Hajong.Server
 
   build-depends:       base                    >=4.6

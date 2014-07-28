@@ -6,8 +6,9 @@
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
-------------------------------------------------------------------------------
+--
 -- Comparing tiles and melding.
+------------------------------------------------------------------------------
 module Hajong.Game.Tiles where
 
 import ClassyPrelude

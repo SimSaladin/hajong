@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------------
 -- | 
--- Module         : GameTypes
+-- Module         : Hajong.Game.Types
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
@@ -10,25 +10,27 @@
 module Hajong.Game.Types where
 
 import ClassyPrelude
+import Control.Monad.Error (MonadError, throwError)
+import Control.Monad.Reader (MonadReader)
+import Control.Monad.Writer (MonadWriter)
+import Control.Monad.State (MonadState)
+import Control.Monad.RWS
 import Control.Lens
 
--- * Utility
-
-if' :: Bool -> t -> t -> t
-if' cond th el = if cond then th else el
-
 -- * Game state
-
--- | Server-side state
-data GameServer playerID = GameServer
-                   { _gamePlayers :: RiichiPlayers playerID
-                   , _gameName :: Text
-                   , _gameState :: Maybe RiichiState -- maybe in running game
-                   }
 
 type RiichiPlayers playerID = [(Player, Maybe playerID, Points)]
 
 type Points = Int
+
+-- * Game
+
+-- | Server-side state
+data GameState playerID = GameState
+                   { _gamePlayers :: RiichiPlayers playerID
+                   , _gameName :: Text
+                   , _gameRound :: Maybe RiichiState -- maybe in running game
+                   }
 
 -- * Round
 
@@ -83,11 +85,22 @@ data Hand = Hand
           , _handPublic :: HandPublic
           } deriving (Show, Read, Eq)
 
--- * Players
+-- * Context
 
--- | State of single player
+-- | Context of game and deal flow.
+type RoundM m = ( MonadReader RiichiPublic m
+                , MonadState RiichiSecret m
+                , MonadWriter [RoundEvent] m
+                , MonadError Text m
+                )
+
+type RoundM' = RWST RiichiPublic [RoundEvent] RiichiSecret (Either Text)
+
+-- * Player wrappers
+
+-- | State of single player. Note that there is no RiichiSecret.
 data GamePlayer playerID = GamePlayer
-                  { _playerPlayer :: Player
+                  { _playerPlayer :: Player -- ^ Me
                   , _playerPublic :: RiichiPublic
                   , _playerPublicHands :: Map Player HandPublic
                   , _playerPlayers :: RiichiPlayers playerID
@@ -133,7 +146,8 @@ data Shout = Pon
 
 -- * Lenses
 
-makeLenses ''GameServer
+-- |
+makeLenses ''GameState
 makeLenses ''GamePlayer
 makeLenses ''RiichiSecret
 makeLenses ''RiichiPublic
@@ -143,3 +157,14 @@ makeLenses ''Hand
 
 handOf :: Player -> Lens RiichiSecret RiichiSecret (Maybe Hand) (Maybe Hand)
 handOf player = riichiHands.at player
+
+-- * Utility
+
+if' :: Bool -> t -> t -> t
+if' cond th el = if cond then th else el
+
+liftE :: RoundM m => Either Text a -> m a
+liftE = either throwError return
+
+handOf' :: RoundM m => Player -> m Hand
+handOf' player = use (handOf player) >>= maybe (throwError "Player not found") return
