@@ -14,7 +14,6 @@ import ClassyPrelude
 import Control.Lens
 import Control.Monad.Free
 import Control.Monad.State
-import qualified Data.List as L
 
 import Hajong.Game.Mentsu
 import Hajong.Game.Tiles
@@ -28,8 +27,8 @@ runChecker yi hand = fmap fst . (`runStateT` hand) . iterM f
     where
         f :: YakuChecker (StateT [Mentsu] Maybe Int) -> StateT [Mentsu] Maybe Int
         f (YakuMentsu  mp s)            = get >>= lift . findMatch mp >>= putRes >>  s
-        f (YakuMentsu' mp f)            = get >>= lift . findMatch mp >>= putRes >>= f
-        f (YakuStateful f)              = f yi
+        f (YakuMentsu' mp s)            = get >>= lift . findMatch mp >>= putRes >>= s
+        f (YakuStateful s)              = s yi
         f (YakuHandConcealedDegrades s) = if yakuIsConcealed yi then s else (\x -> x - 1) <$> s
         f (YakuHandConcealed s)         = if yakuIsConcealed yi then s else lift Nothing
         f (YakuHandOpen s)              = if yakuIsConcealed yi then lift Nothing else s
@@ -46,7 +45,7 @@ findMatch mp (x:xs)
 -- | Match a property on a mentsu.
 matchProp :: MentsuProp -> Mentsu -> Bool
 matchProp tt mentsu
-    | (first:_) <- mentsuPai mentsu = case tt of
+    | (firstTile:_) <- mentsuPai mentsu = case tt of
         MentsuJantou       | isJantou mentsu       -> True
         MentsuAnyJantou    | not $ isJantou mentsu -> True
         MentsuShuntsu      | isShuntsu mentsu      -> True
@@ -54,14 +53,14 @@ matchProp tt mentsu
         MentsuKantsu       | isKantsu mentsu       -> True
         MentsuKoutsuKantsu | isKantsu mentsu || isKoutsu mentsu -> True
         -- XXX: this is incomplete (shuntsu + terminals etc.)
-        TileTerminal        -> tileTerminal first
-        TileSameAs tile     -> first == tile
-        TileSuited          -> tileSuited first
-        TileSameSuit tile   -> compareSuit tile first
-        TileSameNumber tile -> tileNumber tile      == tileNumber first
-        TileNumber n        -> tileNumber first == n
-        TileHonor           -> not $ tileSuited first
-        TileSangenpai       -> tileSangenpai first
+        TileTerminal        -> tileTerminal firstTile
+        TileSameAs tile     -> firstTile == tile
+        TileSuited          -> tileSuited firstTile
+        TileSameSuit tile   -> compareSuit tile firstTile
+        TileSameNumber tile -> tileNumber tile      == tileNumber firstTile
+        TileNumber n        -> tileNumber firstTile == n
+        TileHonor           -> not $ tileSuited firstTile
+        TileSangenpai       -> tileSangenpai firstTile
         TileAnd x y         -> matchProp x mentsu && matchProp y mentsu
         TileOr x y          -> matchProp x mentsu || matchProp y mentsu
         TileNot x           -> not $ matchProp x mentsu

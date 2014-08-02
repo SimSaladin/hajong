@@ -11,9 +11,6 @@ module Hajong.Game.Types where
 
 import ClassyPrelude
 import Control.Monad.Error (MonadError, throwError)
-import Control.Monad.Reader (MonadReader)
-import Control.Monad.Writer (MonadWriter)
-import Control.Monad.State (MonadState)
 import Control.Monad.RWS
 import Control.Lens
 
@@ -34,6 +31,7 @@ data GameState playerID = GameState
 
 -- * Round
 
+-- | This would be better renamed as RoundState, as that's what it really is.
 data RiichiState = RiichiState
                  { _riichiSecret :: RiichiSecret
                  , _riichiPublic :: RiichiPublic
@@ -43,6 +41,7 @@ data RiichiSecret = RiichiSecret
                  { _riichiWall :: [Tile]
                  , _riichiWanpai :: [Tile]
                  , _riichiHands :: Map Player Hand
+                 , _riichiWaitShoutsFrom :: Maybe [Player]
                  } deriving (Show, Read)
 
 data RiichiPublic = RiichiPublic
@@ -55,15 +54,16 @@ data RiichiPublic = RiichiPublic
                  , _riichiEvents :: [(Player, TurnAction, Int)]
                  } deriving (Show, Read)
 
-data TurnAction = TurnRiichi Tile
-                | TurnDiscard Tile
-                | TurnDraw Bool (Maybe Tile)
+data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
+                | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile
-                | TurnShouted Shout Player -- shout [by who]
+                | TurnShouted Shout Player -- ^ tile, shout, shouter
                 deriving (Show, Read)
 
-data RoundEvent = RoundAction Player TurnAction
+data RoundEvent = RoundTurnBegin Player
+                | RoundTurnAction Player TurnAction
                 | RoundPublicHand Player HandPublic
+                | RoundTurnEnded Player
                 | RoundTsumo Player
                 | RoundRon Player [Player] -- From, who?
                 | RoundDraw [Player] -- tenpai players
@@ -88,10 +88,16 @@ data Hand = Hand
 -- * Context
 
 -- | Context of game and deal flow.
+--
+-- Note that RiichiSecret is freely modifiable as a state, but
+-- @RiichiPublic@ is read-only. Modifications to the public part must
+-- be encoded in RoundEvents. This way it is trivial to keep clients'
+-- public states in sync with minimum bandwidth.
 type RoundM m = ( MonadReader RiichiPublic m
                 , MonadState RiichiSecret m
                 , MonadWriter [RoundEvent] m
                 , MonadError Text m
+                , Functor m
                 )
 
 type RoundM' = RWST RiichiPublic [RoundEvent] RiichiSecret (Either Text)

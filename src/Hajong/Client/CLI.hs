@@ -22,8 +22,7 @@ import           System.Console.Haskeline
 import qualified Network.WebSockets as WS
 
 ---------------------------------------------------------------------
-import           Hajong.Game.Types
-import           Hajong.Game.Mechanics
+import           Hajong.Game
 import           Hajong.Client.PrettyPrint
 import           Hajong.Server (unicast, Lounge(..), Nick, Event(..), loungeNicksIdle, loungeGames)
                         -- XXX: Put these somewhere common?
@@ -255,7 +254,7 @@ discardTile n riichi = do
     let tiles = game^.playerMyHand.handConcealed ++ maybeToList (game^.playerMyHand.handPick)
     case tiles ^? traversed.index n of
         Nothing   -> out $ "No tile at index " <> tshow n
-        Just tile -> emit $ GameAction $ ($ tile) $ if riichi then TurnRiichi else TurnDiscard
+        Just tile -> emit $ GameAction $ TurnTileDiscard riichi tile
 
 -- ** Other actions
 
@@ -290,18 +289,10 @@ clientEventHandler ev = case ev of
     Message sayer msg -> out $ "<" <> sayer <> "> " <> msg
     Invalid err       -> out $ "[error] " <> err
     -- x                 -> out $ "Received an unhandled event: " <> tshow x
--- handleTurnAction :: TurnAction -> Client ()
--- handleTurnAction ta = do
---     case ta of
---         TurnRiichi _          -> undefined
---         TurnDiscard tile      -> undefined
---         TurnDraw dead _       -> undefined
---         TurnAnkan tile        -> undefined
---         TurnShouted shout who -> undefined
 
 handleRoundEvent :: RoundEvent -> Client ()
 handleRoundEvent ev = case ev of
-    RoundAction p a ->  undefined
+    RoundTurnAction p a ->  undefined
     RoundPublicHand p hp -> undefined
     RoundTsumo p -> undefined
     RoundRon p fps -> undefined
@@ -354,9 +345,8 @@ handleTurnAction :: TurnAction -> Client ()
 handleTurnAction ta = do
     putStrLn $ "TURNACTION: " <> tshow ta
     case ta of
-        TurnRiichi _          -> undefined
-        TurnDiscard tile      -> undefined
-        TurnDraw dead _       -> undefined
+        TurnTileDiscard riichi tile -> undefined
+        TurnTileDraw dead _   -> undefined
         TurnAnkan tile        -> undefined
         TurnShouted shout who -> undefined
 

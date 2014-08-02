@@ -16,9 +16,7 @@ import Data.List (transpose, cycle)
 import Data.Text (splitOn, chunksOf, justifyLeft, justifyRight)
 import qualified Data.List.Split as L (chunksOf)
 
-import Hajong.Game.Types
-import Hajong.Game.Hand
-import Hajong.Game.Mechanics
+import Hajong.Game
 
 class PrettyPrint x where
     pshow :: x -> Text

@@ -19,6 +19,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Hajong.Client.CLI
                      , Hajong.Client.PrettyPrint
+                     , Hajong.Game
                      , Hajong.Game.Yaku.Builder
                      , Hajong.Game.Yaku.Standard
                      , Hajong.Game.Hand
@@ -42,6 +43,7 @@ library
                      , split
                      , either
                      , free
+                     , async
 
   default-extensions:  NoImplicitPrelude
                      , TemplateHaskell
@@ -84,5 +86,7 @@ test-suite test
                      , QuickCheck
                      , unix
                      , temporary
+
+  default-extensions:  OverloadedStrings
 
   ghc-options:       -rtsopts

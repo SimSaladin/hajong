@@ -14,9 +14,7 @@ import ClassyPrelude
 import Control.Lens
 
 import Hajong.Game.Types
-import Hajong.Game.Tiles
 import Hajong.Game.Mentsu
-import Hajong.Game.Yaku.Standard
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
@@ -40,6 +38,7 @@ setRiichi :: Tile -> Hand -> Either Text Hand
 setRiichi tile hand
     | hand ^. handPublic.handRiichi = Left "Already in riichi"
     | tenpai hand                   = Right $ set (handPublic.handRiichi) True hand
+    -- TODO use tile
     | otherwise                     = Left "Not in tenpai"
 
 tenpai :: Hand -> Bool
