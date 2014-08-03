@@ -22,5 +22,5 @@ hajongCLI = do
                 "s" -> server
                 _   -> client
     where
-        server = putStrLn "Starting server..." >> serverMain
-        client = putStrLn "Starting client..." >> clientMain Nothing
+        server = putStrLn "Starting server...\n" >> serverMain
+        client = putStrLn "Starting client...\n" >> clientMain

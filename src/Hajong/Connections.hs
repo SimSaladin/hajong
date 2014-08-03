@@ -12,6 +12,7 @@ module Hajong.Connections where
 
 import           ClassyPrelude
 import           Control.Monad.Trans.Either
+import           Control.Monad.Reader.Class
 import           Control.Lens
 import qualified Network.WebSockets         as WS
 
@@ -34,7 +35,7 @@ data Event = JoinServer Text -- ^ Nick
            -- Game events
            | CreateGame Text
            | NewGame (Int, Text, Set Nick) -- name, nicks
-           | StartGame (GamePlayer Nick)
+           | RoundStarts (GamePlayer Nick)
            | JoinGame Int Text -- ^ Game lounge
            -- In-game events
            | GameAction TurnAction -- ^ From client to server only
@@ -78,3 +79,14 @@ instance WS.WebSocketsData Event where
 -- | convert maybe to EitherT
 maybeToEitherT :: Monad m => e -> Maybe a -> EitherT e m a
 maybeToEitherT def = maybe (left def) return
+
+-- * General
+
+rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
+rview l = view l >>= liftIO . readMVar
+
+rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
+rswap l a = view l >>= liftIO . (`swapMVar` a)
+
+rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
+rmodify l f = view l >>= liftIO . (`modifyMVar_` f)

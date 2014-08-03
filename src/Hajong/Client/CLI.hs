@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, OverloadedStrings, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE TupleSections #-}
 ------------------------------------------------------------------------------
 -- | 
 -- Module         : Hajong.Client.CLI
@@ -10,321 +10,193 @@
 ------------------------------------------------------------------------------
 module Hajong.Client.CLI where
 
+import qualified System.IO
 import           ClassyPrelude hiding (finally, handle, toLower)
-import           Control.Concurrent (forkFinally, killThread, myThreadId, ThreadId)
-import           Control.Monad.Reader (runReaderT, ReaderT, MonadReader(..))
+import           Control.Concurrent.Async (race)
+import           Control.Monad.Cont (runContT, ContT, callCC)
+import           Control.Monad.Reader (runReaderT, ReaderT)
 import           Control.Lens
 import           Data.List (elemIndex)
 import           Data.Char (isUpper, toLower)
 import qualified Data.Text as T
+import           Data.Text.IO (putStr)
 import           System.Random
-import           System.Console.Haskeline
+-- import           System.Console.Haskeline rm pkg! TODO
 import qualified Network.WebSockets as WS
 
 ---------------------------------------------------------------------
 import           Hajong.Game
 import           Hajong.Client.PrettyPrint
 import           Hajong.Connections
-                        -- XXX: Put these somewhere common?
 
--- * Client state
+type ClientM = ContT () (ReaderT ClientState IO)
+
+discardKeys :: String
+discardKeys = "aoeuidhtns-mwvz"
 
 data ClientState = ClientState
                  { _clientConn         :: Client
-                 , _clientNick         :: Text
-                 , _clientMainThread   :: ThreadId
+                 , _clientOutput       :: Text -> IO ()
+                 , _clientGetChar      :: IO Char
+                 , _clientGetLine      :: IO Text
                  , _clientLounge       :: MVar Lounge
                  , _clientGame         :: MVar (Maybe (GamePlayer Nick)) -- ^ The game state
-                 , _clientReceiveChan  :: TChan Text -- ^ Such chan, wow. (wat)
-                 , _clientCanInterrupt :: MVar Bool -- ^ Huh?
-                 , _clientWaiting      :: MVar Int -- ^ What?
+                 , _clientWaiting      :: MVar Int -- ^ Wait for game n to begin
                  }
 
 makeLenses ''ClientState
 
-newClientState :: WS.Connection -> Text -> IO ClientState
-newClientState conn nick = ClientState (websocketClient nick conn) nick
-    <$> myThreadId
+isMyNick :: Nick -> ClientM Bool
+isMyNick nick = liftM (\c -> getNick c == nick) $ view clientConn
+
+-- * Configure
+
+newClientState :: IO (Client -> (Text -> IO ()) -> ClientState)
+newClientState = (\gc gl v1 v2 v3 c o -> ClientState c o gc gl v1 v2 v3)
+    <$> pure System.IO.getChar
+    <*> pure consoleGetLine
     <*> newMVar (Lounge mempty mempty)
     <*> newMVar Nothing
-    <*> newTChanIO
-    <*> newMVar True
     <*> newMVar (-1)
 
--- ** Helpers
+randomNick :: IO Nick
+randomNick = liftM pack $ replicateM 5 $ randomRIO ('a', 'z')
 
-rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
-rview l = view l >>= liftIO . readMVar
+-- * Emit and print
 
-rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
-rswap l a = view l >>= liftIO . (`swapMVar` a)
+-- | Send an event to server.
+emit :: Event -> ClientM ()
+emit ev = view clientConn >>= (`unicast` ev)
 
-rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
-rmodify l f = view l >>= liftIO . (`modifyMVar_` f)
+-- | Output some text to user.
+outNoLn :: Text -> ClientM ()
+outNoLn x = view clientOutput >>= liftIO . ($ x)
 
--- * User I/O
+out :: Text -> ClientM ()
+out x = outNoLn $ x <> "\n"
 
--- | Server side facing only
-type Listen a = ClientOutput m => m a
+-- | "withParam msg f" asks a line of input with label "msg" and calls
+-- f with the input.
+withParam :: Text -> (Text -> ClientM ()) -> ClientM ()
+withParam prompt cc =
+        outNoLn prompt >> view clientGetLine >>= liftIO >>= cc
 
--- | User inpput
-type UI a = ClientInput m => m a
-
-class ( Functor m, Applicative m, Monad m
-      , MonadIO m, MonadReader ClientState m
-      ) => ClientOutput m where
-
-    -- | Send an event to server.
-    emit :: Event -> m ()
-    emit ev = view clientConn >>= (`unicast` ev)
-
-    -- | Output some text to user.
-    out :: Text -> m ()
-    out x = outAll [x]
-
-    -- | Output much text to user.
-    outAll :: [Text] -> m ()
-
-class ClientOutput m => ClientInput m where
-    -- | Get a single character
-    askChar     :: Text -> m (Maybe Char)
-
-    -- | "withParam msg f" asks a line of input with label "msg" and calls
-    -- f with the input.
-    withParam   :: Text -> (Text -> m ()) -> m ()
-
--- Real console input and output instances
-
-instance ClientOutput (InputT (ReaderT ClientState IO)) where
-    outAll = mapM_ (outputStrLn . unpack) -- TODO ?
-
-instance ClientInput (InputT (ReaderT ClientState IO)) where
-    askChar = getInputChar . unpack
-    withParam prompt ma =
-        uninterrupted $ do
-            line <- getInputLine (unpack prompt) <&> fmap pack
-            maybe (return ()) ma line
-      where
-        uninterrupted f = do
-            ivar <- view clientCanInterrupt
-            (liftIO (swapMVar ivar False) >> f) `finally`
-                -- throw interrupt to print stuff from queue after the action.
-                (liftIO (swapMVar ivar True)
-                >> view clientMainThread >>= liftIO . (`throwTo` Interrupt))
-
-instance MonadReader ClientState (InputT (ReaderT ClientState IO)) where
-    ask       = lift ask
-    local _ _ = error "local not implemented"
-
-instance ClientOutput (ReaderT ClientState IO) where
-    -- Print to main thread's haskeline via a chan from any thread.
-    outAll xs = do
-        chan <- view clientReceiveChan
-        mapM_ (liftIO . atomically . writeTChan chan) xs
-
-        -- When the main thread is interruptible (it has so declared via
-        -- "clientCanInterrupt"), throw it an interrupt so it outputs the
-        -- lines.
-        interrupt <- rview clientCanInterrupt
-        when interrupt $ view clientMainThread >>= liftIO . (`throwTo` Interrupt)
+consoleGetLine :: IO Text
+consoleGetLine = do
+    System.IO.hSetEcho stdin True
+    l <- getLine
+    System.IO.hSetEcho stdin False
+    return l
 
 -- * App
 
--- | Run client with console IO.
-clientMain :: Maybe Handle -> IO ()
-clientMain mhandle = clientMain' input listener
-    where
-        listener    = runReaderT clientReceiver
-        input state = flip runReaderT state $ runInputTBehavior
-            (maybe defaultBehavior useFileHandle mhandle)
-            defaultSettings
-            consoleInput
+clientMain :: IO ()
+clientMain = do
+    cs <- newClientState
+    nick <- randomNick
+    System.IO.hSetBuffering stdin System.IO.NoBuffering
+    System.IO.hSetBuffering stdout System.IO.NoBuffering
+    System.IO.hSetEcho stdin False
+    runWSClient $ \c -> cs (websocketClient nick c) putStr
 
--- | Run client with given IO functions.
-clientMain' :: (ClientState -> IO ()) -> (ClientState -> IO ()) -> IO ()
-clientMain' input = WS.runClient "localhost" 9160 "/" . clientApp input
-
-clientApp :: (ClientState -> IO ()) -- ^ Input loop
-          -> (ClientState -> IO ()) -- ^ Server listener
-          -> WS.ClientApp ()
-clientApp input listener conn = do
-
-    -- Assign a nick
-    ident <- liftM pack $ replicateM 5 $ randomRIO ('a', 'z')
-
-    state <- newClientState conn ident
-
-    -- Start server listener
-    listenerMVar <- newEmptyMVar 
-    listenerThread <- (takeMVar listenerMVar >> listener state) `forkFinally` const (putMVar listenerMVar ())
-
-    -- Tell we have joined
-    unicast (websocketClient "" conn) (JoinServer ident)
-
-    -- Run input loop; the mvar is used to prevent listener from throwing
-    -- interrupts before input can handle them.
-    putMVar listenerMVar () >> input state
-
-    -- cleanup
+runWSClient :: (WS.Connection -> ClientState) -> IO ()
+runWSClient toCS = WS.runClient "localhost" 9160 "/" $ \conn -> do
+    let cs    = toCS conn
+        logic = do
+            out "Connected to server. Type ? for help."
+            emit (JoinServer $ getNick $ _clientConn cs) >> clientLogic
+    runReaderT (runContT logic (\_ -> return ())) cs
     WS.sendClose conn (PartServer "Bye")
-    _ <- killThread listenerThread >> takeMVar listenerMVar
-    return ()
 
--- * User input
+-- * Client logic
 
-consoleInput :: InputT (ReaderT ClientState IO) ()
-consoleInput = withInterrupt loop
-    where
-        -- The interrupt stuff here is necessary to disable output when
-        -- asking for input.
-        loop = handleInterrupt interrupt (inputLoop loop)
-        interrupt = do
-            chan  <- view clientReceiveChan
-            mline <- liftIO $ atomically $ tryReadTChan chan
-            maybe loop (\line -> out line >> interrupt) mline
+clientLogic :: ClientM ()
+clientLogic = do
+    getChar <- view clientGetChar
+    callCC $ \k -> view clientConn
+        >>= liftIO . race getChar . receive
+        >>= either (inputHandler k) eventHandler
+        >> clientLogic
 
--- | The main input loop asks for commands (single characters) and executes
--- the associated commands.
-inputLoop :: ClientInput m => m () -> m ()
-inputLoop loop = do
-    minput <- askChar =<< shortStatus
-    case minput of
-        Nothing    -> loop
-        Just 'q'   -> return ()
-        Just input -> inputHandler input >> loop
+-- | Character in: execute a command based on a character.
+inputHandler :: (() -> ClientM ()) -> Char -> ClientM ()
+inputHandler exit ch = do
+    in_g <- isJust <$> rview clientGame
+    case ch of
+        'q'  -> exit ()
+        '?'  -> printHelp
+        '!'  -> printStatus
+        '\n' -> when in_g printGameState >> printShortStatus
+        ' '  -> chatMessage
+        _    -> if in_g then gameInputHandler ch else loungeInputHandler ch
 
--- | Execute a command based on a character.
-inputHandler :: ClientInput m => Char -> m ()
-inputHandler '?' = printHelp
-inputHandler '!' = printStatus
-inputHandler ' ' = chatMessage
-inputHandler  x  = do
-    inGame <- rview clientGame
-    if isJust inGame then gameHandler x else loungeHandler x
-    where
-        loungeHandler 'n' = printUsers
-        loungeHandler 'g' = printGames
-        loungeHandler 'c' = createGame
-        loungeHandler 'j' = joinGame
-        loungeHandler 'r' = rawCommand
-        loungeHandler  _  = unknownCommand
+loungeInputHandler :: Char -> ClientM ()
+loungeInputHandler ch = case ch of
+    'n' -> printUsers
+    'g' -> printGamesList
+    'c' -> createGame
+    'j' -> joinGame
+    'r' -> rawCommand
+    _   -> unknownCommand ch
 
-        gameHandler 'p' = emit $ GameShout Pon
-        gameHandler 'c' = emit $ GameShout $ Chi (undefined ,undefined) -- TODO get the tiles
-        gameHandler 'k' = emit $ GameShout Kan
-        gameHandler 'r' = emit $ GameShout Ron
-        gameHandler 'l' = askChar "" >>= \(Just q) -> loungeHandler q
-        gameHandler  _  = maybe unknownCommand (`discardTile` isUpper x) $ elemIndex (toLower x) discardKeys
+gameInputHandler :: Char -> ClientM ()
+gameInputHandler ch =
+    case ch of
+        'p' -> emit $ GameShout Pon
+        'c' -> emit $ GameShout $ Chi (undefined ,undefined) -- TODO get the tiles
+        'k' -> emit $ GameShout Kan
+        'r' -> emit $ GameShout Ron
+        'l' -> view clientGetChar >>= liftIO >>= loungeInputHandler
+        _  | Just dt <- elemIndex (toLower ch) discardKeys
+           , riichi  <- isUpper ch   -> discardTile dt riichi
+           | otherwise              -> unknownCommand ch
 
-        discardKeys     = "aoeuidhtns-mwvz"
+unknownCommand :: Char -> ClientM ()
+unknownCommand ch = out $ "Command `" <> pack [ch] <> "` not recognized"
 
-        unknownCommand  = out $ "Command `" <> pack [x] <> "` not recognized"
-
-shortStatus :: ClientOutput m => m Text
-shortStatus = do
-    nick   <- view clientNick
-    inGame <- rview clientGame
-    gameN  <- rview clientWaiting
-    let status = if gameN >= 0
-                     then maybe "wait" (const "game") inGame <> " " <> tshow gameN
-                     else "idle"
-    return $ "(" <> status <> ") <" <> nick <> "> "
-
--- ** Lounge actions
-
-createGame :: ClientInput m => m ()
-createGame = withParam "Game name: " $ \name ->
-        let name' = T.dropWhileEnd (== ' ') $ T.dropWhile (== ' ') name
-            in case name' of
-                 "" -> out "Name cannot be empty"
-                 _  -> emit $ CreateGame name'
-
-joinGame :: ClientInput m => m ()
-joinGame = printGames >> withParam "join game: " go
-    where
-        go str = case readMay str of
-            Nothing -> out $ "NaN: " <> str
-            Just n  -> emit $ JoinGame n ""
-
--- ** Game actions
-
-discardTile :: ClientInput m => Int -> Bool -> m ()
-discardTile n riichi = do
-    game <- rview clientGame <&> (^?! _Just)
-    let tiles = game^.playerMyHand.handConcealed ++ maybeToList (game^.playerMyHand.handPick)
-    case tiles ^? traversed.index n of
-        Nothing   -> out $ "No tile at index " <> tshow n
-        Just tile -> emit $ GameAction $ TurnTileDiscard riichi tile
-
--- ** Other actions
-
-chatMessage :: ClientInput m => m ()
-chatMessage = withParam "say: " send
-    where
-        send ""  = return ()
-        send msg = emit $ Message "" msg
-
-rawCommand :: ClientInput m => m ()
-rawCommand = withParam "send command: " $
-        maybe (out "Command not recognized") emit . readMay
-
--- * Server listener
-
-clientReceiver :: ClientOutput m => m ()
-clientReceiver = do
-    out "Connected to server. Type ? for help."
-    conn <- view clientConn
-    forever $ receive conn >>= clientEventHandler
-
-clientEventHandler :: Event -> Listen ()
-clientEventHandler ev = case ev of
+eventHandler :: Event -> ClientM ()
+eventHandler ev = case ev of
     JoinServer nick   -> nickJoined nick
     PartServer nick   -> nickParted nick
-    LoungeInfo lounge -> rswap clientLounge lounge >> printLounge
+    LoungeInfo lounge -> loungeInfoChanged lounge
     NewGame info      -> gameCreated info
-    StartGame gstate  -> rswap clientGame (Just gstate) >> startGame
-    JoinGame n nick   -> handleJoinGame n nick 
-    GameEvents ev     -> mapM_ handleRoundEvent ev
-    GameShout shout   -> handleGameShout shout
+    RoundStarts gp    -> roundStarts gp
+    JoinGame n nick   -> joinedGame n nick 
+    GameEvents ev     -> mapM_ receivedRoundEvent ev
+    GameShout shout   -> return () -- never received from server
+    GameHandChanged h -> receivedNewHand h
     Message sayer msg -> out $ "<" <> sayer <> "> " <> msg
     Invalid err       -> out $ "[error] " <> err
-    -- x                 -> out $ "Received an unhandled event: " <> tshow x
+    _ -> out $ "Received invalid event, this should NOT happen (" <> tshow ev <> ")"
 
-handleRoundEvent :: RoundEvent -> Listen ()
-handleRoundEvent ev = case ev of
-    RoundTurnAction p a ->  undefined
-    RoundPublicHand p hp -> undefined
-    RoundTsumo p -> undefined
-    RoundRon p fps -> undefined
-    RoundDraw tps -> undefined
+-- * Events
 
-nickJoined :: Text -> Listen ()
+nickJoined :: Text -> ClientM ()
 nickJoined nick = do
-    me <- view clientNick
-    if me == nick
-        then out "Succesfully joined server."
-        else do
-            rmodify clientLounge $ return . over loungeNicksIdle (insertSet nick)
-            out $ nick <> " has joined."
+    me <- isMyNick nick
+    unless me $ do
+        rmodify clientLounge $ return . over loungeNicksIdle (insertSet nick)
+        out $ nick <> " has joined."
 
-nickParted :: Text -> Listen ()
-nickParted nick = do
-    n <- view clientNick
-    if n == nick
-        then out "You have left the server"
-        else do
-            rmodify clientLounge $ return
-                . over loungeNicksIdle (deleteSet nick)
-                . over (loungeGames.each._2) (deleteSet nick)
-            out $ nick <> " has parted."
+nickParted :: Text -> ClientM ()
+nickParted nick = callCC $ \k -> do
+    me <- isMyNick nick
+    when me $ out "You have left the server" >> k ()
+    rmodify clientLounge $ return
+        . (loungeNicksIdle %~ deleteSet nick)
+        . ((loungeGames.each._2) %~ deleteSet nick)
+    out $ nick <> " has parted."
 
-gameCreated :: (Int, Text, Set Nick) -> Listen ()
+gameCreated :: (Int, Text, Set Nick) -> ClientM ()
 gameCreated (n, name, nicks) = do
-    out $ "New game `" <> ppGame n (name, nicks)
+    out $ "New game created: `" <> ppGame n (name, nicks)
     rmodify clientLounge $ return . over loungeGames (insertMap n (name, nicks))
+ 
+loungeInfoChanged :: Lounge -> ClientM ()
+loungeInfoChanged lounge = rswap clientLounge lounge >> printLounge
 
-handleJoinGame :: Int -> Text -> Listen ()
-handleJoinGame n nick = do
+joinedGame :: Int -> Text -> ClientM ()
+joinedGame n nick = do
     rmodify clientLounge $ return
         . over (loungeGames.at n.traversed._2) (insertSet nick)
         . over loungeNicksIdle (deleteSet nick)
@@ -335,33 +207,131 @@ handleJoinGame n nick = do
             | count < 4 = tshow (4 - count) <> " more players until game starts." 
             | otherwise = " Game is starting!"
 
-    me <- liftM (== nick) $ view clientNick
+    me <- isMyNick nick
     if me
         then do _ <- rswap clientWaiting n
                 out $ "Joined the game (" <> tshow n <> "). " <> countInfo
         else out $ nick <> " joined game (" <> tshow n <> "). " <> countInfo
 
-handleTurnAction :: TurnAction -> Listen ()
-handleTurnAction ta = do
-    putStrLn $ "TURNACTION: " <> tshow ta
-    case ta of
-        TurnTileDiscard riichi tile -> undefined
-        TurnTileDraw dead _   -> undefined
-        TurnAnkan tile        -> undefined
-        TurnShouted shout who -> undefined
-
-handleGameShout :: Shout -> Listen ()
-handleGameShout shout = undefined
-
--- * Printing
-
-startGame :: Listen ()
-startGame = do
-    out "Entering game!"
+roundStarts :: GamePlayer Nick -> ClientM ()
+roundStarts gp = do
+    out "The round begins now!"
+    _ <- rswap clientGame (Just gp)
     printGameState
 
-printHelp :: ClientInput m => m ()
-printHelp = outAll
+receivedRoundEvent :: RoundEvent -> ClientM ()
+receivedRoundEvent ev = case ev of
+    RoundTurnAction p ta -> receivedTurnAction p ta
+
+    RoundPublicHand p hp ->
+        out "A public hand changed TODO"
+
+    RoundTsumo p         ->
+        out "Round was won by tsumo"
+        -- TODO
+
+    RoundRon p fps       ->
+        out "Round was won by a ron"
+        -- TODO
+
+    RoundDraw tps        ->
+        out "Round ended in an exhaustive draw"
+        -- TODO
+
+receivedTurnAction :: Player -> TurnAction -> ClientM ()
+receivedTurnAction p ta = case ta of
+    TurnTileDiscard riichi tile -> receivedDiscard riichi tile
+    TurnTileDraw dead mt        -> receivedTileDraw dead mt
+    TurnAnkan tile              -> receivedAnkan tile
+    TurnShouted shout who       -> receivedShout shout who
+    TurnAuto                    -> return ()
+
+receivedDiscard :: Bool -> Tile -> ClientM ()
+receivedDiscard riichi tile = 
+    out $ "Discarded " <> pshow tile <> "." <> if riichi then " Riichi!" else ""
+    -- TODO change state?
+
+receivedTileDraw :: Bool -> Maybe Tile -> ClientM ()
+receivedTileDraw dead mt = 
+    out $ "Draw " <> maybe "" ((<> " ") . pshow) mt <> if dead then "from wanpai." else ""
+    -- TODO change state?
+
+receivedShout :: Shout -> Player -> ClientM ()
+receivedShout shout player = 
+    out $ pshow player <> ": " <> pshow shout
+    -- TODO Change state?
+
+receivedNewHand :: Hand -> ClientM ()
+receivedNewHand h = rmodify clientGame $ return . set (_Just.playerMyHand) h
+    -- TODO something happens here?
+
+receivedAnkan :: Tile -> ClientM ()
+receivedAnkan t = out $ "Called " <> pshow t <> " ankan."
+    -- TODO change state?
+
+-- * Actions
+
+createGame :: ClientM ()
+createGame = withParam "Game name: " $ \name ->
+        let name' = T.dropWhileEnd (== ' ') $ T.dropWhile (== ' ') name
+            in case name' of
+                 "" -> out "Name cannot be empty"
+                 _  -> emit $ CreateGame name'
+
+joinGame :: ClientM ()
+joinGame = printGamesList >> withParam "Join game: " go
+    where
+        go str = case readMay str of
+            Nothing -> out $ "NaN: " <> str
+            Just n  -> emit $ JoinGame n ""
+
+-- ** Shout
+
+-- ** Discard
+
+discardOptions :: ClientM [(Tile, Bool)] -- ^ (discard, can riichi?)
+discardOptions = do
+    game <- rview clientGame <&> (^?! _Just)
+    let tiles = game^.playerMyHand.handConcealed ++ maybeToList (game^.playerMyHand.handPick)
+    return $ map (,True) tiles -- TODO check if can riichi
+
+-- ^ "discardTile nth with_riichi"
+discardTile :: Int -> Bool -> ClientM ()
+discardTile n riichi = do
+    tiles <- discardOptions
+    case tiles ^? traversed.index n of
+        Nothing             -> out $ "No tile for " <> tshow n
+        Just (tile, can_riichi)
+            | False <- can_riichi
+            , True <- riichi -> out "Cannot riichi with that tile"
+            | otherwise     -> emit $ GameAction $ TurnTileDiscard riichi tile
+
+-- ** Other
+
+chatMessage :: ClientM ()
+chatMessage = withParam "say: " send
+    where
+        send ""  = return ()
+        send msg = emit $ Message "" msg
+
+rawCommand :: ClientM ()
+rawCommand = withParam "send command: " $
+        maybe (out "Command not recognized") emit . readMay
+
+-- ** Print
+
+printShortStatus :: ClientM ()
+printShortStatus = do
+    i_am   <- getNick <$> view clientConn
+    inGame <- rview clientGame
+    game_n <- rview clientWaiting
+    let status = if game_n >= 0
+                     then maybe "wait" (const "game") inGame <> " " <> tshow game_n
+                     else "idle"
+    out $ "(" <> status <> ") <" <> i_am <> "> "
+
+printHelp :: ClientM ()
+printHelp = out $ unlines
     [ "Every command is initiated by it's first [l]etter"
     , ""
     , "Global commands"
@@ -386,7 +356,7 @@ printHelp = outAll
     , "  [l]ounge                   Interpret next letter as a lounge commend"
     ]
 
-printStatus :: ClientInput m => m ()
+printStatus :: ClientM ()
 printStatus = do
     mgame       <- rview clientGame
     gameWait    <- rview clientWaiting
@@ -394,33 +364,21 @@ printStatus = do
         Nothing -> out $ "In lounge" <> if gameWait >= 0 then ", ready for game n. " <> tshow gameWait else ""
         Just _  -> out $ "In game n." <> tshow gameWait
 
-printUsers :: Listen ()
+printUsers :: ClientM ()
 printUsers = do
     lounge <- view clientLounge >>= liftIO . readMVar
-    outAll [ "Users idle: " <> ppNicks (lounge ^. loungeNicksIdle)]
+    out $ "Users idle: " <> ppNicks (lounge ^. loungeNicksIdle)
 
-printGames :: Listen ()
-printGames = do
+printGamesList :: ClientM ()
+printGamesList = do
     lounge <- rview clientLounge
     case lounge^.loungeGames & imap ppGame & toListOf each of
        []     -> out "No games"
-       (x:xs) -> outAll $ "Games: " <> x : map ("       " <>) xs
+       (x:xs) -> out $ unlines $ "Games: " <> x : map ("       " <>) xs
 
-printLounge :: Listen ()
-printLounge = printUsers >> printGames
+printLounge :: ClientM ()
+printLounge = printUsers >> printGamesList
 
-printGameState :: Listen ()
-printGameState = do
-    Just game <- rview clientGame
-    let public = game ^. playerPublic
-    out $ pshow game
-
--- * PP
-
-ppGame :: Int -> (Text, Set Nick) -> Text
-ppGame n (name,nicks) = mconcat ["(", tshow n, ") ", name, " [", ppNicks nicks, "]"]
-
-ppNicks :: Set Nick -> Text
-ppNicks nicks = case setToList nicks of
-            [] -> ""
-            (x:xs) -> foldl' (\a b -> a <> ", " <> b) x xs
+printGameState :: ClientM ()
+printGameState = 
+    rview clientGame >>= out . maybe "Round is not active!" pshow

@@ -17,12 +17,23 @@ import Data.Text (splitOn, chunksOf, justifyLeft, justifyRight)
 import qualified Data.List.Split as L (chunksOf)
 
 import Hajong.Game
+import Hajong.Connections
 
 class PrettyPrint x where
     pshow :: x -> Text
 
 class PrettyRead x where
     pread :: Text -> x
+
+-- * PP
+
+ppGame :: Int -> (Text, Set Nick) -> Text
+ppGame n (name,nicks) = mconcat ["(", tshow n, ") ", name, " [", ppNicks nicks, "]"]
+
+ppNicks :: Set Nick -> Text
+ppNicks nicks = case setToList nicks of
+            [] -> ""
+            (x:xs) -> foldl' (\a b -> a <> ", " <> b) x xs
 
 -- * Functions
  
@@ -88,9 +99,15 @@ newtype PosRight a = PosRight { posRight :: a } deriving (Show, Read)
 
 ----------------------------------------------------------
 
-
 -- Instances
 
+-- Shouts
+
+instance PrettyPrint Shout where
+    pshow Pon = "Pon!"
+    pshow Ron = "Ron!"
+    pshow Kan = "Kan!"
+    pshow (Chi (_,_)) = "Chi"
 
 -- Player Info
 
