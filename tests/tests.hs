@@ -13,14 +13,15 @@ import System.Posix
 import qualified Test.QuickCheck.Property as Q
 import qualified Data.List as L
 
+import Hajong.Game
+import Hajong.Server
+
 import GameMentsu
 import GameMechanics
 import CLIPrettyPrint
 import Server
 import CLIClient
-
-import Hajong.Game
-import Hajong.Server
+import Worker
 
 main :: IO ()
 main = do
@@ -39,4 +40,5 @@ tests = testGroup "Hajong tests"
     , mechanicsTests
     , cliPrettyPrintTests
     , clientTests
+    , workerTests
     ]

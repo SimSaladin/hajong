@@ -27,7 +27,8 @@ data GameState playerID = GameState
                    { _gamePlayers :: RiichiPlayers playerID
                    , _gameName :: Text
                    , _gameRound :: Maybe RiichiState -- maybe in running game
-                   }
+                   } deriving (Show, Read)
+
 
 -- * Round
 
@@ -35,13 +36,13 @@ data GameState playerID = GameState
 data RiichiState = RiichiState
                  { _riichiSecret :: RiichiSecret
                  , _riichiPublic :: RiichiPublic
-                 }
+                 } deriving (Show, Read)
 
 data RiichiSecret = RiichiSecret
                  { _riichiWall :: [Tile]
                  , _riichiWanpai :: [Tile]
                  , _riichiHands :: Map Player Hand
-                 , _riichiWaitShoutsFrom :: Maybe [Player]
+                 , _riichiWaitShoutsFrom :: [Player]
                  } deriving (Show, Read)
 
 data RiichiPublic = RiichiPublic
@@ -58,16 +59,18 @@ data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile
                 | TurnShouted Shout Player -- ^ tile, shout, shouter
+                | TurnAuto -- ^ Special never-failing and definitely turn-ending action
                 deriving (Show, Read)
 
-data RoundEvent = RoundTurnBegin Player
+data RoundEvent = RoundTurnBegins Player
                 | RoundTurnAction Player TurnAction
                 | RoundPublicHand Player HandPublic
-                | RoundTurnEnded Player
                 | RoundTsumo Player
                 | RoundRon Player [Player] -- From, who?
                 | RoundDraw [Player] -- tenpai players
                 deriving (Show, Read)
+
+data RoundResults = RoundResults
 
 -- * Hands
 

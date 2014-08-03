@@ -98,12 +98,35 @@ runTurn player action = do
 
     return $ if hand /= newHand then Just hand else Nothing
 
+-- | If win(s) were declared, wall was exhausted or four kans were declared
+-- (and TODO declarer is not in the yakuman tenpai): return "RoundResults".
+--
+-- Otherwise the turn is passed to next player as if the player in turn
+-- discarded previously.
+advanceAfterDiscard :: RoundM m => m (Maybe RoundResults)
+advanceAfterDiscard = do
+    tilesLeft <- view riichiWallTilesLeft
+    doras     <- view riichiDora
+    case tilesLeft of
+        0                     -> Just <$> roundOver
+        _ | length doras == 5 -> Just <$> roundOver
+        _                     -> do
+            turnOf <- view riichiTurn
+            tell [RoundTurnBegins $ nextPlayer turnOf]
+            return Nothing
+
+roundOver :: RoundM m => m RoundResults
+roundOver = return RoundResults -- TODO
+
+nextPlayer :: Player -> Player
+nextPlayer = toEnum . (`mod` 4) . fromEnum
+
 -- | Auxiliary function
 runShout :: RoundM m
     => Player -- ^ Whose discard
     -> Player -- ^ Who shouted
-    -> (Hand, Player -> Hand -> Maybe (Either () Mentsu))
-    -> m Hand
+    -> (Hand, Player -> Hand -> Maybe (Either () Mentsu)) -- ^ (Hand of in turn, <some function>)
+    -> m Hand -- ^ Hand of shouter
 runShout turnPlayer shouter (turnHand, f) = do
     hand <- handOf' shouter
     case f shouter hand of
@@ -111,8 +134,7 @@ runShout turnPlayer shouter (turnHand, f) = do
         Just (Left ())      -> tell [RoundRon turnPlayer [shouter]]
         Just (Right mentsu) -> do
             let newHand = hand & over (handPublic.handOpen) (mentsu :)
-                               . over handConcealed
-                               (L.\\ mentsuPai mentsu)
+                               . over handConcealed (L.\\ mentsuPai mentsu)
             handOf shouter ?= newHand
             tell [RoundPublicHand shouter $ _handPublic hand]
     return turnHand
@@ -141,7 +163,7 @@ publishTurnAction player ra = tell $ case ra of
 endTurn :: RoundM m => Tile -> m ()
 endTurn dt = do
     hands <- Map.filter (couldShout dt) <$> use riichiHands
-    unless (null hands) $ riichiWaitShoutsFrom .= Just (Map.keys hands)
+    riichiWaitShoutsFrom .= Map.keys hands
 
 -- | True if the tile could be shouted to the hand.
 couldShout :: Tile -> Hand -> Bool
@@ -168,7 +190,7 @@ newSecret = liftM dealTiles $ shuffleM riichiTiles
             { _riichiWall           = wall
             , _riichiWanpai         = wanpai
             , _riichiHands          = Map.fromList $ zip defaultPlayers (map initHand [h1, h2, h3, h4])
-            , _riichiWaitShoutsFrom = Nothing
+            , _riichiWaitShoutsFrom = []
             } where
                 (hands, xs)             = splitAt (13 * 4) tiles
                 ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands

@@ -24,13 +24,13 @@ import qualified Network.WebSockets as WS
 ---------------------------------------------------------------------
 import           Hajong.Game
 import           Hajong.Client.PrettyPrint
-import           Hajong.Server (unicast, Lounge(..), Nick, Event(..), loungeNicksIdle, loungeGames)
+import           Hajong.Connections
                         -- XXX: Put these somewhere common?
 
 -- * Client state
 
 data ClientState = ClientState
-                 { _clientConn         :: WS.Connection
+                 { _clientConn         :: Client
                  , _clientNick         :: Text
                  , _clientMainThread   :: ThreadId
                  , _clientLounge       :: MVar Lounge
@@ -43,7 +43,7 @@ data ClientState = ClientState
 makeLenses ''ClientState
 
 newClientState :: WS.Connection -> Text -> IO ClientState
-newClientState conn nick = ClientState conn nick
+newClientState conn nick = ClientState (websocketClient nick conn) nick
     <$> myThreadId
     <*> newMVar (Lounge mempty mempty)
     <*> newMVar Nothing
@@ -64,8 +64,8 @@ rmodify l f = view l >>= liftIO . (`modifyMVar_` f)
 
 -- * User I/O
 
--- | Server side only
-type Client a = ClientOutput m => m a
+-- | Server side facing only
+type Listen a = ClientOutput m => m a
 
 -- | User inpput
 type UI a = ClientInput m => m a
@@ -159,7 +159,7 @@ clientApp input listener conn = do
     listenerThread <- (takeMVar listenerMVar >> listener state) `forkFinally` const (putMVar listenerMVar ())
 
     -- Tell we have joined
-    unicast conn (JoinServer ident)
+    unicast (websocketClient "" conn) (JoinServer ident)
 
     -- Run input loop; the mvar is used to prevent listener from throwing
     -- interrupts before input can handle them.
@@ -274,9 +274,9 @@ clientReceiver :: ClientOutput m => m ()
 clientReceiver = do
     out "Connected to server. Type ? for help."
     conn <- view clientConn
-    forever $ liftIO (WS.receiveData conn) >>= clientEventHandler
+    forever $ receive conn >>= clientEventHandler
 
-clientEventHandler :: Event -> Client ()
+clientEventHandler :: Event -> Listen ()
 clientEventHandler ev = case ev of
     JoinServer nick   -> nickJoined nick
     PartServer nick   -> nickParted nick
@@ -290,7 +290,7 @@ clientEventHandler ev = case ev of
     Invalid err       -> out $ "[error] " <> err
     -- x                 -> out $ "Received an unhandled event: " <> tshow x
 
-handleRoundEvent :: RoundEvent -> Client ()
+handleRoundEvent :: RoundEvent -> Listen ()
 handleRoundEvent ev = case ev of
     RoundTurnAction p a ->  undefined
     RoundPublicHand p hp -> undefined
@@ -298,7 +298,7 @@ handleRoundEvent ev = case ev of
     RoundRon p fps -> undefined
     RoundDraw tps -> undefined
 
-nickJoined :: Text -> Client ()
+nickJoined :: Text -> Listen ()
 nickJoined nick = do
     me <- view clientNick
     if me == nick
@@ -307,7 +307,7 @@ nickJoined nick = do
             rmodify clientLounge $ return . over loungeNicksIdle (insertSet nick)
             out $ nick <> " has joined."
 
-nickParted :: Text -> Client ()
+nickParted :: Text -> Listen ()
 nickParted nick = do
     n <- view clientNick
     if n == nick
@@ -318,12 +318,12 @@ nickParted nick = do
                 . over (loungeGames.each._2) (deleteSet nick)
             out $ nick <> " has parted."
 
-gameCreated :: (Int, Text, Set Nick) -> Client ()
+gameCreated :: (Int, Text, Set Nick) -> Listen ()
 gameCreated (n, name, nicks) = do
     out $ "New game `" <> ppGame n (name, nicks)
     rmodify clientLounge $ return . over loungeGames (insertMap n (name, nicks))
 
-handleJoinGame :: Int -> Text -> Client ()
+handleJoinGame :: Int -> Text -> Listen ()
 handleJoinGame n nick = do
     rmodify clientLounge $ return
         . over (loungeGames.at n.traversed._2) (insertSet nick)
@@ -341,7 +341,7 @@ handleJoinGame n nick = do
                 out $ "Joined the game (" <> tshow n <> "). " <> countInfo
         else out $ nick <> " joined game (" <> tshow n <> "). " <> countInfo
 
-handleTurnAction :: TurnAction -> Client ()
+handleTurnAction :: TurnAction -> Listen ()
 handleTurnAction ta = do
     putStrLn $ "TURNACTION: " <> tshow ta
     case ta of
@@ -350,12 +350,12 @@ handleTurnAction ta = do
         TurnAnkan tile        -> undefined
         TurnShouted shout who -> undefined
 
-handleGameShout :: Shout -> Client ()
+handleGameShout :: Shout -> Listen ()
 handleGameShout shout = undefined
 
 -- * Printing
 
-startGame :: Client ()
+startGame :: Listen ()
 startGame = do
     out "Entering game!"
     printGameState
@@ -394,22 +394,22 @@ printStatus = do
         Nothing -> out $ "In lounge" <> if gameWait >= 0 then ", ready for game n. " <> tshow gameWait else ""
         Just _  -> out $ "In game n." <> tshow gameWait
 
-printUsers :: Client ()
+printUsers :: Listen ()
 printUsers = do
     lounge <- view clientLounge >>= liftIO . readMVar
     outAll [ "Users idle: " <> ppNicks (lounge ^. loungeNicksIdle)]
 
-printGames :: Client ()
+printGames :: Listen ()
 printGames = do
     lounge <- rview clientLounge
     case lounge^.loungeGames & imap ppGame & toListOf each of
        []     -> out "No games"
        (x:xs) -> outAll $ "Games: " <> x : map ("       " <>) xs
 
-printLounge :: Client ()
+printLounge :: Listen ()
 printLounge = printUsers >> printGames
 
-printGameState :: Client ()
+printGameState :: Listen ()
 printGameState = do
     Just game <- rview clientGame
     let public = game ^. playerPublic

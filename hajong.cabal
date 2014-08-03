@@ -28,6 +28,8 @@ library
                      , Hajong.Game.Tiles
                      , Hajong.Game.Types
                      , Hajong.Server
+                     , Hajong.Worker
+                     , Hajong.Connections
 
   build-depends:       base                    >=4.6
                      , lens                    >=4.0
@@ -79,7 +81,6 @@ test-suite test
                      , lens
                      , silently
                      , async
-                     , knob
                      , tasty
                      , tasty-hunit
                      , tasty-quickcheck

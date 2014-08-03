@@ -52,7 +52,7 @@ dummyFullState = RiichiState secret public
             { _riichiWall           = riichiTiles
             , _riichiWanpai         = take 14 riichiTiles
             , _riichiHands          = mapFromList $ zip defaultPlayers (repeat fullHand)
-            , _riichiWaitShoutsFrom = Nothing
+            , _riichiWaitShoutsFrom = []
             }
 
         public                     = RiichiPublic

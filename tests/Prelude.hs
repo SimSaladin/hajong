@@ -24,6 +24,7 @@ import Test.Tasty.QuickCheck as X
 import qualified Test.QuickCheck.Property as Q
 
 import Hajong.Game
+import Hajong.Connections
 
 -- | "action =~ expected" => expected `isInfixOf` (result of action)
 (=~) :: IO Text -> Text -> IO ()
@@ -60,3 +61,50 @@ instance Arbitrary Mentsu where
 
 instance Arbitrary Player where
     arbitrary = elements defaultPlayers
+
+instance Arbitrary Text where
+    arbitrary = pack <$> arbitrary
+
+instance Arbitrary TurnAction where
+    arbitrary = oneof
+        [ TurnTileDiscard <$> arbitrary <*> arbitrary
+        , TurnTileDraw <$> arbitrary <*> arbitrary
+        , TurnAnkan <$> arbitrary
+        , TurnShouted <$> arbitrary <*> arbitrary
+        , pure TurnAuto
+        ]
+
+instance Arbitrary Shout where
+    arbitrary = oneof
+        [ pure Pon
+        , pure Kan
+        , pure Ron
+        , Chi <$> ((,) <$> arbitrary <*> arbitrary)
+        ]
+
+instance Arbitrary RoundEvent where
+    arbitrary = oneof
+        [ RoundTurnBegins <$> arbitrary
+        , RoundTurnAction <$> arbitrary <*> arbitrary
+        -- , RoundPublicHand <$> arbitrary <*> arbitrary
+        , RoundTsumo <$> arbitrary
+        , RoundRon <$> arbitrary <*> arbitrary
+        , RoundDraw <$> arbitrary 
+        ]
+
+instance Arbitrary Event where
+    arbitrary = oneof
+        [ JoinServer <$> arbitrary
+        , PartServer <$> arbitrary
+        -- , LoungeInfo 
+        , Message <$> arbitrary <*> arbitrary
+        , Invalid <$> arbitrary
+        , CreateGame <$> arbitrary
+        , (\a b -> NewGame (a,b,mempty)) <$> arbitrary <*> arbitrary
+        , JoinGame <$> arbitrary <*> arbitrary
+        , GameAction <$> arbitrary
+        , pure GameDontCare
+        , GameEvents <$> arbitrary
+        -- , GameHandChanged <$> arbitrary
+        --, GameShout <$> arbitrary
+        ]
