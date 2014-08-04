@@ -10,10 +10,7 @@
 ------------------------------------------------------------------------------
 module Hajong.Connections where
 
-import           ClassyPrelude
 import           Control.Monad.Trans.Either
-import           Control.Monad.Reader.Class
-import           Control.Lens
 import qualified Network.WebSockets         as WS
 
 import Hajong.Game
@@ -22,27 +19,24 @@ type Nick = Text
 
 data Lounge = Lounge
             { _loungeNicksIdle :: Set Nick
-            , _loungeGames :: Map Int (Text, Set Nick)
+            , _loungeGames :: Map Int Text -- TODO (Text, Set Nick)
             } deriving (Show, Read)
 
 makeLenses ''Lounge
 
 data Event = JoinServer Text -- ^ Nick
            | PartServer Text
-           | LoungeInfo Lounge
            | Message Text Text -- ^ from, content
            | Invalid Text
-           -- Game events
+
+           | LoungeInfo Lounge
+           | GameCreated (Int, Text, Set Nick) -- name, nicks
            | CreateGame Text
-           | NewGame (Int, Text, Set Nick) -- name, nicks
-           | RoundStarts (GamePlayer Nick)
            | JoinGame Int Text -- ^ Game lounge
-           -- In-game events
-           | GameAction TurnAction -- ^ From client to server only
-           | GameDontCare -- ^ About discarded tile
-           | GameEvents [RoundEvent]
-           | GameHandChanged Hand -- Own hand only
-           | GameShout Shout
+
+           | InGamePrivateEvent GameEvent
+           | InGameEvents [GameEvent]
+           | InGameAction GameAction
            deriving (Show, Read)
 
 -- * Clients
@@ -58,7 +52,7 @@ instance Ord Client where a <= b = getNick a <= getNick b
 instance Show Client where show = unpack . getNick
 
 multicast :: MonadIO m => GameState Client -> Event -> m ()
-multicast gs event = forM_ (gs^.gamePlayers^..(each._2._Just)) (`unicast` event)
+multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each._Just)
 
 unicastError :: MonadIO m => Client -> Text -> m ()
 unicastError c = unicast c . Invalid
@@ -79,14 +73,3 @@ instance WS.WebSocketsData Event where
 -- | convert maybe to EitherT
 maybeToEitherT :: Monad m => e -> Maybe a -> EitherT e m a
 maybeToEitherT def = maybe (left def) return
-
--- * General
-
-rview :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> m b
-rview l = view l >>= liftIO . readMVar
-
-rswap :: (MonadReader s m, MonadIO m) => Getting (MVar b) s (MVar b) -> b -> m b 
-rswap l a = view l >>= liftIO . (`swapMVar` a)
-
-rmodify :: (MonadReader s m, MonadIO m) => Getting (MVar a) s (MVar a) -> (a -> IO a) -> m ()
-rmodify l f = view l >>= liftIO . (`modifyMVar_` f)

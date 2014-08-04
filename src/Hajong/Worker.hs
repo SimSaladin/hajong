@@ -17,12 +17,11 @@
 ------------------------------------------------------------------------------
 module Hajong.Worker where
 
-import           ClassyPrelude
+import           Data.Maybe (fromJust)
 import           Control.Concurrent
 import           Control.Monad.Trans.Either
-import           Control.Lens
 import           Control.Concurrent.Async
-import           Control.Monad.Reader       (runReaderT, ReaderT, MonadReader)
+import           Control.Monad.Reader       (runReaderT, ReaderT)
 import qualified Data.List as L
 
 ----------------------------------------------
@@ -34,26 +33,25 @@ import Hajong.Game
 -- let (_,mc',_):_     = gs ^. gamePlayers & filter (^._1.to (== turnPlayer))
 
 newtype Worker a = Worker { runWorker :: ReaderT WorkerState IO a }
-                   deriving (Functor, Monad, MonadIO, MonadReader WorkerState)
+                   deriving (Functor, Applicative, Monad, MonadIO, MonadReader WorkerState)
 
 type WorkerState = (TVar (GameState Client), TMVar WorkerInput)
 
 type WCont = Worker ()
 
 data WorkerInput = WorkerAction (Worker ())
-                 | WorkerClientPass Client
-                 | WorkerClientAction Client TurnAction
+                 | WorkerClientAction Client GameAction
 
 -- | Solve Player based on the client.
 clientToPlayer :: Client -> GameState Client -> Player
 clientToPlayer c gs = pl
-    where (pl,_,_):_ = gs ^. gamePlayers & filter (^._2.to (== Just c))
+    where (Just (pl,_)) = gs^.gamePlayers & ifind (const (== Just c))
 
 -- | Start the game worker thread
 startWorker :: TMVar WorkerInput -> GameState Client -> IO ()
 startWorker inVar gs = do
     gsv <- newTVarIO gs
-    void $ forkIO $ runReaderT (runWorker workerWaitPlayers) (gsv, inVar)
+    void $ forkIO $ runReaderT (runWorker waitingPlayers) (gsv, inVar)
 
 -- * Primitive
 
@@ -61,48 +59,70 @@ startWorker inVar gs = do
 workerTake :: Worker WorkerInput
 workerTake = liftIO . atomically . takeTMVar =<< view _2
 
--- | Process events until a valid turn action, when the continuation
--- induced by it is returned.
-workerUntilTurnAction :: Worker WCont
-workerUntilTurnAction = workerTake >>= workerAction >>= maybe workerUntilTurnAction return
+workerAction' :: (TurnAction -> Client -> Worker a) -- ^ TurnAction
+              -> (Client -> Shout -> Worker a) -- ^ Shout
+              -> (Client -> Worker a) -- ^ GameDontCare
+              -> Worker a -- ^ Action
+              -> Worker a
+workerAction' f_ta f_sh f_dc f_ac = do
+    wi <- workerTake
+    case wi of
+        WorkerAction m          -> m >> f_ac
+        WorkerClientAction c ga -> case ga of
+            GameTurn ta     -> f_ta ta c
+            GameShout shout -> f_sh c shout
+            GameDontCare    -> f_dc c
 
 -- | Either apply the action and return Nothing, or return the
 -- continuation from applying a WorkerClientAction.
-workerAction :: WorkerInput -> Worker (Maybe WCont)
-workerAction (WorkerAction m)          = m >> return Nothing
-workerAction (WorkerClientPass _)      = return Nothing
-workerAction (WorkerClientAction c ta) = workerProcessTurnAction ta c
+workerTakeTurnAction :: Worker WCont
+workerTakeTurnAction = workerAction'
+    workerProcessTurnAction (\_ _ -> return Nothing) (\_ -> return Nothing) (return Nothing)
+    >>= maybe workerTakeTurnAction return
 
 -- | Attempt to apply the TurnAction. Return the continuation if it
 -- succeeded.
 workerProcessTurnAction :: TurnAction -> Client -> Worker (Maybe WCont)
 workerProcessTurnAction ta c = do
-    gs <- liftIO . readTVarIO =<< view _1
+    gs <- rview _1
     let player = clientToPlayer c gs
 
-    case gsRoundAction (runTurn player ta) gs & _Left %~ ("Game error: " <>) of
-        Left err                      -> unicastError c err >> return Nothing
-        Right (mhand, secret, events) -> return $ Just $ do
-            -- the continuation
-            updateState secret events
-            case mhand of
-                Just hand -> unicast c $ GameHandChanged hand
-                Nothing -> return ()
+    res <- workerRoundM (runTurn player ta)
+    case res of
+        Left err      -> unicastError c err >> return Nothing
+        Right (_, ma) -> return $ Just $ do
+            ma
             case ta of
                 TurnTileDraw _ _    -> waitForAction c
                 TurnAnkan _         -> waitForAction c
-                TurnTileDiscard _ _ -> waitForShouts $ _riichiWaitShoutsFrom secret
-                TurnShouted _ _     -> advanceTurn
-                TurnAuto            -> advanceTurn
+                TurnTileDiscard _ _ -> waitForShouts $
+                    gs^?!gameRound._Just^.riichiSecret.riichiWaitShoutsFrom
+
+workerRoundM :: RoundM' a -> Worker (Either Text (a, Worker ()))
+workerRoundM ma = liftM (fmap tores . runRoundM ma) $ atomically . readTVar =<< view _1
+    where tores (res, secret, events) = (res, updateState secret events >> sendGameEvents events)
 
 -- | The game state has changed.
-updateState :: RiichiSecret -> [RoundEvent] -> Worker ()
+updateState :: RiichiSecret -> [GameEvent] -> Worker ()
 updateState secret events = do
     gsv <- view _1
-    gs  <- atomically $ do
-        modifyTVar gsv $ gameRound._Just.riichiSecret .~ secret
-        readTVar gsv
-    multicast gs (GameEvents events)
+    atomically $ modifyTVar gsv $ gameRound._Just
+        %~ ((riichiSecret .~ secret) . (riichiPublic %~ applyGameEvents' events))
+
+-- | Hide sensitive info per player
+sendGameEvents :: [GameEvent] -> Worker ()
+sendGameEvents events = do
+    gs <- view _1 >>= atomically . readTVar
+    public <- filterM (f gs) events
+    multicast gs $ InGameEvents public
+    where
+        f gs e@(RoundPrivateChange p _) = sendPrivate gs p e
+        f gs e@(RoundPrivateStarts pg)  = sendPrivate gs (_playerPlayer pg) e
+        f _ _                           = return True
+
+        sendPrivate gs p e =
+            maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
+            >> return False
 
 -- | "workerRace n ma mb" races between "ma" and "delay n >> mb"
 workerRace :: Int -> Worker a -> Worker a -> Worker a
@@ -117,7 +137,7 @@ workerAddPlayer client callback = do
     gsv <- view _1
     e_gs <- atomically $ runEitherT $ do
         gs  <- lift $ readTVar gsv
-        gs' <- maybeToEitherT "Game is full" $ gsAddPlayer client gs
+        gs' <- maybeToEitherT "Game is full" $ addClient client gs
         lift $ writeTVar gsv gs'
         return gs'
 
@@ -126,44 +146,46 @@ workerAddPlayer client callback = do
 -- * Continuations
 
 -- | Begin the game including the first round when all players have joined.
-workerWaitPlayers :: WCont
-workerWaitPlayers = do
+waitingPlayers :: WCont
+waitingPlayers = do
     gsv <- view _1
-    may_begin <- gsMaybeFirstRound <$> liftIO (readTVarIO gsv)
+    may_begin <- maybeNextRound <$> liftIO (readTVarIO gsv)
     case may_begin of
         Nothing -> do
             wi <- workerTake
             case wi of
-                WorkerAction m -> m >> workerWaitPlayers
-                _              -> workerWaitPlayers
-        Just m -> do
-            gs <- liftIO m
-            atomically $ writeTVar gsv gs
+                WorkerAction m -> m >> waitingPlayers
+                _              -> waitingPlayers
+        Just m -> liftIO m >>= roundBegins
 
-            -- send the GamePlayer's
-            forM_ (gs^.gamePlayers) $ \(p, Just c, _) ->
-                unicast c $ StartGame
-                    $ playerPlayers.each._2._Just %~ getNick
-                    $ gsPlayerLookup gs p ^?! _Just
-
-            workerTurnBegin
+roundBegins :: GameState Client -> WCont
+roundBegins gs = do
+    _ <- rswap _1 gs
+    workerRoundM startRound >>= either print snd
+    workerTurnBegin
 
 -- | A new turn begins.
 workerTurnBegin :: WCont
-workerTurnBegin = join workerUntilTurnAction
+workerTurnBegin = join workerTakeTurnAction
 
 -- | Advance turn to the next player.
 advanceTurn :: WCont
 advanceTurn = do
-    gs <- atomically . readTVar =<< view _1
-    let Right (mres, secret, events) = gsRoundAction advanceAfterDiscard gs
-    updateState secret events
-    maybe workerTurnBegin handleResults mres
+    liftIO $ putStrLn "Advancing after discard"
+    workerRoundM advanceAfterDiscard >>= either print go
+    where go (r, ma) = ma >> maybe workerTurnBegin roundEnds r
+
+advanceWithShout :: Player -> Shout -> WCont
+advanceWithShout p sh = do
+    liftIO $ putStrLn "Advancing with a shout"
+    workerRoundM (runShout sh p) >>= either print (go . snd)
+    where go ma = ma >> workerTurnBegin
 
 -- | The round ended.
-handleResults :: RoundResults -> WCont
-handleResults res =
-    error "handleResults: TODO"
+roundEnds :: RoundResults -> WCont
+roundEnds res = do
+    print res
+    maybe (return ()) (liftIO >=> roundBegins) . maybeNextRound =<< rview _1
 
 -- | After a discard, there are three possible branchings:
 --  
@@ -175,28 +197,28 @@ handleResults res =
 --      limit reached: advance to next turn.
 waitForShouts :: [Player] -> WCont
 waitForShouts players = do
-    gs  <- liftIO . readTVarIO =<< view _1
-    inv <- view _2
+    gs  <- rview _1
     shv <- liftIO newEmptyTMVarIO
+    liftIO $ putStrLn "Now waiting for shouts."
 
-    let waitAll [] = return advanceTurn
-        waitAll xs@(x:_) = do
-            let passOn p = waitAll (L.delete p xs)
-            wi    <- workerTake
-            mcont <- workerAction wi
-            case (mcont, wi) of
-                (_, WorkerClientPass c) -> passOn (clientToPlayer c gs)
-                (Just cont, WorkerClientAction c (TurnShouted _ p))
-                    | p == x            -> return cont
-                    | otherwise         -> atomically (putTMVar shv cont) >> passOn p
-                _                       -> waitAll xs
+    let waitAll       [] = return advanceTurn
+        waitAll xs@(x:_) = workerAction' (\_ _ -> waitAll xs) shoutHandler passOn (waitAll xs)
+                where
+            passOn c = waitAll (L.delete (clientToPlayer c gs) xs)
+            shoutHandler c sh
+                | shoutedFrom sh == x = return $ advanceWithShout (clientToPlayer c gs) sh
+                                                 -- ^ Highest priority
+                | otherwise           = do
+                    atomically (putTMVar shv (advanceWithShout (clientToPlayer c gs) sh))
+                    passOn c
 
-    join $ workerRace 10000000 (waitAll players) $ return
-        (atomically (tryTakeTMVar shv) >>= fromMaybe advanceTurn)
+    join $ workerRace 10000000
+        (waitAll players)
+        (return $ atomically (tryTakeTMVar shv) >>= fromMaybe advanceTurn)
 
 -- | Expect an action in the queue, or timeout and automatically end the
 -- turn with a default action.
 waitForAction :: Client -> WCont
-waitForAction c = join $ workerRace 10000000 workerUntilTurnAction $ return $ do
-    Just cont <- workerProcessTurnAction TurnAuto c -- TurnAuto never fails
-    cont
+waitForAction c = join $ workerRace 10000000 workerTakeTurnAction $ return $ do
+    auto <- advanceAuto . fromJust . _gameRound <$> rview _1
+    join $ fromJust <$> workerProcessTurnAction auto c -- TurnAuto never fails

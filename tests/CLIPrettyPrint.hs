@@ -29,10 +29,10 @@ cliPrettyPrintTests = testGroup "CLI PrettyPrint"
     , testCase "PosFront Discards" $ PosFront  souTiles `pshowAssert` "                 \n         S9 S8 S7\nS6 S5 S4 S3 S2 S1"
 
     , testGroup "Filled game contains characters" $
-        let game = newGameState "test game"
-                & gsAddPlayer ("Dummy player" :: Text)
+        let game = newEmptyGS "test game"
+                & addClient ("Dummy player" :: Text)
                 & set gameRound (Just dummyFullState) . fromJust
-            Just playerState = gsPlayerLookup game (Player Ton)
+            Just playerState = getPlayerState game (Player Ton)
             in pshow playerState `hunitAllInfixOf` ["|", "_", "(", ")", "(25000)" ]
 
     , testProperty "pread . pshow === id (Hand)"    (preadPshowEquals :: Hand -> Bool)

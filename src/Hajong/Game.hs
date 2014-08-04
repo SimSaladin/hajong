@@ -9,14 +9,14 @@
 ------------------------------------------------------------------------------
 module Hajong.Game
     ( module Hajong.Game.Mechanics
+    , module Hajong.Game.Round
     , module Hajong.Game.Hand
     , module Hajong.Game.Mentsu
     , module Hajong.Game.Tiles
-    , module Hajong.Game.Types
     ) where
 
-import Hajong.Game.Hand
 import Hajong.Game.Mechanics
+import Hajong.Game.Round
+import Hajong.Game.Hand
 import Hajong.Game.Mentsu
 import Hajong.Game.Tiles
-import Hajong.Game.Types

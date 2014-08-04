@@ -9,10 +9,8 @@
 ------------------------------------------------------------------------------
 module Hajong.Game.Yaku.Standard where
 
-import ClassyPrelude
-
-import Hajong.Game.Types
 import Hajong.Game.Yaku.Builder
+import Hajong.Game.Tiles
 
 -- * 4 mentsu + 1 jantou
 

@@ -10,8 +10,6 @@
 ------------------------------------------------------------------------------
 module Hajong.Client.PrettyPrint where
 
-import ClassyPrelude
-import Control.Lens
 import Data.List (transpose, cycle)
 import Data.Text (splitOn, chunksOf, justifyLeft, justifyRight)
 import qualified Data.List.Split as L (chunksOf)
@@ -37,8 +35,9 @@ ppNicks nicks = case setToList nicks of
 
 -- * Functions
  
-breakGamePlayer :: GamePlayer Text -> [(Player, Maybe Text, Points, HandPublic)]
-breakGamePlayer pstate = zipWith (\(player, mnick, points) (_, hand) -> (player, mnick, points, hand))
+breakGamePlayer :: GamePlayer -> [PInfo]
+breakGamePlayer pstate = zipWith
+      (\(player, nick, points) (_, hand) -> (player, nick, points, hand))
       (_playerPlayers pstate)
       (itoList $ _playerPublicHands pstate)
 
@@ -81,11 +80,11 @@ pinfoNickPoints n (_, nick, points, _) = intercalate "\n" $ map (justifyRight n 
 
 -- * Related types 
 
-type PInfo = (Player, Maybe Text, Points, HandPublic)
+type PInfo = (Player, Nick, Points, HandPublic)
 
 newtype PPoints = PPoints Int
 
-newtype PNick = PNick (Maybe Text)
+newtype PNick = PNick Text
 
 type Discards = [(Tile, Maybe Player)]
 
@@ -104,14 +103,14 @@ newtype PosRight a = PosRight { posRight :: a } deriving (Show, Read)
 -- Shouts
 
 instance PrettyPrint Shout where
-    pshow Pon = "Pon!"
-    pshow Ron = "Ron!"
-    pshow Kan = "Kan!"
-    pshow (Chi (_,_)) = "Chi"
+    pshow Pon{} = "Pon!"
+    pshow Ron{} = "Ron!"
+    pshow Kan{} = "Kan!"
+    pshow Chi{} = "Chi!"
 
 -- Player Info
 
-instance PrettyPrint (GamePlayer Text) where
+instance PrettyPrint GamePlayer where
     pshow = do
         dora      <- view $ playerPublic.riichiDora.to pshow
         concealed <- view $ playerMyHand.to pshow
@@ -156,7 +155,7 @@ instance PrettyPrint (PosRight PInfo) where pshow (PosRight info) = pshow (info^
 instance PrettyPrint (PosFront PInfo) where pshow (PosFront info) = pshow (PosMine info)
 
 instance PrettyPrint PPoints    where pshow (PPoints points) = "(" <> tshow points <> ")"
-instance PrettyPrint PNick      where pshow (PNick mnick)    = fromMaybe "<nobody>" mnick
+instance PrettyPrint PNick      where pshow (PNick nick)     = nick
 instance PrettyPrint Player     where pshow (Player kaze)    = tshow kaze <> " (" <> take 1 (pshow $ Kaze kaze) <> ")"
 
 newtype OtherConceal = OtherConceal  Int

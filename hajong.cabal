@@ -20,16 +20,17 @@ library
   exposed-modules:     Hajong.Client.CLI
                      , Hajong.Client.PrettyPrint
                      , Hajong.Game
+                     , Hajong.Game.Tiles
+                     , Hajong.Game.Mentsu
+                     , Hajong.Game.Hand
+                     , Hajong.Game.Round
+                     , Hajong.Game.Mechanics
                      , Hajong.Game.Yaku.Builder
                      , Hajong.Game.Yaku.Standard
-                     , Hajong.Game.Hand
-                     , Hajong.Game.Mechanics
-                     , Hajong.Game.Mentsu
-                     , Hajong.Game.Tiles
-                     , Hajong.Game.Types
                      , Hajong.Server
                      , Hajong.Worker
                      , Hajong.Connections
+  other-modules:       Prelude
 
   build-depends:       base                    >=4.6
                      , lens                    >=4.0
@@ -38,7 +39,6 @@ library
                      , classy-prelude          >=0.8
                      , text                    >=0.1
                      , websockets              >=0.8
-                     , haskeline               >=0.6
                      , stm 
                      , mtl
                      , random
@@ -47,8 +47,7 @@ library
                      , free
                      , async
 
-  default-extensions:  NoImplicitPrelude
-                     , TemplateHaskell
+  default-extensions:  TemplateHaskell
                      , OverloadedStrings
                      , ConstraintKinds
                      , FlexibleContexts

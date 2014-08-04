@@ -11,22 +11,29 @@
 ------------------------------------------------------------------------------
 module Hajong.Game.Tiles where
 
-import ClassyPrelude
-import Control.Applicative
+-- XXX this could be in a more appropriate place
+newtype Player = Player Kazehai
+                 deriving (Show, Read, Eq, Ord)
 
-import Hajong.Game.Types
+deriving instance Enum Player
+deriving instance Bounded Player
 
-koutsu :: [Tile] -> Mentsu
-koutsu = flip Koutsu Nothing
+data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
+            deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
-kantsu :: [Tile] -> Mentsu
-kantsu = flip Kantsu Nothing
+data Sangenpai = Haku | Hatsu | Chun
+               deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
-jantou :: [Tile] -> Mentsu
-jantou = flip Jantou Nothing
+data Kazehai = Ton | Nan | Shaa | Pei
+             deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
-shuntsu :: [Tile] -> Mentsu
-shuntsu = flip Shuntsu Nothing
+data Tile = Man Number Bool
+          | Pin Number Bool
+          | Sou Number Bool
+          | Sangen Sangenpai
+          | Kaze Kazehai
+          deriving (Show, Read, Eq, Ord)
+
 
 riichiTiles :: [Tile]
 riichiTiles = join . replicate 4 $ 

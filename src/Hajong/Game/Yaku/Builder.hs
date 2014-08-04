@@ -10,17 +10,11 @@
 ------------------------------------------------------------------------------
 module Hajong.Game.Yaku.Builder where
 
-import ClassyPrelude
-import Control.Lens
 import Control.Monad.Free
 import Control.Monad.State
 
 import Hajong.Game.Mentsu
 import Hajong.Game.Tiles
-import Hajong.Game.Types
-
-calculateYaku :: CompleteHand -> [Yaku Int] -- XXX: Well, maybe not so stupid return type
-calculateYaku hand = undefined
 
 runChecker :: YakuInfo -> CompleteHand -> Yaku Int -> Maybe Int
 runChecker yi hand = fmap fst . (`runStateT` hand) . iterM f
@@ -64,7 +58,7 @@ matchProp tt mentsu
         TileAnd x y         -> matchProp x mentsu && matchProp y mentsu
         TileOr x y          -> matchProp x mentsu || matchProp y mentsu
         TileNot x           -> not $ matchProp x mentsu
-        TileConcealed       -> isNothing $ mentsuOpen mentsu
+        TileConcealed       -> isNothing $ mentsuFrom mentsu
         PropAny             -> True
         _ -> True
     | otherwise = error "ofTileType: empty mentsu"
@@ -77,11 +71,14 @@ data YakuChecker next = YakuMentsu MentsuProp next
                       -- ^ Require a simple mentsu property. Requiring this
                       -- first could allow for simple optimization by
                       -- removing some repeated checking.
+
                       | YakuMentsu' MentsuProp (Tile -> next)
                       -- ^ Require a mentsu property, but allow upcoming
                       -- properties depend on the matched tile.
+
                       | YakuStateful (YakuInfo -> next)
                       -- ^ Depend on game state.
+
                       | YakuHandConcealedDegrades next
                       | YakuHandConcealed next
                       | YakuHandOpen next

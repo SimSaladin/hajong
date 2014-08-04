@@ -15,7 +15,6 @@ import           Control.Lens
 import           Control.Monad.Reader       (runReaderT, ReaderT, MonadReader)
 import           Control.Monad.Trans.Either
 import           Data.Set                   (mapMonotonic)
-import           System.Console.Haskeline   hiding (throwIO)
 import qualified Network.WebSockets         as WS
 
 ----------------------------------------------------
@@ -73,7 +72,6 @@ serverApp :: TVar ServerState -> WS.ServerApp
 serverApp stateVar pending = do
     conn  <- WS.acceptRequest pending
     event <- WS.receiveData conn
-    dumpState =<< readTVarIO stateVar
 
     case event of
         JoinServer nick -> do
@@ -129,12 +127,12 @@ talkClient = do
     forever $ do
         event <- receive client
         case event of
+            JoinServer _      -> unicast client (Invalid "Already joined (and nick change not implemented)")
             PartServer reason -> viewSS' >>= broadcast (Message "" $ "User " <> getNick client <> " has left [" <> reason <> "]") >> liftIO (throwIO PartedException)
             Message _ msg     -> viewSS' >>= broadcast (Message (getNick client) msg)
             CreateGame name   -> createGame name
             JoinGame n _      -> joinGame n
-            GameAction a      -> handleGameAction a
-            JoinServer _      -> unicast client (Invalid "Already joined (and nick change not implemented)")
+            InGameAction a    -> handleGameAction a
             _ -> do
                 unicast client (Invalid "Event not allowed or not implemented.")
                 liftIO $ print $ "[ignored event] " <> show event
@@ -152,8 +150,7 @@ broadcast event state = liftIO $ forM_ (state ^. serverLounge) (`unicast` event)
 buildLounge :: ServerState -> Lounge
 buildLounge = Lounge
     <$> view (serverLounge . to (mapMonotonic getNick)) -- Idle
-    <*> pure mempty -- TODO
---     <*> over each ((,) <$> _gameName <*> setFromList . (^..each._2._Just.to getNick) . _gamePlayers) . view serverGames
+    <*> over each (const "") . view serverGames
 
 -- * Game workers
 
@@ -178,22 +175,22 @@ createGame name = do
 
     case res of
         Just (state, counter) -> do
-            let Just gs = newGameState name & gsAddPlayer client -- "Just" because starts with empty players
+            let Just gs = newEmptyGS name & addClient client -- "Just" because starts with empty players
             liftIO $ startWorker wvar gs
-            broadcast (NewGame (counter, name, singletonSet $ getNick client)) state
+            broadcast (GameCreated (counter, name, singletonSet $ getNick client)) state
             unicast client $ JoinGame counter $ getNick client
         Nothing -> unicast client $ Invalid "Already in a game or waiting for one, cannot create new one"
 
 -- | Pass the TA to relevant worker
-handleGameAction :: TurnAction -> Server ()
+handleGameAction :: GameAction -> Server ()
 handleGameAction ta = do
     client   <- viewClient
     received <- withSSAtomic $ \var -> do
         state <- readTVar var
-        let Just n = state ^? gameId (getNick client)
-        case state ^. gameAt n of
-            Just wiv -> tryPutTMVar wiv $ WorkerClientAction client ta
-            Nothing -> return False
+        case state ^? gameId (getNick client) of
+            Just n | Just wiv <- state ^. gameAt n
+                -> tryPutTMVar wiv $ WorkerClientAction client ta
+            _   -> return False
 
     -- TODO receive or not notify
     return ()
@@ -219,15 +216,3 @@ joinGame n = do
                 broadcast (JoinGame n $ getNick client) ss'
 
         return () -- TODO use wentIn?
-
--- * Dump
-
-dumpState :: ServerState -> IO ()
-dumpState state = print
-    ( state ^. serverCounter
-    , state ^. serverLounge & mapMonotonic getNick
---    , state ^. serverGames & over (each._3) (mapMonotonic getNick)
-    )
-
-viewTuple :: (Applicative f, MonadReader s f) => Getting a1 s a1 -> Getting a s a -> f (a1, a)
-viewTuple l m = (,) <$> view l <*> view m

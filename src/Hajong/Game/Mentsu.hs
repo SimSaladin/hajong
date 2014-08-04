@@ -9,11 +9,48 @@
 ------------------------------------------------------------------------------
 module Hajong.Game.Mentsu where
 
-import           ClassyPrelude
 import qualified Data.List as L
 
-import Hajong.Game.Types
 import Hajong.Game.Tiles
+
+data Mentsu = Shuntsu { mentsuPai :: [Tile], mentsuFrom :: Maybe Shout } -- straight
+            | Koutsu  { mentsuPai :: [Tile], mentsuFrom :: Maybe Shout } -- triplet
+            | Kantsu  { mentsuPai :: [Tile], mentsuFrom :: Maybe Shout } -- quadret
+            | Jantou  { mentsuPai :: [Tile], mentsuFrom :: Maybe Shout } -- pair
+            deriving (Show, Read, Eq, Ord) -- TODO Why the ord instance?
+
+data Shout = Pon { shoutedFrom :: Player, shoutedTile :: Tile }
+           | Kan { shoutedFrom :: Player, shoutedTile :: Tile }
+           | Chi { shoutedFrom :: Player, shoutedTile :: Tile, shoutedTo :: [Tile] }
+           | Ron { shoutedFrom :: Player, shoutedTile :: Tile, shoutedTo :: [Tile] }
+           deriving (Show, Read, Eq, Ord) -- TODO Check the ord instance
+
+-- * Build
+
+koutsu :: [Tile] -> Mentsu
+koutsu = flip Koutsu Nothing
+
+kantsu :: [Tile] -> Mentsu
+kantsu = flip Kantsu Nothing
+
+jantou :: [Tile] -> Mentsu
+jantou = flip Jantou Nothing
+
+shuntsu :: [Tile] -> Mentsu
+shuntsu = flip Shuntsu Nothing
+
+fromShout :: Shout -> Mentsu
+fromShout shout
+    | Pon{} <- shout           = Koutsu (replicate 3 $ shoutedTile shout) (Just shout)
+    | Kan{} <- shout           = Kantsu (replicate 4 $ shoutedTile shout) (Just shout)
+    | Chi{} <- shout           = Shuntsu (shoutedTile shout : shoutedTo shout) (Just shout)
+    | Ron{} <- shout
+    , [_]   <- shoutedTo shout = Jantou (replicate 2 $ shoutedTile shout) (Just shout)
+    | [x,y] <- shoutedTo shout
+    , x == y                  = Kantsu (replicate 3 $ shoutedTile shout) (Just shout)
+    | otherwise               = Shuntsu (shoutedTile shout : shoutedTo shout) (Just shout)
+
+-- * Check
 
 type Mentsus = [Mentsu]
 type CompleteHand = [Mentsu]

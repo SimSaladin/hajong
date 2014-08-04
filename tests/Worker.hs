@@ -39,7 +39,7 @@ worker = do
 newTestWorker :: IO (TMVar WorkerInput)
 newTestWorker = do
     wiv <- newEmptyTMVarIO
-    startWorker wiv (newGameState "test-state")
+    newEmptyGS wiv (newGameState "test-state")
     return wiv
 
 clientsCombineOutput :: [(Client, Event -> IO (), IO Event)] -> IO (TChan (Nick, Event))
