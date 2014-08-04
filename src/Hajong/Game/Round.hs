@@ -144,9 +144,9 @@ nextRound rs = do
 -- * Round logic (RoundM actions)
 
 startRound :: RoundM m => m ()
-startRound = view riichiPlayers
-    >>= mapM (getPlayerState . view _1)
-    >>= tell . map RoundPrivateStarts
+startRound = do
+    view riichiPlayers >>= mapM (getPlayerState . view _1) >>= tell . map RoundPrivateStarts
+    view riichiTurn >>= tell . return . RoundTurnBegins
 
 -- | Attempt to run a @TurnAction@ as the given user. Fails if it is not
 -- his turn.
@@ -195,7 +195,7 @@ advanceAuto = TurnTileDiscard False . handAutoDiscard . fromJust <$>
     (view (riichiPublic.riichiTurn) >>= view . (riichiSecret . ) . handOf)
 
 nextPlayer :: Player -> Player
-nextPlayer = toEnum . (`mod` 4) . fromEnum
+nextPlayer = toEnum . (`mod` 4) . (+ 1) . fromEnum
 
 handOf :: Player -> Lens RiichiSecret RiichiSecret (Maybe Hand) (Maybe Hand)
 handOf player = riichiHands.at player
@@ -217,7 +217,6 @@ applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
 applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs $ GamePlayer
     (error "Not accessed")
     rp mempty mempty $ Hand [] Nothing Nothing $ HandPublic [] [(error "N/A", Nothing)] False Nothing
-
 
 applyGameEvents :: [GameEvent] -> GamePlayer -> GamePlayer
 applyGameEvents evs gp = foldr applyGameEvent gp evs

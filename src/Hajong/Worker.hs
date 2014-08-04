@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 ------------------------------------------------------------------------------
 -- | 
 -- Module         : Hajong.Worker
@@ -27,10 +28,7 @@ import qualified Data.List as L
 ----------------------------------------------
 import Hajong.Connections
 import Hajong.Game
-
--- Solve turn player instead
--- let Just turnPlayer = gs ^? gameRound._Just.riichiPublic.riichiTurn
--- let (_,mc',_):_     = gs ^. gamePlayers & filter (^._1.to (== turnPlayer))
+default (Text)
 
 newtype Worker a = Worker { runWorker :: ReaderT WorkerState IO a }
                    deriving (Functor, Applicative, Monad, MonadIO, MonadReader WorkerState)
@@ -48,10 +46,14 @@ clientToPlayer c gs = pl
     where (Just (pl,_)) = gs^.gamePlayers & ifind (const (== Just c))
 
 -- | Start the game worker thread
-startWorker :: TMVar WorkerInput -> GameState Client -> IO ()
+startWorker :: TMVar WorkerInput -> GameState Client -> IO ThreadId
 startWorker inVar gs = do
+    print "Worker started"
     gsv <- newTVarIO gs
-    void $ forkIO $ runReaderT (runWorker waitingPlayers) (gsv, inVar)
+    forkIO $ do
+        runReaderT (runWorker waitingPlayers) (gsv, inVar)
+        print "Worker has been stopped"
+        -- TODO inform main thread, etc.
 
 -- * Primitive
 
@@ -93,8 +95,8 @@ workerProcessTurnAction ta c = do
         Right (_, ma) -> return $ Just $ do
             ma
             case ta of
-                TurnTileDraw _ _    -> waitForAction c
-                TurnAnkan _         -> waitForAction c
+                TurnTileDraw _ _    -> workerWaitTurnAction
+                TurnAnkan _         -> workerWaitTurnAction
                 TurnTileDiscard _ _ -> waitForShouts $
                     gs^?!gameRound._Just^.riichiSecret.riichiWaitShoutsFrom
 
@@ -104,10 +106,8 @@ workerRoundM ma = liftM (fmap tores . runRoundM ma) $ atomically . readTVar =<< 
 
 -- | The game state has changed.
 updateState :: RiichiSecret -> [GameEvent] -> Worker ()
-updateState secret events = do
-    gsv <- view _1
-    atomically $ modifyTVar gsv $ gameRound._Just
-        %~ ((riichiSecret .~ secret) . (riichiPublic %~ applyGameEvents' events))
+updateState secret events = rmodify _1 $
+    gameRound._Just %~ ((riichiSecret .~ secret) . (riichiPublic %~ applyGameEvents' events))
 
 -- | Hide sensitive info per player
 sendGameEvents :: [GameEvent] -> Worker ()
@@ -148,6 +148,7 @@ workerAddPlayer client callback = do
 -- | Begin the game including the first round when all players have joined.
 waitingPlayers :: WCont
 waitingPlayers = do
+    print "Waiting players to join"
     gsv <- view _1
     may_begin <- maybeNextRound <$> liftIO (readTVarIO gsv)
     case may_begin of
@@ -160,30 +161,44 @@ waitingPlayers = do
 
 roundBegins :: GameState Client -> WCont
 roundBegins gs = do
+    print "Round begins"
     _ <- rswap _1 gs
     workerRoundM startRound >>= either print snd
-    workerTurnBegin
+    workerWaitTurnAction
 
 -- | A new turn begins.
-workerTurnBegin :: WCont
-workerTurnBegin = join workerTakeTurnAction
+--
+-- | Expect an action in the queue, or timeout and automatically end the
+-- turn with a default action.
+workerWaitTurnAction :: WCont
+workerWaitTurnAction = do
+
+    join $ workerRace 10000000 workerTakeTurnAction $ return $ do
+
+        gs <- rview _1
+        let Just tp = gs ^? gameRound._Just.riichiPublic.riichiTurn
+            Just c  = gs ^? gamePlayers.at tp._Just._Just
+            Just a  = gs ^? gameRound._Just.to advanceAuto
+
+        join $ fromJust <$> workerProcessTurnAction a c
 
 -- | Advance turn to the next player.
 advanceTurn :: WCont
 advanceTurn = do
-    liftIO $ putStrLn "Advancing after discard"
+    print "Advancing turn after a discard"
     workerRoundM advanceAfterDiscard >>= either print go
-    where go (r, ma) = ma >> maybe workerTurnBegin roundEnds r
+    where go (r, ma) = ma >> maybe (print "New turn begins" >> workerWaitTurnAction) roundEnds r
 
 advanceWithShout :: Player -> Shout -> WCont
 advanceWithShout p sh = do
-    liftIO $ putStrLn "Advancing with a shout"
+    print "Advancing with a shout"
     workerRoundM (runShout sh p) >>= either print (go . snd)
-    where go ma = ma >> workerTurnBegin
+    where go ma = ma >> workerWaitTurnAction
 
 -- | The round ended.
 roundEnds :: RoundResults -> WCont
 roundEnds res = do
+    print "Round ended:"
     print res
     maybe (return ()) (liftIO >=> roundBegins) . maybeNextRound =<< rview _1
 
@@ -197,6 +212,7 @@ roundEnds res = do
 --      limit reached: advance to next turn.
 waitForShouts :: [Player] -> WCont
 waitForShouts players = do
+    print "Waiting for shouts after the discard"
     gs  <- rview _1
     shv <- liftIO newEmptyTMVarIO
     liftIO $ putStrLn "Now waiting for shouts."
@@ -207,7 +223,7 @@ waitForShouts players = do
             passOn c = waitAll (L.delete (clientToPlayer c gs) xs)
             shoutHandler c sh
                 | shoutedFrom sh == x = return $ advanceWithShout (clientToPlayer c gs) sh
-                                                 -- ^ Highest priority
+                                                 -- Highest priority ^
                 | otherwise           = do
                     atomically (putTMVar shv (advanceWithShout (clientToPlayer c gs) sh))
                     passOn c
@@ -215,10 +231,3 @@ waitForShouts players = do
     join $ workerRace 10000000
         (waitAll players)
         (return $ atomically (tryTakeTMVar shv) >>= fromMaybe advanceTurn)
-
--- | Expect an action in the queue, or timeout and automatically end the
--- turn with a default action.
-waitForAction :: Client -> WCont
-waitForAction c = join $ workerRace 10000000 workerTakeTurnAction $ return $ do
-    auto <- advanceAuto . fromJust . _gameRound <$> rview _1
-    join $ fromJust <$> workerProcessTurnAction auto c -- TurnAuto never fails

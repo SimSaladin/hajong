@@ -143,8 +143,9 @@ yakuChinitsu = do
 
 -- * Special
 
-yakuChiitoitsu :: Yaku ()
-yakuChiitoitsu = undefined -- TODO how does this implement?
+yakuChiitoitsu :: Yaku Int
+yakuChiitoitsu =
+    undefined -- TODO how does this implement?
 
 -- * Unrelated to mentsu
 
@@ -171,3 +172,4 @@ yakuChankan = undefined
 
 yakuNagashiMangan :: Yaku ()
 yakuNagashiMangan = undefined
+

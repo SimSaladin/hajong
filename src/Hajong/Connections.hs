@@ -19,7 +19,7 @@ type Nick = Text
 
 data Lounge = Lounge
             { _loungeNicksIdle :: Set Nick
-            , _loungeGames :: Map Int Text -- TODO (Text, Set Nick)
+            , _loungeGames :: Map Int (Text, Set Nick)
             } deriving (Show, Read)
 
 makeLenses ''Lounge

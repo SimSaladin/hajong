@@ -140,18 +140,20 @@ loungeInputHandler ch = case ch of
     _   -> unknownCommand ch
 
 gameInputHandler :: Char -> ClientM ()
-gameInputHandler ch = do
-    tp <- undefined
-    dt <- undefined
-    case ch of
-        'p' -> emit $ Pon tp dt
-        'c' -> emit $ Chi tp dt [] -- TODO get the tiles
-        'k' -> emit $ Kan tp dt
-        'r' -> emit $ Ron tp dt [] -- TODO 
-        'l' -> view clientGetChar >>= liftIO >>= loungeInputHandler
-        _  | Just my_dt <- elemIndex (Data.Char.toLower ch) discardKeys
-           , riichi     <- Data.Char.isUpper ch -> discardTile my_dt riichi
-           | otherwise                         -> unknownCommand ch
+gameInputHandler ch
+    | 'l' <- ch  = oneLoungeCmd
+    | Just my_dt <- elemIndex (Data.Char.toLower ch) discardKeys
+                = discardTile my_dt (Data.Char.isUpper ch )
+    | otherwise = lastDiscard >>= maybe noLastDiscard handleShouts
+    where
+        oneLoungeCmd  = view clientGetChar >>= liftIO >>= loungeInputHandler
+        noLastDiscard = unknownCommand ch
+        handleShouts (tp, (dt,_)) = case ch of
+            'p' -> emit $ Pon tp dt
+            'c' -> emit $ Chi tp dt [] -- TODO get the tiles
+            'k' -> emit $ Kan tp dt
+            'r' -> emit $ Ron tp dt [] -- TODO 
+            _   -> unknownCommand ch
 
 unknownCommand :: Char -> ClientM ()
 unknownCommand ch = out $ "Command `" <> pack [ch] <> "` not recognized"
@@ -160,7 +162,7 @@ unknownCommand ch = out $ "Command `" <> pack [ch] <> "` not recognized"
 
 eventHandler :: Event -> ClientM ()
 eventHandler ev = case ev of
-    InGamePrivateEvent ev -> gameEventHandler ev
+    InGamePrivateEvent ge -> gameEventHandler ge
     InGameEvents evs      -> mapM_ gameEventHandler evs
     Message sayer msg     -> out $ "<" <> sayer <> "> " <> msg
     Invalid err           -> out $ "[error] " <> err
@@ -212,10 +214,10 @@ gameEventHandler ev = do
                 printGameState
 
         RoundPrivateChange _p _h -> out "My hand changed"
-        RoundTurnBegins _p       -> out "It's someone's turn!"
-        RoundTurnAction p ta     -> turnActionHandler p ta
+        RoundTurnBegins p        -> beginTurn p
+        RoundTurnAction p ta     -> turnActionHandler p ta >> printGameState
         RoundTurnShouted p shout -> out $ pshow p <> " shouts " <> pshow shout
-        RoundHandChanged _p _hp  -> out "A public hand changed"
+        RoundHandChanged _p _hp  -> printGameState
         RoundEnded res           -> case res of
             RoundTsumo{} -> out "Round was won by tsumo"
             RoundRon{}   -> out "Round was won by a ron"
@@ -227,6 +229,18 @@ turnActionHandler _p ta = case ta of
     TurnTileDraw dead mt        -> out $ "Draw " <> maybe "" ((<> " ") . pshow) mt <> if dead then "from wanpai." else ""
     TurnAnkan tile              -> out $ "Called " <> pshow tile <> " ankan."
 
+-- ** Sub events
+
+beginTurn :: Player -> ClientM ()
+beginTurn p = do
+    Just game <- rview clientGame
+    if _playerPlayer game == p
+        then beginMyTurn
+        else out $ "It's turn of " <> pshow p
+
+beginMyTurn :: ClientM ()
+beginMyTurn = emit $ TurnTileDraw False Nothing
+
 -- * Auxilary functions
 
 isMyNick :: Nick -> ClientM Bool
@@ -237,6 +251,15 @@ discardOptions = do
     game <- rview clientGame <&> (^?! _Just)
     let tiles = game^.playerMyHand.handConcealed ++ maybeToList (game^.playerMyHand.handPick)
     return $ map (,True) tiles -- TODO check if can riichi
+
+lastDiscard :: ClientM (Maybe (Player, (Tile, UTCTime)))
+lastDiscard = (>>= riichiLastDiscard) `liftM` rview clientGame
+
+riichiLastDiscard :: GamePlayer -> Maybe (Player, (Tile, UTCTime))
+riichiLastDiscard = do
+    pl <- view $ playerPublic.riichiTurn
+    mdt <- preview $ playerPublicHands.at pl._Just.handTurnDiscard
+    return $ (pl,) <$> join mdt
 
 -- * Actions
 
