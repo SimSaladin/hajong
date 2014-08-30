@@ -17,6 +17,8 @@ import qualified Network.WebSockets         as WS
 
 import Hajong.Game
 
+-- * Functions
+
 {-# DEPRECATED maybeToEitherT "use ? instead" #-}
 
 -- | convert maybe to EitherT
