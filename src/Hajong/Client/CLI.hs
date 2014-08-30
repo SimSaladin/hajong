@@ -215,9 +215,9 @@ gameEventHandler ev = do
 
         RoundPrivateChange _p _h -> out "My hand changed"
         RoundTurnBegins p        -> beginTurn p
-        RoundTurnAction p ta     -> turnActionHandler p ta >> printGameState
+        RoundTurnAction p ta     -> turnActionHandler p ta
         RoundTurnShouted p shout -> out $ pshow p <> " shouts " <> pshow shout
-        RoundHandChanged _p _hp  -> printGameState
+        RoundHandChanged p hp    -> out "Someones hand changed"
         RoundEnded res           -> case res of
             RoundTsumo{} -> out "Round was won by tsumo"
             RoundRon{}   -> out "Round was won by a ron"
@@ -233,9 +233,10 @@ turnActionHandler _p ta = case ta of
 
 beginTurn :: Player -> ClientM ()
 beginTurn p = do
+    out "--------------------------------------------"
     Just game <- rview clientGame
     if _playerPlayer game == p
-        then beginMyTurn
+        then out "It's your turn!" >> beginMyTurn
         else out $ "It's turn of " <> pshow p
 
 beginMyTurn :: ClientM ()

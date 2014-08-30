@@ -7,6 +7,8 @@
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
+--
+-- Data types of information exchanged between server and clients.
 ------------------------------------------------------------------------------
 module Hajong.Connections where
 
@@ -14,6 +16,17 @@ import           Control.Monad.Trans.Either
 import qualified Network.WebSockets         as WS
 
 import Hajong.Game
+
+{-# DEPRECATED maybeToEitherT "use ? instead" #-}
+
+-- | convert maybe to EitherT
+maybeToEitherT :: Monad m => e -> Maybe a -> EitherT e m a
+maybeToEitherT def = maybe (left def) return
+
+(?) :: Monad m => Maybe a -> e -> EitherT e m a
+(?) = flip maybeToEitherT
+
+-- * Events 'n stuff
 
 type Nick = Text
 
@@ -51,8 +64,11 @@ instance Eq Client where a == b = getNick a == getNick b
 instance Ord Client where a <= b = getNick a <= getNick b
 instance Show Client where show = unpack . getNick
 
+-- * Sending to client(s)
+
 multicast :: MonadIO m => GameState Client -> Event -> m ()
 multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each._Just)
+    -- TODO Just move this to server already
 
 unicastError :: MonadIO m => Client -> Text -> m ()
 unicastError c = unicast c . Invalid
@@ -61,15 +77,12 @@ clientEither :: MonadIO m => Client -> Either Text a -> (a -> m ()) -> m ()
 clientEither client (Left err) _ = unicastError client err
 clientEither _ (Right a) f  = f a
 
--- * Websocket clients
+-- * Web socket specific
 
 websocketClient :: Nick -> WS.Connection -> Client
 websocketClient nick conn = Client nick (liftIO . WS.sendTextData conn) (liftIO $ WS.receiveData conn)
 
 instance WS.WebSocketsData Event where
+    -- XXX: This should probably be json instead in the future.
     toLazyByteString   = WS.toLazyByteString . tshow
     fromLazyByteString = fromMaybe (Invalid "Malformed event") .  readMay . asText . WS.fromLazyByteString
-
--- | convert maybe to EitherT
-maybeToEitherT :: Monad m => e -> Maybe a -> EitherT e m a
-maybeToEitherT def = maybe (left def) return

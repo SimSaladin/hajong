@@ -58,18 +58,22 @@ data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnAnkan Tile
                 deriving (Show, Read)
 
-data GameEvent = RoundTurnBegins Player
+data GameEvent = RoundPrivateStarts GamePlayer -- ^ Only at the start of a round
+               | RoundPrivateWaitForShout Int -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
+               | RoundPrivateChange Player Hand
+               | RoundTurnBegins Player
                | RoundTurnAction Player TurnAction
                | RoundTurnShouted Player Shout -- ^ Who, Shout
                | RoundHandChanged Player HandPublic
+                        -- TODO this is a bit too vague to be exactly
+                        -- useful for clients.. perhaps could identify
+                        -- between draws, kans, shouts.
                | RoundEnded RoundResults
-               | RoundPrivateChange Player Hand
-               | RoundPrivateStarts GamePlayer
                deriving (Show, Read)
 
 data GameAction = GameTurn TurnAction
                 | GameShout Shout
-                | GameDontCare -- ^ About discarded tile
+                | GameDontCare -- ^ About shouting last discarded tile
                 deriving (Show, Read)
 
 makeLenses ''RiichiSecret
@@ -242,7 +246,7 @@ applyTurnAction p ta = case ta of
     TurnTileDraw _ _  -> playerPublic.riichiWallTilesLeft -~ 1
     TurnAnkan tile    -> over (playerPublicHands.at p._Just.handOpen) (|> kantsu (replicate 4 tile))
 
--- * Internal to module
+-- * Operations
 
 -- | Set the hand of player
 updateHand :: RoundM m => Player -> Hand -> m ()
@@ -259,14 +263,18 @@ publishTurnAction player ra = tell $ case ra of
     TurnTileDraw b _ -> [ RoundTurnAction player $ TurnTileDraw b Nothing ]
     _                -> [ RoundTurnAction player ra ]
 
-roundEndedDraw :: RoundM m => m RoundResults
-roundEndedDraw = return $ RoundDraw [] [] -- TODO tenpai players
+-- ** Get results
 
--- | Set riichiWaitShoutsFrom to players who could shout the discard.
-endTurn :: RoundM m => Tile -> m ()
-endTurn dt = do
-    hands <- Map.filter (not . null . shoutsOn dt) <$> use riichiHands
-    riichiWaitShoutsFrom .= Map.keys hands
+roundEndedDraw :: RoundM m => m RoundResults
+roundEndedDraw =
+    roundEndsWith $ RoundDraw [] [] -- TODO tenpai players
+
+roundEndsWith :: RoundM m => RoundResults -> m RoundResults
+roundEndsWith results = do
+    tell [RoundEnded results]
+    return results
+
+-- ** Player in turn
 
 drawWall :: RoundM m => Hand -> m Hand
 drawWall hand = do
@@ -285,3 +293,9 @@ drawDeadWall hand = preuse (riichiWall._Snoc)
             Just (dt, wanpai) <- preuse (riichiWanpai._Cons)
             riichiWanpai .= wanpai
             return $ handPick .~ Just dt $ hand
+
+-- | Set riichiWaitShoutsFrom to players who could shout the discard.
+endTurn :: RoundM m => Tile -> m ()
+endTurn dt = do
+    hands <- Map.filter (not . null . shoutsOn dt) <$> use riichiHands
+    riichiWaitShoutsFrom .= Map.keys hands

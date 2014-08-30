@@ -39,6 +39,9 @@ library
                      , classy-prelude          >=0.8
                      , text                    >=0.1
                      , websockets              >=0.8
+                     , monad-logger            >=0.3
+                     , fast-logger
+                     , data-default
                      , stm 
                      , mtl
                      , random
