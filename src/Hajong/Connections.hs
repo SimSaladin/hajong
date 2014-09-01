@@ -12,9 +12,11 @@
 ------------------------------------------------------------------------------
 module Hajong.Connections where
 
+import           Prelude hiding ((.=))
+import qualified Data.Map as M
 import           Control.Monad.Trans.Either
 import qualified Network.WebSockets         as WS
-
+import           Data.Aeson
 import Hajong.Game
 
 -- * Functions
@@ -54,6 +56,40 @@ data Event = JoinServer Text -- ^ Nick
            | InGameAction GameAction
            deriving (Show, Read)
 
+instance ToJSON Event where
+    toJSON (JoinServer nick)     = atType "join" ["nick" .= nick]
+    toJSON (PartServer nick)     = atType "part" ["nick" .= nick]
+    toJSON (Message sender cnt)  = atType "msg" ["from" .= sender, "content" .= cnt]
+    toJSON (Invalid msg)         = atType "invalid" ["content" .= msg]
+    toJSON (LoungeInfo lounge)   = atType "lounge" (loungeJSON lounge)
+    toJSON (GameCreated (i,t,n)) = atType "game-created" ["ident" .= i, "topic" .= t, "players" .= n]
+    toJSON (JoinGame nth nick)   = atType "gaem-join" ["nick" .= nick, "ident" .= nth]
+
+loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
+
+gamePairs :: (Int, (Text, Set Nick)) -> Value
+gamePairs (i,(t,n)) = object ["ident" .= i, "topic" .= t, "players" .= n]
+
+atType :: Text -> [(Text, Value)] -> Value
+atType t xs = object ("type" .= t : xs)
+
+instance FromJSON Event where
+    parseJSON (Object o) = do
+        t <- o .: "type"
+        case t :: Text of
+            "join"         -> JoinServer         <$> o .: "nick"
+            "part"         -> PartServer         <$> o .: "nick"
+            "msg"          -> Message            <$> o .: "from" <*> o .: "content"
+            "game-created" -> (\x y z -> GameCreated (x,y,z)) <$> o .: "ident" <*> o .: "topic" <*> o .: "players"
+            "game-join"    -> JoinGame           <$> o .: "ident" <*> o .: "nick"
+            "game-secret"  -> InGamePrivateEvent <$> undefined
+            "game-public"  -> InGameEvents       <$> undefined
+            "game-action"  -> InGameAction       <$> undefined
+            "game-create"  -> CreateGame         <$> o .: "topic"
+            "lounge"       -> LoungeInfo         <$> undefined
+            _              -> pure (Invalid ("Unknown type: " <> t))
+    parseJSON _ = pure (Invalid "Top-level object expected")
+
 -- * Clients
 
 data Client = Client
@@ -82,7 +118,9 @@ clientEither _ (Right a) f  = f a
 -- * Web socket specific
 
 websocketClient :: Nick -> WS.Connection -> Client
-websocketClient nick conn = Client nick (liftIO . WS.sendTextData conn) (liftIO $ WS.receiveData conn)
+websocketClient nick conn = Client nick
+    (liftIO . WS.sendTextData conn . encode)
+    (liftIO $ fromMaybe (Invalid "No parse") . decode <$> WS.receiveData conn)
 
 instance WS.WebSocketsData Event where
     -- XXX: This should probably be json instead in the future.

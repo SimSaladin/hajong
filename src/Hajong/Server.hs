@@ -15,6 +15,7 @@ import           Control.Monad.Logger
 import           Data.Set                   (mapMonotonic)
 import           Data.Default
 import qualified Network.WebSockets         as WS
+import qualified Data.Aeson                 as A
 
 ----------------------------------------------------
 import Hajong.Connections
@@ -92,13 +93,13 @@ serverApp ss_v pending = do
     conn  <- WS.acceptRequest pending
     event <- WS.receiveData conn
 
-    case event of
-        JoinServer nick -> do
+    case A.decode event of
+        Just (JoinServer nick) -> do
             putStrLn $ "New client " <> nick
             clientWorkerMain ss_v (websocketClient nick conn)
 
         _ -> do
-            putStrLn $ pack $ "Received non-event first: " <> show event
+            putStrLn $ pack $ "Received non-event or malformed json first: " <> show event
             unicast (websocketClient "" conn)
                     (Invalid "No JoinServer received. Please identify yourself.")
 
