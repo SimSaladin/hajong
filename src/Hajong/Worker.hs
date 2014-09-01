@@ -54,6 +54,7 @@ data WorkerState = WorkerState
                  }
 
 data WorkerInput = WorkerAction (Worker ())
+                 | WorkerClientParts Client
                  | WorkerClientAction Client GameAction
 
 type WCont = Worker ()

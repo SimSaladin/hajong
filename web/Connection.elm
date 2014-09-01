@@ -24,12 +24,13 @@ data Event = JoinServer { nick : String } -- ^ Nick
            | Invalid { content : String }
            | LoungeInfo { lounge : LoungeData }
            | GameCreated { game : GameInfo }
-           | JoinGame Int String -- ^ Game lounge
+           | JoinGame { ident : Int, nick : String }
            | InGamePrivateEvent GameEvent
            | InGameEvents [GameEvent]
             -- One way only?
            | CreateGame String
            | InGameAction GameAction
+           | Noop
 
 -- Send
 
@@ -39,23 +40,44 @@ joinServer nick = JoinServer {nick = nick}
 createGame : String -> Event
 createGame topic = CreateGame topic
 
+joinGame : Int -> Event
+joinGame n = JoinGame { nick = "", ident = n }
+
 -- Receive -------------------------------------------------------------------
 
-processEvent : Event -> {a | lounge : LoungeData } -> {a | lounge : LoungeData }
+type KindaState a = {a | gameWait : Maybe GameInfo, mynick : String, lounge : LoungeData }
+
+processEvent : Event -> KindaState a -> KindaState a
 processEvent event gameState = case event of
         JoinServer {nick}   -> { gameState | lounge <- addIdle nick gameState.lounge }
         PartServer {nick}   -> { gameState | lounge <- deleteNick nick gameState.lounge }
         LoungeInfo {lounge} -> { gameState | lounge <- lounge }
         GameCreated {game}  -> { gameState | lounge <- addGame game gameState.lounge }
+        JoinGame {nick, ident} ->
+            { gameState | lounge   <- addJoinedGame ident nick gameState.lounge
+                        , gameWait <-
+                            if gameState.mynick == nick
+                                then Just . head <| filter (\g -> g.ident == ident) gameState.lounge.games
+                                else gameState.gameWait
+            }
         _ -> gameState
 
 -- Helpers
 
-addIdle n l    = { l | idle  <- Set.insert n l.idle }
-deleteNick n l = { l | idle  <- Set.remove n l.idle }
 addGame g l    = { l | games <- g :: l.games }
 
--- JSON conversion
+addIdle n l    = { l | idle  <- Set.insert n l.idle }
+
+addJoinedGame i n l =
+    { l | games <- map (\g -> if g.ident == i then { g | players <- Set.insert n g.players } else g) l.games
+        , idle  <- Set.remove n l.idle
+    }
+
+deleteNick n l = { l | idle  <- Set.remove n l.idle
+                     , games <- map (\g -> { g | players <- Set.remove n g.players }) l.games
+                 }
+
+-- From JSON
 
 fromJson : String -> Event
 fromJson str = maybe (Invalid { content = str }) fromJson' <| fromString str
@@ -66,26 +88,31 @@ fromJust (Just x) = x
 fromJson' : Value -> Event
 fromJson' (Object o) = case "type" .: o |> justString of
 
-    "join"    -> JoinServer <| hasNick o {}
-    "part"    -> PartServer <| hasNick o {}
-    "msg"     -> Message <| hasContent o <| hasFrom o {}
-    "invalid" -> Invalid <| hasContent o {}
-
-    "lounge"  -> LoungeInfo <| hasLounge o {}
-
+    "join"         -> JoinServer  <| hasNick o {}
+    "part"         -> PartServer  <| hasNick o {}
+    "msg"          -> Message     <| hasContent o <| hasFrom o {}
+    "invalid"      -> Invalid     <| hasContent o {}
+    "lounge"       -> LoungeInfo  <| hasLounge o {}
     "game-created" -> GameCreated <| hasGame o {}
-    "game-join" -> JoinGame (justInt <| Dict.getOrFail "ident" o)
-                            (justString <| Dict.getOrFail "nick" o)
-    "game-secret" -> InGamePrivateEvent <| parseGameEvent o
-    "game-event"  -> InGameEvents <| (\(Array xs) -> map parseGameEvent xs)
-                                  <| Dict.getOrFail "events" o
+    "game-join"    -> JoinGame    <| hasNick o { ident = justInt <| "ident" .: o }
+    "game-secret"  -> InGamePrivateEvent <| parseGameEvent o
+    "game-event"   -> InGameEvents <| (\(Array xs) -> map parseGameEvent xs)
+                                   <| Dict.getOrFail "events" o
 
     t -> Invalid { content = "Received unexpected " ++ t }
 
+-- * To JSON
+
 toJson : Event -> Value
 toJson ev = case ev of
-    JoinServer {nick} -> Object (Dict.fromList [("type", Json.String "join"), ("nick", Json.String nick)])
-    CreateGame g -> Object (Dict.fromList [("type", Json.String "game-create"), ("topic", Json.String g)])
+    JoinServer {nick} -> atType "join" [("nick", Json.String nick)]
+    PartServer {nick} -> atType "part" [("nick", Json.String nick)]
+    Message{from,content} -> atType "msg" [("from", Json.String from), ("content", Json.String content)]
+    CreateGame g -> atType "game-create" [("topic", Json.String g)]
+    JoinGame {ident,nick} -> atType "game-join" [("nick", Json.String nick), ("ident", Json.Number <| toFloat ident)]
+
+atType : String -> [(String, Value)] -> Value
+atType t xs = Object (Dict.fromList <| ("type", Json.String t) :: xs)
 
 -- Parsers
 

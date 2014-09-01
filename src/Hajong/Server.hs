@@ -135,15 +135,21 @@ connects = do
 disconnects :: ClientWorker ()
 disconnects = do
     c <- view client
-    liftIO $ putStrLn $ "Client disconnected (" <> getNick c <> ")"
-    ss <- withAtomic $ \var -> do
+    logInfoN $ "Client disconnected (" <> getNick c <> ")"
+
+    withAtomic $ \var -> do
+
+        -- inform worker
+        ss <- readTVar var
+        case (ss ^? gameId (getNick c)) >>= \gid -> ss ^. gameAt gid of
+            Just (wi_v,_,_) -> putTMVar wi_v (WorkerClientParts c)
+            Nothing         -> return ()
+
         modifyTVar var
             $ over serverConnections     (deleteMap $ getNick c)
             . over serverLounge          (deleteSet c)
-            -- TODO Inform the worker
-            -- . over (serverGames.each.gamePlayers.each._2)
-            -- (\x -> if x == Just c then Nothing else x)
-        readTVar var
+            . over (serverGames.each._3) (deleteSet c)
+
     broadcast $ PartServer (getNick c)
 
 talkClient :: ClientWorker ()
@@ -196,6 +202,8 @@ joinGame n = do
     ss   <- rview ssVar
 
     let inLounge = ss^.serverLounge.to (member c)
+
+    logDebugN $ getNick c <> " joining game " <> tshow n
 
     case ss^.gameAt n of
         _ | not inLounge -> unicast c $ Invalid "Already in a game. You cannot join multiple games"

@@ -63,7 +63,7 @@ instance ToJSON Event where
     toJSON (Invalid msg)         = atType "invalid" ["content" .= msg]
     toJSON (LoungeInfo lounge)   = atType "lounge" (loungeJSON lounge)
     toJSON (GameCreated (i,t,n)) = atType "game-created" ["ident" .= i, "topic" .= t, "players" .= n]
-    toJSON (JoinGame nth nick)   = atType "gaem-join" ["nick" .= nick, "ident" .= nth]
+    toJSON (JoinGame nth nick)   = atType "game-join" ["nick" .= nick, "ident" .= nth]
 
 loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
 
