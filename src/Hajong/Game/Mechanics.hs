@@ -66,5 +66,13 @@ addClient client = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) go 
         go Nothing Nothing = (Just (), Just client)
         go      s        c = (s, c)
 
+removeClient :: Eq a => a -> GameState a -> Maybe (GameState a)
+removeClient client gs = do
+    p <- clientToPlayer client gs
+    return $ (gamePlayers.at p .~ Nothing) gs
+
 playerToClient :: GameState c -> Player -> Maybe c
 playerToClient gs p = gs^.gamePlayers.at p.to join
+
+clientToPlayer :: Eq c => c -> GameState c -> Maybe Player
+clientToPlayer c gs = gs^.gamePlayers & ifind (\_ x -> x == Just c) <&> view _1

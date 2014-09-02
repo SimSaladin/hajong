@@ -142,7 +142,7 @@ disconnects = do
         -- inform worker
         ss <- readTVar var
         case (ss ^? gameId (getNick c)) >>= \gid -> ss ^. gameAt gid of
-            Just (wi_v,_,_) -> putTMVar wi_v (WorkerClientParts c)
+            Just (wi_v,_,_) -> putTMVar wi_v (workerPartPlayer c $ const $ return ())
             Nothing         -> return ()
 
         modifyTVar var
@@ -210,14 +210,12 @@ joinGame n = do
         Nothing          -> unicast c $ Invalid "Game not found"
         Just (wi_v,_,_)  -> do
             ss_v <- view ssVar
-            let action = workerAddPlayer c $ \gs -> do
-                    multicast gs (JoinGame n $ getNick c)
-                    ss' <- atomically $ do
-                        modifyTVar ss_v (clientToGame n c)
-                        readTVar ss_v
-                    broadcast' (JoinGame n $ getNick c) ss'
-
-                in atomically $ putTMVar wi_v (WorkerAction action)
+            atomically $ putTMVar wi_v $ workerAddPlayer c $ \gs -> do
+                multicast gs (JoinGame n $ getNick c)
+                ss' <- atomically $ do
+                    modifyTVar ss_v (clientToGame n c)
+                    readTVar ss_v
+                broadcast' (JoinGame n $ getNick c) ss'
 
 -- | Pass the TA to relevant worker
 handleGameAction :: GameAction -> ClientWorker ()
@@ -227,5 +225,5 @@ handleGameAction ga = do
     case ss ^? gameId (getNick c) of
         Just n
             | Just (wi_v,_,_) <- ss ^. gameAt n
-            -> atomically . putTMVar wi_v $ WorkerClientAction c ga
+            -> atomically . putTMVar wi_v $ workerPartPlayer c (const $ return ())
         _   -> unicast c $ Invalid "You are not in a game"

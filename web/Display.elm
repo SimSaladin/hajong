@@ -34,17 +34,17 @@ eventView ev = case ev of
 
 loungeView : Viewed AtLounge -> Element
 loungeView o = flow down
-    [ maybe (spacer 10 10 |> color red) waitView o.game.gameWait
+    [ maybe (spacer 10 10 |> color red) (waitView . lookupGameInfo o.game) o.game.gameWait
     , toText "Lounge" |> bold |> centered
-    , blockElement 300 400 (gameListView o)
+    , blockElement 250 400 (gameListView o)
         `beside` spacer 5 5 `beside`
-        blockElement 300 400 (gameCreateView o)
+        blockElement 250 400 (gameCreateView o)
     , spacer 5 5
     ]
 
-waitView game = flow right
+waitView game = color lightOrange <| flow right
     [ toText "Waiting for " |> leftAligned
-    , (gameInfoView game |> color purple)
+    , gameInfoView game
     ]
 
 gameCreateView {game, newgame} = flow down

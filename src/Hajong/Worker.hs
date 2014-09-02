@@ -21,6 +21,7 @@ module Hajong.Worker
     ( WorkerState(..), WorkerInput(..)
     , startWorker
     , workerAddPlayer
+    , workerPartPlayer
     ) where
 
 import           Data.Maybe (fromJust)
@@ -54,7 +55,6 @@ data WorkerState = WorkerState
                  }
 
 data WorkerInput = WorkerAction (Worker ())
-                 | WorkerClientParts Client
                  | WorkerClientAction Client GameAction
 
 type WCont = Worker ()
@@ -71,8 +71,8 @@ startWorker input gs logger = do
 
 -- ** Injecting to worker
 
-workerAddPlayer :: Client -> (GameState Client -> IO ()) -> Worker ()
-workerAddPlayer client callback = do
+workerAddPlayer :: Client -> (GameState Client -> IO ()) -> WorkerInput
+workerAddPlayer client callback = WorkerAction $ do
     gsv <- view gameVar
     e_gs <- atomically $ runEitherT $ do
         gs  <- lift $ readTVar gsv
@@ -82,17 +82,21 @@ workerAddPlayer client callback = do
 
     clientEither client e_gs (liftIO . callback)
 
--- * Pure functions
+workerPartPlayer :: Client -> (GameState Client -> IO ()) -> WorkerInput
+workerPartPlayer client callback = WorkerAction $ do
+    gsv <- view gameVar
+    mgs <- atomically $ do
+        gs  <- readTVar gsv
+        let mgs = removeClient client gs
+        maybe (return ()) (writeTVar gsv) mgs
+        return mgs
+    maybe (return ()) (liftIO . callback) mgs
 
--- | Solve Player based on the client.
-clientToPlayer :: Client -> GameState Client -> Player
-clientToPlayer c gs = pl
-    where (Just (pl,_)) = gs^.gamePlayers & ifind (const (== Just c))
 
 -- * Unwrap monads
 
 runWCont :: WorkerState -> Worker a -> IO a
-runWCont st cont = runReaderT (_loggerFun st $ runWorker cont) st
+runWCont st cont = runReaderT (st ^. loggerFun $ runWorker cont) st
 
 workerRoundM :: RoundM' a -> Worker (Either Text (a, Worker ()))
 workerRoundM ma = liftM (fmap tores . runRoundM ma) $ rview gameVar
@@ -161,18 +165,20 @@ workerAction' f_ta f_sh f_dc f_ac = do
 workerProcessTurnAction :: TurnAction -> Client -> Worker (Maybe WCont)
 workerProcessTurnAction ta c = do
     gs <- rview gameVar
-    let player = clientToPlayer c gs
 
-    res <- workerRoundM (runTurn player ta)
-    case res of
-        Left err      -> unicastError c err >> return Nothing
-        Right (_, ma) -> return $ Just $ do
-            ma
-            case ta of
-                TurnTileDraw _ _    -> turnActionOrTimeout
-                TurnAnkan _         -> turnActionOrTimeout
-                TurnTileDiscard _ _ -> waitForShouts $
-                    gs^?!gameRound._Just^.riichiSecret.riichiWaitShoutsFrom
+    case clientToPlayer c gs of
+        Nothing     -> unicastError c "You are not a player in this game!" >> return Nothing
+        Just player -> do
+            res <- workerRoundM (runTurn player ta)
+            case res of
+                Left err      -> unicastError c err >> return Nothing
+                Right (_, ma) -> return $ Just $ do
+                    ma
+                    case ta of
+                        TurnTileDraw _ _    -> turnActionOrTimeout
+                        TurnAnkan _         -> turnActionOrTimeout
+                        TurnTileDiscard _ _ -> waitForShouts $
+                            gs^?!gameRound._Just^.riichiSecret.riichiWaitShoutsFrom
 
 -- | "workerRace n ma mb" races between "ma" and "delay n >> mb"
 workerRace :: Int -> Worker a -> Worker a -> Worker a
@@ -243,16 +249,30 @@ waitForShouts players = do
     gs  <- rview gameVar
     shv <- liftIO newEmptyTMVarIO
 
-    let waitAll       [] = return advanceTurn
-        waitAll xs@(x:_) = workerAction' (\_ _ -> waitAll xs) shoutHandler passOn (waitAll xs)
-                where
-            passOn c = waitAll (L.delete (clientToPlayer c gs) xs)
-            shoutHandler c sh
-                | shoutedFrom sh == x = return $ advanceWithShout (clientToPlayer c gs) sh
-                                                 -- Highest priority ^
-                | otherwise           = do
-                    atomically (putTMVar shv (advanceWithShout (clientToPlayer c gs) sh))
-                    passOn c
+    -- Important invariant of waitAll's first argument:
+    --  Shout priorities must be in /decreasing/ order. (This whole thing
+    --  is wrong as it takes players and not shouts - TODO)
+
+    let waitAll [] = return advanceTurn
+        waitAll xs = workerAction' (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
+
+        passOn xs c = waitAll $ maybe id L.delete (clientToPlayer c gs) xs
+
+        shoutHandler [] _ _ = error "shoutHandler: empty list (this is a bug)"
+        shoutHandler xs@(x:_) c sh
+            | shoutedFrom sh == x = return $ case clientToPlayer c gs of
+                      Just p  -> advanceWithShout p sh -- Highest priority
+                      Nothing -> error "WTF? an afk player just shouted?"
+
+            | otherwise =
+                -- save the currently most winning shout. This is wrong too
+                -- as it doesn't check priorities in possibly existing
+                -- value - TODO
+                case clientToPlayer c gs of
+                    Just p -> do
+                        atomically (putTMVar shv (advanceWithShout p sh))
+                        passOn xs c
+                    Nothing -> error "WTF? an afk player just shouted?"
 
     join $ workerRace 10000000
         (waitAll players)

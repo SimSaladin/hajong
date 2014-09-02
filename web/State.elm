@@ -11,7 +11,7 @@ type GameState = { status   : Status
                  , mynick   : String
                  , lounge   : LoungeData
                  , gameSel  : Maybe GameInfo
-                 , gameWait : Maybe GameInfo
+                 , gameWait : Maybe Int
                  , mousepos : (Int, Int)
                  , eventlog : [Event]
                  , debuglog : String
@@ -30,3 +30,6 @@ defaultGame = { status = InLounge
 
 atLounge : GameState -> Bool
 atLounge = (\s -> s.status == InLounge)
+
+lookupGameInfo : GameState -> Int -> GameInfo
+lookupGameInfo game ident = head <| filter (\g -> g.ident == ident) game.lounge.games

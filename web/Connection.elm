@@ -45,7 +45,7 @@ joinGame n = JoinGame { nick = "", ident = n }
 
 -- Receive -------------------------------------------------------------------
 
-type KindaState a = {a | gameWait : Maybe GameInfo, mynick : String, lounge : LoungeData }
+type KindaState a = {a | gameWait : Maybe Int, mynick : String, lounge : LoungeData }
 
 processEvent : Event -> KindaState a -> KindaState a
 processEvent event gameState = case event of
@@ -57,15 +57,14 @@ processEvent event gameState = case event of
             { gameState | lounge   <- addJoinedGame ident nick gameState.lounge
                         , gameWait <-
                             if gameState.mynick == nick
-                                then Just . head <| filter (\g -> g.ident == ident) gameState.lounge.games
+                                then Just ident
                                 else gameState.gameWait
             }
         _ -> gameState
 
 -- Helpers
 
-addGame g l    = { l | games <- g :: l.games }
-
+addGame g l    = { l | games <- l.games ++ [g] }
 addIdle n l    = { l | idle  <- Set.insert n l.idle }
 
 addJoinedGame i n l =
