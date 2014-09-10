@@ -51,11 +51,11 @@ runRoundM m = maybe (Left "No active round!") run . _gameRound
 -- | Return an IO action to create the next round if
 --      - it would be first round and all player seats are occupied, or
 --      - the previous round has ended. (TODO!)
-maybeNextRound :: GameState a -> Maybe (IO (GameState a))
-maybeNextRound gs = do
+maybeNextRound :: (a -> Bool) -> GameState a -> Maybe (IO (GameState a))
+maybeNextRound ready gs =
     case _gameRound gs of
-        Nothing -> return $ (\rs -> gs & gameRound .~ Just rs) <$> newRiichiState
-        Just _  -> Nothing
+        Nothing -> maybeBeginGame ready gs
+        Just _  -> Nothing -- return $ (\rs -> gs & gameRound .~ Just rs) <$> newRiichiState
 
 -- | If appropriate, begin the game
 maybeBeginGame :: (p -> Bool) -> GameState p -> Maybe (IO (GameState p))
@@ -67,11 +67,11 @@ maybeBeginGame ready gs = do
 
 -- | Try putting the given client to an empty player seat. Returns Nothing
 -- if the game is already full.
-addClient :: Eq playerID => playerID -> GameState playerID -> Maybe (GameState playerID)
-addClient client = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) go Nothing
+addClient :: Eq playerID => playerID -> (playerID -> Bool) -> GameState playerID -> Maybe (GameState playerID)
+addClient client f = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) go Nothing
     where
-        go Nothing Nothing = (Just (), Just client)
-        go      s        c = (s, c)
+        go s c | isNothing s && f c = (Just (), client)
+               | otherwise          = (s, c)
 
 removeClient :: Eq playerID => playerID -> GameState playerID -> Maybe (GameState playerID)
 removeClient client gs = do
@@ -81,7 +81,7 @@ removeClient client gs = do
 -- ** Read
 
 playerToClient :: GameState playerID -> Player -> Maybe playerID
-playerToClient gs p = gs^.gamePlayers.at p.to join
+playerToClient gs p = gs^.gamePlayers.at p
 
 clientToPlayer :: Eq playerID => playerID -> GameState playerID -> Maybe Player
-clientToPlayer c gs = gs^.gamePlayers & ifind (\_ x -> x == Just c) <&> view _1
+clientToPlayer c gs = gs^.gamePlayers & ifind (\_ x -> x == c) <&> view _1

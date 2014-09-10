@@ -166,6 +166,7 @@ talkClient = do
             Message _ msg     -> broadcast $ Message (getNick c) msg
             CreateGame name   -> createGame name >>= joinGame
             JoinGame n _      -> joinGame n
+            ForceStart n      -> forceStart n
             InGameAction a    -> handleGameAction a
             _ -> do
                 unicast c $ Invalid "Event not allowed or not implemented."
@@ -192,7 +193,8 @@ createGame name = do
         writeTVar var ss'
         return counter
 
-    threadId <- liftIO $ startWorker wvar (newEmptyGS name) runStdoutLoggingT
+    let gs = newEmptyGS dummyClient name
+    threadId <- liftIO $ startWorker wvar gs runStdoutLoggingT
     broadcast $ GameCreated (n, name, mempty)
     return n
 
@@ -216,6 +218,14 @@ joinGame n = do
                     modifyTVar ss_v (clientToGame n c)
                     readTVar ss_v
                 broadcast' (JoinGame n $ getNick c) ss'
+
+-- | Force the specfied game to start even if there are not enough players.
+forceStart :: Int -> ClientWorker ()
+forceStart n = do
+    ss <- rview ssVar
+    case ss^.gameAt n of
+        Nothing -> return ()
+        Just (wi_v,_,_) -> atomically $ putTMVar wi_v workerForceStart
 
 -- | Pass the TA to relevant worker
 handleGameAction :: GameAction -> ClientWorker ()

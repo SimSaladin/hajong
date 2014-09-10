@@ -22,6 +22,7 @@ module Hajong.Worker
     , startWorker
     , workerAddPlayer
     , workerPartPlayer
+    , workerForceStart
     ) where
 
 import           Data.Maybe (fromJust)
@@ -47,15 +48,12 @@ newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerState IO) a }
 
 -- type WorkerState = (TVar (GameState Client), TMVar WorkerInput)
 data WorkerState = WorkerState
-                 { _gameVar :: TVar (GameState Seat)
+                 { _gameVar :: TVar (GameState Client)
                  , _inputVar :: TMVar WorkerInput
                  , _loggerFun :: forall a. LoggingT (ReaderT WorkerState IO) a -> (ReaderT WorkerState IO) a
                     -- TODO supply only a LoggerSet or something, instead
                     -- of unwrapping LoggingT's every time in threads!
                  }
-
--- | Left are stub; left from game prematurely, or bots.
-type Seat = Either Nick Client
 
 data WorkerInput = WorkerAction (Worker ())
                  | WorkerClientAction Client GameAction
@@ -71,7 +69,7 @@ startWorker :: (m ~ ReaderT WorkerState IO)
             => TMVar WorkerInput -> GameState Client -> (forall a. LoggingT m a -> m a)
             -> IO ThreadId
 startWorker input gs logger = do
-    gsvar <- newTVarIO $ Right <$> gs
+    gsvar <- newTVarIO gs
     forkIO $ runWCont (WorkerState gsvar input logger) waitPlayersAndBegin
 
 -- ** Injecting to worker
@@ -81,7 +79,7 @@ workerAddPlayer client callback = WorkerAction $ do
     gsv <- view gameVar
     e_gs <- atomically $ runEitherT $ do
         gs  <- lift $ readTVar gsv
-        gs' <- addClient client gs ? "Game is full" 
+        gs' <- addClient client (not . isReal) gs ? "Game is full" 
         lift $ writeTVar gsv gs'
         return gs'
 
@@ -97,6 +95,9 @@ workerPartPlayer client callback = WorkerAction $ do
         return mgs
     maybe (return ()) (liftIO . callback) mgs
 
+workerForceStart :: WorkerInput
+workerForceStart = WorkerAction $
+    rmodify gameVar $ over (gamePlayers.each) (\c -> c { isReady = True })
 
 -- * Unwrap monads
 
@@ -198,9 +199,9 @@ workerRace n a b = do
 waitPlayersAndBegin :: WCont
 waitPlayersAndBegin = logInfoN "Waiting for players" >> go
     where
-        go = rview gameVar >>=
-             maybe (takeInput >>= process >> go)
-                   (liftIO >=> beginRound) . maybeNextRound
+        go = rview gameVar >>= maybe (takeInput >>= process >> go)
+                                    (liftIO >=> beginRound)
+                                    . maybeNextRound isReady
 
         process (WorkerAction m) = m
         process _                = logWarnN "Got ingame action when not in game"
@@ -221,7 +222,7 @@ turnActionOrTimeout =
     join $ workerRace 10000000 takeInputTurnAction $ return $ do
         gs <- rview gameVar
         let Just tp = gs ^? gameRound._Just.riichiPublic.riichiTurn
-            Just c  = gs ^? gamePlayers.at tp._Just._Just
+            Just c  = gs ^? gamePlayers.at tp._Just
             Just a  = gs ^? gameRound._Just.to advanceAuto
         join $ fromJust <$> workerProcessTurnAction a c
 
@@ -287,7 +288,7 @@ waitForShouts players = do
 endRound :: RoundResults -> WCont
 endRound results = do
     logInfoN $ "Round ended (" ++ tshow results ++ ")"
-    maybe endGame (liftIO >=> beginRound) . maybeNextRound =<< rview gameVar
+    maybe endGame (liftIO >=> beginRound) . maybeNextRound isReady =<< rview gameVar
 
 endGame :: WCont
 endGame = logInfoN "Game ended, stopping worker."

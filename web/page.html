@@ -3,16 +3,16 @@
   <head>
     <title>Embedding Elm in HTML!</title>
     <script type="text/javascript" src="http://elm-lang.org/elm-runtime.js"></script>
-    <script type="text/javascript" src="build/Game.js"></script>
+    <script type="text/javascript" src="build/Main.js"></script>
   </head>
  
   <body>
-    <div id="game"></div>
+    <div id="game" style="height:100%"></div>
   </body>
  
   <script type="text/javascript">
     var mainDiv = document.getElementById('game');
-    var game = Elm.embed(Elm.Game, mainDiv, { mynick : "mynick" });
+    var game = Elm.embed(Elm.Main, mainDiv, { mynick : "mynick" });
 
   </script>
  

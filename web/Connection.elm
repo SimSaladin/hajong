@@ -25,10 +25,11 @@ data Event = JoinServer { nick : String } -- ^ Nick
            | LoungeInfo { lounge : LoungeData }
            | GameCreated { game : GameInfo }
            | JoinGame { ident : Int, nick : String }
-           | InGamePrivateEvent GameEvent
+           -- | InGamePrivateEvent GameEvent
            | InGameEvents [GameEvent]
             -- One way only?
            | CreateGame String
+           | ForceStart { ident : Int }
            | InGameAction GameAction
            | Noop
 
@@ -42,6 +43,9 @@ createGame topic = CreateGame topic
 
 joinGame : Int -> Event
 joinGame n = JoinGame { nick = "", ident = n }
+
+forceStart : Int -> Event
+forceStart n = ForceStart { ident = n }
 
 -- Receive -------------------------------------------------------------------
 
@@ -94,7 +98,6 @@ fromJson' (Object o) = case "type" .: o |> justString of
     "lounge"       -> LoungeInfo  <| hasLounge o {}
     "game-created" -> GameCreated <| hasGame o {}
     "game-join"    -> JoinGame    <| hasNick o { ident = justInt <| "ident" .: o }
-    "game-secret"  -> InGamePrivateEvent <| parseGameEvent o
     "game-event"   -> InGameEvents <| (\(Array xs) -> map parseGameEvent xs)
                                    <| Dict.getOrFail "events" o
 
@@ -104,11 +107,12 @@ fromJson' (Object o) = case "type" .: o |> justString of
 
 toJson : Event -> Value
 toJson ev = case ev of
-    JoinServer {nick} -> atType "join" [("nick", Json.String nick)]
-    PartServer {nick} -> atType "part" [("nick", Json.String nick)]
+    JoinServer {nick}     -> atType "join" [("nick", Json.String nick)]
+    PartServer {nick}     -> atType "part" [("nick", Json.String nick)]
     Message{from,content} -> atType "msg" [("from", Json.String from), ("content", Json.String content)]
-    CreateGame g -> atType "game-create" [("topic", Json.String g)]
+    CreateGame g          -> atType "game-create" [("topic", Json.String g)]
     JoinGame {ident,nick} -> atType "game-join" [("nick", Json.String nick), ("ident", Json.Number <| toFloat ident)]
+    ForceStart {ident}    -> atType "game-fstart" [("ident", Json.Number <| toFloat ident)]
 
 atType : String -> [(String, Value)] -> Value
 atType t xs = Object (Dict.fromList <| ("type", Json.String t) :: xs)
@@ -141,4 +145,14 @@ parseGame o = { ident = justInt <| "ident" .: o
               , topic = justString <| "topic" .: o
               , players = nickSet <| "players" .: o
               }
+
+parseGameEvent o = case "event" .: o |> justString of
+    "round-begin"  -> RoundPrivateStarts
+    "waiting"      -> RoundPrivateWaitForShout Int -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
+    "my-hand"      -> RoundPrivateChange Kaze Hand
+    "turn-changed" -> RoundTurnBegins Kaze
+    "turn-action"  -> RoundTurnAction Kaze TurnAction
+    "shout"        -> RoundTurnShouted Kaze Shout -- ^ Who, Shout
+    "hand"         -> RoundHandChanged Kaze Hand
+    "end"          -> RoundEnded RoundResult
 

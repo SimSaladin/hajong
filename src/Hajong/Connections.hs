@@ -44,6 +44,7 @@ data Event = JoinServer Text -- ^ Nick
            | GameCreated (Int, Text, Set Nick) -- name, nicks
            | CreateGame Text
            | JoinGame Int Text -- ^ Game lounge
+           | ForceStart Int
 
            | InGamePrivateEvent GameEvent
            | InGameEvents [GameEvent]
@@ -51,21 +52,59 @@ data Event = JoinServer Text -- ^ Nick
            deriving (Show, Read)
 
 instance ToJSON Event where
-    toJSON (JoinServer nick)     = atType "join" ["nick" .= nick]
-    toJSON (PartServer nick)     = atType "part" ["nick" .= nick]
-    toJSON (Message sender cnt)  = atType "msg" ["from" .= sender, "content" .= cnt]
-    toJSON (Invalid msg)         = atType "invalid" ["content" .= msg]
-    toJSON (LoungeInfo lounge)   = atType "lounge" (loungeJSON lounge)
-    toJSON (GameCreated (i,t,n)) = atType "game-created" ["ident" .= i, "topic" .= t, "players" .= n]
-    toJSON (JoinGame nth nick)   = atType "game-join" ["nick" .= nick, "ident" .= nth]
+    toJSON (JoinServer nick)       = atType "join"         ["nick" .= nick]
+    toJSON (PartServer nick)       = atType "part"         ["nick" .= nick]
+    toJSON (Message sender cnt)    = atType "msg"          ["from" .= sender, "content" .= cnt]
+    toJSON (Invalid msg)           = atType "invalid"      ["content" .= msg]
+    toJSON (LoungeInfo lounge)     = atType "lounge"       (loungeJSON lounge)
+    toJSON (GameCreated (i,t,n))   = atType "game-created" ["ident" .= i, "topic" .= t, "players" .= n]
+    toJSON (JoinGame nth nick)     = atType "game-join"    ["nick" .= nick, "ident" .= nth]
+    toJSON (InGamePrivateEvent ge) = atType "game-event"   ["events" .= [gameEventJSON ge]]
+
+gameEventJSON ge = case ge of
+    RoundPrivateStarts gameplayer   -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
+    RoundPrivateWaitForShout secs   -> atEvent "waiting"      ["time" .= secs]
+    RoundPrivateChange kaze hand    -> atEvent "my-hand"      ["player" .= kaze, "hand" .= hand]
+    RoundTurnBegins kaze            -> atEvent "turn-changed" []
+    RoundTurnAction kaze turnaction -> atEvent "turn-action"  []
+    RoundTurnShouted kaze shout     -> atEvent "shout"        []
+    RoundHandChanged kaze hand      -> atEvent "hand"         []
+    RoundEnded results              -> atEvent "end"          []
+
+instance ToJSON Player where toJSON (Player k) = toJSON k
+
+instance ToJSON Kazehai  where
+    toJSON = toJSON . tshow
+
+instance ToJSON Hand where
+    toJSON h = object 
+        [ "concealed" .= _handConcealed h
+        , "pick" .= _handPick h
+        , "furiten" .= _handFuriten h
+        , "public" .= _handPublic h
+        ]
+
+instance ToJSON HandPublic where
+    toJSON p = object
+        [ "open" .= _handOpen p
+        , "discards" .= _handDiscards p
+        , "riichi" .= _handRiichi p
+        , "turn-discard" .= _handTurnDiscard p
+        ]
+
+instance ToJSON Mentsu where toJSON m = undefined
+instance ToJSON Tile where toJSON t = undefined
+
+gamePlayerJSON gp = undefined
 
 loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
 
 gamePairs :: (Int, (Text, Set Nick)) -> Value
 gamePairs (i,(t,n)) = object ["ident" .= i, "topic" .= t, "players" .= n]
 
-atType :: Text -> [(Text, Value)] -> Value
+atType, atEvent :: Text -> [(Text, Value)] -> Value
 atType t xs = object ("type" .= t : xs)
+atEvent t xs = object ("event" .= t : xs)
 
 instance FromJSON Event where
     parseJSON (Object o) = do
@@ -80,6 +119,7 @@ instance FromJSON Event where
             "game-public"  -> InGameEvents       <$> undefined
             "game-action"  -> InGameAction       <$> undefined
             "game-create"  -> CreateGame         <$> o .: "topic"
+            "game-fstart"  -> ForceStart         <$> o .: "ident"
             "lounge"       -> LoungeInfo         <$> undefined
             _              -> pure (Invalid ("Unknown type: " <> t))
     parseJSON _ = pure (Invalid "Top-level object expected")
@@ -88,6 +128,8 @@ instance FromJSON Event where
 
 data Client = Client
             { getNick :: Nick
+            , isReal  :: Bool
+            , isReady :: Bool
             , unicast :: MonadIO m => Event -> m ()
             , receive :: MonadIO m => m Event
             }
@@ -96,10 +138,13 @@ instance Eq Client where a == b = getNick a == getNick b
 instance Ord Client where a <= b = getNick a <= getNick b
 instance Show Client where show = unpack . getNick
 
+dummyClient :: Client
+dummyClient = Client "dummy" False False (const (return ())) undefined
+
 -- * Sending to client(s)
 
 multicast :: MonadIO m => GameState Client -> Event -> m ()
-multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each._Just)
+multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
     -- TODO Just move this to server already
 
 unicastError :: MonadIO m => Client -> Text -> m ()
@@ -112,7 +157,7 @@ clientEither _ (Right a) f  = f a
 -- * Web socket specific
 
 websocketClient :: Nick -> WS.Connection -> Client
-websocketClient nick conn = Client nick
+websocketClient nick conn = Client nick True True
     (liftIO . WS.sendTextData conn . encode)
     (liftIO $ fromMaybe (Invalid "No parse") . decode <$> WS.receiveData conn)
 
