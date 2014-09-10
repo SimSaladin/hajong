@@ -7,10 +7,10 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Hajong.Game.Yaku.Standard where
+module Mahjong.Yaku.Standard where
 
-import Hajong.Game.Yaku.Builder
-import Hajong.Game.Tiles
+import Mahjong.Yaku.Builder
+import Mahjong.Tiles (Number(..), toKazehai)
 
 -- * 4 mentsu + 1 jantou
 
@@ -94,8 +94,8 @@ yakuShouSangen = do
 yakuFanpai :: Yaku Int
 yakuFanpai = do
     info <- yakuState
-    let roundTile = Kaze $ yakuRoundKaze info
-        playerKaze = Kaze $ yakuPlayerKaze info
+    let roundTile = toKazehai $ yakuRoundKaze info
+        playerKaze = toKazehai $ yakuPlayerKaze info
     tile <- anyMentsu' (sangenpai |. sameTile roundTile |. sameTile playerKaze)
     return $ if roundTile == playerKaze && roundTile == tile
         then 2

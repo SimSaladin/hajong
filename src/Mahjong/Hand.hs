@@ -1,18 +1,24 @@
 ------------------------------------------------------------------------------
--- Module         : Hajong.Game.Hand
+-- |
+-- Module         : Mahjong.Hand
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 --
--- A single player's hand.
+-- This module provides the representation type for a mahjong hand
+-- (@Hand@), and functions that operate on a hand.
 ------------------------------------------------------------------------------
-module Hajong.Game.Hand where
+module Mahjong.Hand where
 
 import qualified Data.List as L
-import Hajong.Game.Tiles
-import Hajong.Game.Mentsu
+
+import Mahjong.Hand.Mentsu
+import Mahjong.Hand.Algo
+import Mahjong.Tiles
+
+-- * Types
 
 data HandPublic = HandPublic
                 { _handOpen :: [Mentsu]
@@ -30,6 +36,11 @@ data Hand = Hand
 
 makeLenses ''HandPublic
 makeLenses ''Hand
+
+instance HasGroupings Hand where
+    getGroupings h = getGroupings $ (,) <$> _handOpen . _handPublic <*> _handConcealed $ h
+
+-- * Create
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
@@ -73,13 +84,6 @@ handAutoDiscard hand
 
 -- * Properties
 
-tenpai :: Hand -> Bool
-tenpai hand = shanten hand == 0
-
--- | Calculate shanten for hand
-shanten :: Hand -> Int
-shanten hand = error "undefined: `shanten' in src/Hajong/Game/Mentsu.hs"
-
 -- | All mentsu that could be melded with hand given some tile.
 shoutsOn :: Tile -> Hand -> [Shout]
 shoutsOn tile hand = [] -- TODO
@@ -96,7 +100,7 @@ ankanOn tile hand
     where
         sameConcealed = hand^.handConcealed^..folded.filtered (== tile)
         hand'         = hand & handConcealed %~ filter (/= tile)
-                             & handPublic.handOpen %~ (:) (kantsu (replicate 4 tile))
+                             & handPublic.handOpen %~ (:) (kantsu tile)
 
 -- | Meld the mentsu to the hand
 meldTo :: CanError m => Shout -> Mentsu -> Hand -> m Hand

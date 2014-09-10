@@ -8,15 +8,16 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Hajong.Game.Yaku.Builder where
+module Mahjong.Yaku.Builder where
 
 import Control.Monad.Free
 import Control.Monad.State
 
-import Hajong.Game.Mentsu
-import Hajong.Game.Tiles
+import Mahjong.Hand.Mentsu
+import Mahjong.Tiles (Kazehai(..), Tile(..), Number(..))
+import qualified Mahjong.Tiles as T
 
-runChecker :: YakuInfo -> CompleteHand -> Yaku Int -> Maybe Int
+runChecker :: YakuInfo -> [Mentsu] -> Yaku Int -> Maybe Int
 runChecker yi hand = fmap fst . (`runStateT` hand) . iterM f
     where
         f :: YakuChecker (StateT [Mentsu] Maybe Int) -> StateT [Mentsu] Maybe Int
@@ -33,13 +34,13 @@ runChecker yi hand = fmap fst . (`runStateT` hand) . iterM f
 findMatch :: MentsuProp -> [Mentsu] -> Maybe ([Mentsu], Tile)
 findMatch _  []   = Nothing
 findMatch mp (x:xs)
-    | matchProp mp x = Just (xs, unsafeHead $ mentsuPai x)
+    | matchProp mp x = Just (xs, unsafeHead $ mentsuTiles x)
     | otherwise      = (_1 %~ (x:)) <$> findMatch mp xs
 
 -- | Match a property on a mentsu.
 matchProp :: MentsuProp -> Mentsu -> Bool
 matchProp tt mentsu
-    | (firstTile:_) <- mentsuPai mentsu = case tt of
+    | (firstTile:_) <- mentsuTiles mentsu = case tt of
         MentsuJantou       | isJantou mentsu       -> True
         MentsuAnyJantou    | not $ isJantou mentsu -> True
         MentsuShuntsu      | isShuntsu mentsu      -> True
@@ -47,18 +48,18 @@ matchProp tt mentsu
         MentsuKantsu       | isKantsu mentsu       -> True
         MentsuKoutsuKantsu | isKantsu mentsu || isKoutsu mentsu -> True
         -- XXX: this is incomplete (shuntsu + terminals etc.)
-        TileTerminal        -> tileTerminal firstTile
+        TileTerminal        -> T.terminal firstTile
         TileSameAs tile     -> firstTile == tile
-        TileSuited          -> tileSuited firstTile
-        TileSameSuit tile   -> compareSuit tile firstTile
-        TileSameNumber tile -> tileNumber tile      == tileNumber firstTile
-        TileNumber n        -> tileNumber firstTile == n
-        TileHonor           -> not $ tileSuited firstTile
-        TileSangenpai       -> tileSangenpai firstTile
+        TileSuited          -> T.suited firstTile
+        TileSameSuit tile   -> T.suitedSame tile firstTile
+        TileSameNumber tile -> T.tileNumber tile      == T.tileNumber firstTile
+        TileNumber n        -> T.tileNumber firstTile == Just n
+        TileHonor           -> not $ T.suited firstTile
+        TileSangenpai       -> T.sangenpai firstTile
         TileAnd x y         -> matchProp x mentsu && matchProp y mentsu
         TileOr x y          -> matchProp x mentsu || matchProp y mentsu
         TileNot x           -> not $ matchProp x mentsu
-        TileConcealed       -> isNothing $ mentsuFrom mentsu
+        TileConcealed       -> isNothing $ mentsuShout mentsu
         PropAny             -> True
         _ -> True
     | otherwise = error "ofTileType: empty mentsu"

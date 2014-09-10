@@ -36,7 +36,7 @@ import qualified Data.List as L
 ----------------------------------------------
 import Hajong.Connections hiding (multicast)
 import qualified Hajong.Connections as Con (multicast)
-import Hajong.Game
+import Mahjong
 
 default (Text)
 

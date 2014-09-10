@@ -9,13 +9,13 @@
 -- Portability    : non-portable
 --
 -- The mechanics to play a game of mahjong.
-module Hajong.Game.Mechanics where
+module Mahjong.Mechanics where
 
 import           Control.Monad.RWS
 import qualified Data.Map as Map
 
-import Hajong.Game.Round
-import Hajong.Game.Tiles
+import Mahjong.Round
+import Mahjong.Tiles
 
 -- | "GameState" records all information of a single game.
 data GameState playerID = GameState

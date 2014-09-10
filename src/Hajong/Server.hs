@@ -20,7 +20,7 @@ import qualified Data.Aeson                 as A
 ----------------------------------------------------
 import Hajong.Connections
 import Hajong.Worker
-import Hajong.Game
+import Mahjong
 
 -- * Common ServerState
 

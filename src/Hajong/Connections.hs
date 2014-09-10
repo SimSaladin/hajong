@@ -19,7 +19,7 @@ import qualified Network.WebSockets         as WS
 import           Data.Aeson
 
 --------------------------------------------------------
-import Hajong.Game
+import Mahjong
 
 (?) :: Monad m => Maybe a -> e -> EitherT e m a
 mr ? err = maybe (left err) return mr

@@ -22,7 +22,7 @@ import qualified Network.WebSockets as WS
 import qualified System.IO
 
 ---------------------------------------------------------------------
-import           Hajong.Game
+import           Mahjong
 import           Hajong.Client.PrettyPrint
 import           Hajong.Connections
 

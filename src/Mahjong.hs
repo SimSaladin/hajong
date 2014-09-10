@@ -7,16 +7,18 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Hajong.Game
-    ( module Hajong.Game.Mechanics
-    , module Hajong.Game.Round
-    , module Hajong.Game.Hand
-    , module Hajong.Game.Mentsu
-    , module Hajong.Game.Tiles
+module Mahjong
+    ( module Mahjong.Mechanics
+    , module Mahjong.Round
+    , module Mahjong.Hand
+    , module Mahjong.Hand.Mentsu
+    , module Mahjong.Hand.Algo
+    , module Mahjong.Tiles
     ) where
 
-import Hajong.Game.Mechanics
-import Hajong.Game.Round
-import Hajong.Game.Hand
-import Hajong.Game.Mentsu
-import Hajong.Game.Tiles
+import Mahjong.Mechanics
+import Mahjong.Round
+import Mahjong.Hand
+import Mahjong.Hand.Mentsu
+import Mahjong.Hand.Algo
+import Mahjong.Tiles

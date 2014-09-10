@@ -1,13 +1,13 @@
-module Hajong.Game.Round where
+module Mahjong.Round where
 
 import qualified Data.Map as Map
 import           Data.Maybe (fromJust)
 -- import Control.Monad.RWS
 import System.Random.Shuffle (shuffleM)
 
-import Hajong.Game.Tiles
-import Hajong.Game.Mentsu
-import Hajong.Game.Hand
+import Mahjong.Tiles
+import Mahjong.Hand
+import Mahjong.Hand.Mentsu
 
 -- TODO: separate to Hajong.Game.Points or smth
 data RoundResults = RoundTsumo { winners :: [Player], payers :: [Player] }
@@ -237,6 +237,7 @@ applyGameEvent ev = case ev of
     RoundEnded how           -> playerPublic.riichiResults .~ Just how
     RoundPrivateChange _ h   -> playerMyHand .~ h
     RoundPrivateStarts gp    -> const gp
+    RoundPrivateWaitForShout _ -> id
 
 applyTurnAction :: Player -> TurnAction -> GamePlayer -> GamePlayer
 applyTurnAction p ta = case ta of
@@ -244,7 +245,7 @@ applyTurnAction p ta = case ta of
         over (playerPublicHands.at p._Just.handDiscards) (|> (tile, Nothing))
         . set (playerPublicHands.at p._Just.handRiichi) riichi
     TurnTileDraw _ _  -> playerPublic.riichiWallTilesLeft -~ 1
-    TurnAnkan tile    -> over (playerPublicHands.at p._Just.handOpen) (|> kantsu (replicate 4 tile))
+    TurnAnkan tile    -> over (playerPublicHands.at p._Just.handOpen) (|> kantsu tile)
 
 -- * Operations
 
