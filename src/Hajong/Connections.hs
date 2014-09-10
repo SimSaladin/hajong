@@ -17,18 +17,12 @@ import qualified Data.Map as M
 import           Control.Monad.Trans.Either
 import qualified Network.WebSockets         as WS
 import           Data.Aeson
+
+--------------------------------------------------------
 import Hajong.Game
 
--- * Functions
-
-{-# DEPRECATED maybeToEitherT "use ? instead" #-}
-
--- | convert maybe to EitherT
-maybeToEitherT :: Monad m => e -> Maybe a -> EitherT e m a
-maybeToEitherT def = maybe (left def) return
-
 (?) :: Monad m => Maybe a -> e -> EitherT e m a
-(?) = flip maybeToEitherT
+mr ? err = maybe (left err) return mr
 
 -- * Events 'n stuff
 

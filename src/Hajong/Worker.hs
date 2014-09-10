@@ -18,7 +18,7 @@
 --  to end his turn).
 ------------------------------------------------------------------------------
 module Hajong.Worker
-    ( WorkerState(..), WorkerInput(..)
+    ( WorkerState(..), WorkerInput(WorkerClientAction)
     , startWorker
     , workerAddPlayer
     , workerPartPlayer
@@ -47,12 +47,15 @@ newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerState IO) a }
 
 -- type WorkerState = (TVar (GameState Client), TMVar WorkerInput)
 data WorkerState = WorkerState
-                 { _gameVar :: TVar (GameState Client)
+                 { _gameVar :: TVar (GameState Seat)
                  , _inputVar :: TMVar WorkerInput
                  , _loggerFun :: forall a. LoggingT (ReaderT WorkerState IO) a -> (ReaderT WorkerState IO) a
                     -- TODO supply only a LoggerSet or something, instead
                     -- of unwrapping LoggingT's every time in threads!
                  }
+
+-- | Left are stub; left from game prematurely, or bots.
+type Seat = Either Nick Client
 
 data WorkerInput = WorkerAction (Worker ())
                  | WorkerClientAction Client GameAction
@@ -64,9 +67,11 @@ makeLenses ''WorkerState
 -- * Entry points
 
 -- | Fork a new worker thread
-startWorker :: (m ~ ReaderT WorkerState IO) => TMVar WorkerInput -> GameState Client -> (forall a. LoggingT m a -> m a) -> IO ThreadId
+startWorker :: (m ~ ReaderT WorkerState IO)
+            => TMVar WorkerInput -> GameState Client -> (forall a. LoggingT m a -> m a)
+            -> IO ThreadId
 startWorker input gs logger = do
-    gsvar <- newTVarIO gs
+    gsvar <- newTVarIO $ Right <$> gs
     forkIO $ runWCont (WorkerState gsvar input logger) waitPlayersAndBegin
 
 -- ** Injecting to worker

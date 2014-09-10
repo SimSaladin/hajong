@@ -19,7 +19,7 @@ import Hajong.Game.Tiles
 
 -- | "GameState" records all information of a single game.
 data GameState playerID = GameState
-                   { _gamePlayers :: Map Player (Maybe playerID)
+                   { _gamePlayers :: Map Player playerID
                    , _gameName :: Text
                    , _gameRound :: Maybe RiichiState -- maybe in running game
                    } deriving (Show, Read, Functor)
@@ -30,10 +30,10 @@ type RoundM' = RWST RiichiPublic [GameEvent] RiichiSecret (Either Text)
 -- * GameState
 
 -- | Create a new GameState with the given label.
-newEmptyGS :: Text -> GameState a
-newEmptyGS name = GameState players name Nothing
+newEmptyGS :: playerID -> Text -> GameState playerID
+newEmptyGS defaultPlayer name = GameState players name Nothing
     where
-        players = Map.fromList $ zip [minBound .. maxBound] (repeat Nothing)
+        players = Map.fromList $ zip [minBound .. maxBound] (repeat defaultPlayer)
 
 -- | Execute a round action in the "GameState".
 --
@@ -53,26 +53,35 @@ runRoundM m = maybe (Left "No active round!") run . _gameRound
 --      - the previous round has ended. (TODO!)
 maybeNextRound :: GameState a -> Maybe (IO (GameState a))
 maybeNextRound gs = do
-    guard . null $ gs^.gamePlayers^..each._Nothing
     case _gameRound gs of
-        Nothing -> Just $ (\rs -> gs & gameRound .~ Just rs) <$> newRiichiState
+        Nothing -> return $ (\rs -> gs & gameRound .~ Just rs) <$> newRiichiState
         Just _  -> Nothing
+
+-- | If appropriate, begin the game
+maybeBeginGame :: (p -> Bool) -> GameState p -> Maybe (IO (GameState p))
+maybeBeginGame ready gs = do
+    guard . null $ gs^.gamePlayers^..each.filtered (not . ready)
+    return $ (\rs -> gs & gameRound .~ Just rs) <$> newRiichiState
+
+-- ** Modify
 
 -- | Try putting the given client to an empty player seat. Returns Nothing
 -- if the game is already full.
-addClient :: Eq a => a -> GameState a -> Maybe (GameState a)
+addClient :: Eq playerID => playerID -> GameState playerID -> Maybe (GameState playerID)
 addClient client = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) go Nothing
     where
         go Nothing Nothing = (Just (), Just client)
         go      s        c = (s, c)
 
-removeClient :: Eq a => a -> GameState a -> Maybe (GameState a)
+removeClient :: Eq playerID => playerID -> GameState playerID -> Maybe (GameState playerID)
 removeClient client gs = do
     p <- clientToPlayer client gs
     return $ (gamePlayers.at p .~ Nothing) gs
 
-playerToClient :: GameState c -> Player -> Maybe c
+-- ** Read
+
+playerToClient :: GameState playerID -> Player -> Maybe playerID
 playerToClient gs p = gs^.gamePlayers.at p.to join
 
-clientToPlayer :: Eq c => c -> GameState c -> Maybe Player
+clientToPlayer :: Eq playerID => playerID -> GameState playerID -> Maybe Player
 clientToPlayer c gs = gs^.gamePlayers & ifind (\_ x -> x == Just c) <&> view _1
