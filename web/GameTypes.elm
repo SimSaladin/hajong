@@ -20,6 +20,12 @@ data Kaze     = Ton | Nan | Shaa | Pei
 data Sangen   = Haku | Hatsu | Chun
 data TileKind = Man | Pin | Sou | Kazehai Kaze | Sangenpai Sangen
 
+readKaze x = case x of
+    "Ton" -> Ton
+    "Nan" -> Nan
+    "Shaa" -> Shaa
+    "Pei" -> Pei
+
 -- Hands ---------------------------------------------------------------------
 
 type Hand = { called : [Mentsu], concealed : [Tile] }
@@ -50,16 +56,14 @@ data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile
 
-data GameEvent = RoundPrivateStarts {} -- ^ Only at the start of a round
-               | RoundPrivateWaitForShout Int -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
-               | RoundPrivateChange Kaze Hand
-               | RoundTurnBegins Kaze
-               | RoundTurnAction Kaze TurnAction
-               | RoundTurnShouted Kaze Shout -- ^ Who, Shout
-               | RoundHandChanged Kaze Hand
-               | RoundEnded RoundResult
-
-parseGameEvent o = RoundPrivateStarts {} -- TODO TODO TODO TODO 
+data GameEvent = RoundPrivateStarts RoundState
+               | RoundPrivateWaitForShout { seconds : Int }
+               | RoundPrivateChange { player : Kaze, hand : Hand }
+               | RoundTurnBegins    { player : Kaze }
+               | RoundTurnAction    { player : Kaze, action : TurnAction }
+               | RoundTurnShouted   { player : Kaze, shout : Shout }
+               | RoundHandChanged   { player : Kaze, hand : Hand }
+               | RoundEnded         RoundResult
 
 data GameAction = GameTurn TurnAction
                 | GameShout Shout

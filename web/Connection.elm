@@ -121,12 +121,15 @@ atType t xs = Object (Dict.fromList <| ("type", Json.String t) :: xs)
 
 n .: o = Dict.getOrFail n o
 
-hasNick o s = { s | nick = "nick" .: o |> justString }
-hasFrom o s = { s | from = "from" .: o |> justString }
-hasContent o s = { s | content = "content" .: o |> justString }
+justString (Json.String s) = s
+justInt (Json.Number n) = floor n
 
-hasLounge o s = { s | lounge = parseLoungeData o }
-hasGame o s = { s | game = parseGame o }
+hasNick o s    = { s | nick    = "nick"    .: o |> justString }
+hasFrom o s    = { s | from    = "from"    .: o |> justString }
+hasContent o s = { s | content = "content" .: o |> justString }
+hasPlayer o s  = { s | player  = "player"  .: o |> justString |> readKaze }
+hasLounge o s  = { s | lounge  = parseLoungeData o }
+hasGame o s    = { s | game    = parseGame o }
 
 parseLoungeData o =
     { idle  = nickSet <| "idle" .: o
@@ -138,21 +141,28 @@ nickSet (Array xs) = map (\(Json.String s) -> s) xs |> Set.fromList
 gameList : Value -> [GameInfo]
 gameList (Array xs) = map (\(Object o) -> parseGame o) xs
 
-justString (Json.String s) = s
-justInt (Json.Number n) = floor n
-
-parseGame o = { ident = justInt <| "ident" .: o
-              , topic = justString <| "topic" .: o
-              , players = nickSet <| "players" .: o
+parseGame o = { ident   = justInt    <| "ident" .: o
+              , topic   = justString <| "topic" .: o
+              , players = nickSet    <| "players" .: o
               }
 
 parseGameEvent o = case "event" .: o |> justString of
-    "round-begin"  -> RoundPrivateStarts
-    "waiting"      -> RoundPrivateWaitForShout Int -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
-    "my-hand"      -> RoundPrivateChange Kaze Hand
-    "turn-changed" -> RoundTurnBegins Kaze
-    "turn-action"  -> RoundTurnAction Kaze TurnAction
-    "shout"        -> RoundTurnShouted Kaze Shout -- ^ Who, Shout
-    "hand"         -> RoundHandChanged Kaze Hand
+    "round-begin"  -> RoundPrivateStarts <| parseRoundState o
+    "waiting"      -> RoundPrivateWaitForShout (justInt <| "seconds" .: o)
+    "my-hand"      -> RoundPrivateChange <| hasPlayer o <| { hand = "hand" .: o |> parseHand }
+    "turn-changed" -> RoundTurnBegins <| hasPlayer o
+    "turn-action"  -> RoundTurnAction <| hasPlayer o { action = "action" .: o |> parseTurnAction }
+    "shout"        -> RoundTurnShouted <| hasPlayer o { shout = "shout" .: o |> parseShout }
+    "hand"         -> RoundHandChanged <| hasPlayer o { hand = "hand" .: o |> parseHand }
     "end"          -> RoundEnded RoundResult
 
+parseHand o = {}
+
+parseRoundState o =
+    { mypos = "player" .: o |> readKaze . justString
+    }
+
+parseTurnAction o = case "type" .: o |> justString of
+    "draw"    -> TurnTileDraw ("wanpai" .: o |> justBool) (Dict.get "tile" o |> maybeTile)
+    "discard" -> TurnTileDiscard ("riichi" .: o |> justBool) ("tile" .: o |> justTile)
+    "ankan"   -> TurnAnkan <| "tile" .: o |> justTile

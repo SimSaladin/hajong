@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances #-}
 ------------------------------------------------------------------------------
 -- | 
@@ -59,17 +60,35 @@ instance ToJSON Event where
     toJSON (LoungeInfo lounge)     = atType "lounge"       (loungeJSON lounge)
     toJSON (GameCreated (i,t,n))   = atType "game-created" ["ident" .= i, "topic" .= t, "players" .= n]
     toJSON (JoinGame nth nick)     = atType "game-join"    ["nick" .= nick, "ident" .= nth]
-    toJSON (InGamePrivateEvent ge) = atType "game-event"   ["events" .= [gameEventJSON ge]]
+    toJSON (InGamePrivateEvent ge) = atType "game-event"   ["events" .= ge]
+    toJSON (InGameEvents xs)       = atType "game-event"   ["events" .= xs]
+    toJSON _ = error "toJSON called for an Event that shouldn't be deserialized on server"
 
-gameEventJSON ge = case ge of
-    RoundPrivateStarts gameplayer   -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
-    RoundPrivateWaitForShout secs   -> atEvent "waiting"      ["time" .= secs]
-    RoundPrivateChange kaze hand    -> atEvent "my-hand"      ["player" .= kaze, "hand" .= hand]
-    RoundTurnBegins kaze            -> atEvent "turn-changed" []
-    RoundTurnAction kaze turnaction -> atEvent "turn-action"  []
-    RoundTurnShouted kaze shout     -> atEvent "shout"        []
-    RoundHandChanged kaze hand      -> atEvent "hand"         []
-    RoundEnded results              -> atEvent "end"          []
+instance ToJSON GameEvent where
+    toJSON ge = case ge of
+        RoundPrivateStarts gameplayer   -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
+        RoundPrivateWaitForShout secs   -> atEvent "waiting"      ["time" .= secs]
+        RoundPrivateChange kaze hand    -> atEvent "my-hand"      ["player" .= kaze, "hand" .= hand]
+        RoundTurnBegins kaze            -> atEvent "turn-changed" ["player" .= kaze]
+        RoundTurnAction kaze turnaction -> atEvent "turn-action"  ["player" .= kaze, "action" .= turnaction]
+        RoundTurnShouted kaze shout     -> atEvent "shout"        ["player" .= kaze, "shout" .= shout]
+        RoundHandChanged kaze hand      -> atEvent "hand"         ["player" .= kaze, "hand" .= hand]
+        RoundEnded results              -> atEvent "end"          ["results" .= results]
+
+gamePlayerJSON x =
+    [ "player"    .= _playerPlayer x
+    , "gamestate" .= _playerPublic x
+    , "hands"     .= object (map (tshow *** toJSON) $ M.toList $ _playerPublicHands x)
+    -- , "players"   .= _playerPlayers x
+    , "myhand"    .= _playerMyHand x
+    ]
+
+loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
+
+instance ToJSON TurnAction where
+    toJSON (TurnTileDiscard r t) = atType "discard" ["riichi" .= r, "tile" .= t]
+    toJSON (TurnTileDraw w mt)   = atType "draw" ["wanpai" .= w, "tile" .= mt]
+    toJSON (TurnAnkan t)         = atType "ankan" ["tile" .= t]
 
 instance ToJSON Player where toJSON (Player k) = toJSON k
 
@@ -92,12 +111,41 @@ instance ToJSON HandPublic where
         , "turn-discard" .= _handTurnDiscard p
         ]
 
-instance ToJSON Mentsu where toJSON m = undefined
-instance ToJSON Tile where toJSON t = undefined
+instance ToJSON Mentsu where
+    toJSON (Mentsu mk t ms) = object [ "type" .= mk, "tile" .= t, "shouted" .= ms ]
 
-gamePlayerJSON gp = undefined
+instance ToJSON MentsuKind where toJSON = toJSON . tshow
 
-loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
+instance ToJSON Shout where
+    toJSON (Pon p tile) = atType "pon" ["from" .= p, "tile" .= tile]
+    toJSON (Kan p tile) = atType "pon" ["from" .= p, "tile" .= tile]
+    toJSON (Chi p tile xs) = atType "pon" ["from" .= p, "tile" .= tile, "to" .= xs]
+    toJSON (Ron p tile xs) = atType "pon" ["from" .= p, "tile" .= tile, "to" .= xs]
+
+instance ToJSON Tile where
+    toJSON (Suited tk n a) = object [ "type" .= tk, "number" .= n, "aka" .= a ]
+    toJSON (Honor h) = object [ "type" .= HonorTile, "ident" .= h]
+
+instance ToJSON Number where toJSON = toJSON . fromEnum
+instance ToJSON TileKind where toJSON = toJSON . tshow
+
+instance ToJSON Honor where
+    toJSON (Sangenpai s) = toJSON (tshow s)
+    toJSON (Kazehai k) = toJSON k
+
+instance ToJSON RoundResults where
+    toJSON results = undefined
+
+instance ToJSON RiichiPublic where
+    toJSON x = object
+        [ "dora"       .= _riichiDora x
+        , "tiles-left" .= _riichiWallTilesLeft x
+        , "round"      .= _riichiRound x
+        , "oja"        .= _riichiDealer x
+        , "turn"       .= _riichiTurn x
+        , "players"    .= _riichiPlayers x
+        , "results"    .= _riichiResults x
+        ]
 
 gamePairs :: (Int, (Text, Set Nick)) -> Value
 gamePairs (i,(t,n)) = object ["ident" .= i, "topic" .= t, "players" .= n]
