@@ -123,6 +123,25 @@ n .: o = Dict.getOrFail n o
 
 justString (Json.String s) = s
 justInt (Json.Number n) = floor n
+justBool (Json.Boolean b) = b
+
+justTile (Object o) = case "type" .: o |> justString of
+    "ManTile" -> Suited Man ("number" .: o |> justInt) (justBool <| "aka" .: o)
+    "SouTile" -> Suited Sou ("number" .: o |> justInt) (justBool <| "aka" .: o)
+    "PinTile" -> Suited Pin ("number" .: o |> justInt) (justBool <| "aka" .: o)
+    "HonorTile" -> Honor <| hasHonor o
+
+hasHonor o = case "ident" .: o |> justString of
+    "Ton"   -> Kazehai Ton
+    "Nan"   -> Kazehai Nan
+    "Shaa"  -> Kazehai Shaa
+    "Pei"   -> Kazehai Pei
+    "Haku"  -> Sangenpai Haku
+    "Hatsu" -> Sangenpai Hatsu
+    "Chun"  -> Sangenpai Chun
+
+
+maybeTile _ = Nothing
 
 hasNick o s    = { s | nick    = "nick"    .: o |> justString }
 hasFrom o s    = { s | from    = "from"    .: o |> justString }
@@ -158,11 +177,30 @@ parseGameEvent o = case "event" .: o |> justString of
 
 parseHand o = {}
 
-parseRoundState o =
-    { mypos = "player" .: o |> readKaze . justString
-    }
+parseShout o = {}
+
+parseRoundState o = case "gamestate" .: o of
+    Object g -> 
+        { mypos = "player" .: o |> readKaze . justString
+        , round = "round" .: g |> readKaze . justString
+        , dealer = "oja" .: g |> readKaze . justString
+        , turn = "turn" .: g |> readKaze . justString
+        , dora = "dora" .: g |> (\(Array xs) -> map justTile xs)
+        , tilesleft = "tiles-left" .: g |> justInt
+        , hands = "hands" .: o |> (\(Array xs) -> Dict.fromList <| map justHand xs)
+        , points = "players" .: g |> parsePlayers
+        , results = "results" .: g |> parseResults
+        }
+
+justHand (Array [a, b]) = 
+
+parsePlayers (Array xs) = map parsePlayer xs
+
+parsePlayer (Array [a,b,c]) = (a, b, c)
+
+parseResults (Object o) = { endKind = Tsumo, winners = [], payers = [] } -- TODO
 
 parseTurnAction o = case "type" .: o |> justString of
     "draw"    -> TurnTileDraw ("wanpai" .: o |> justBool) (Dict.get "tile" o |> maybeTile)
     "discard" -> TurnTileDiscard ("riichi" .: o |> justBool) ("tile" .: o |> justTile)
-    "ankan"   -> TurnAnkan <| "tile" .: o |> justTile
+    "ankan"   -> TurnAnkan <| ("tile" .: o |> justTile)

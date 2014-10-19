@@ -32,7 +32,7 @@ module Mahjong.Hand.Algo
     devops
     ) where
 
-import           Data.Maybe
+import           Data.Maybe (fromJust)
 import           Data.Either (isLeft)
 -- import           Data.Bifunctor
 import           Data.List (delete, nub)

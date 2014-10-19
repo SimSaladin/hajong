@@ -15,10 +15,13 @@ defaultLounge = { idle = Set.empty, games = [] }
 
 -- Tiles ---------------------------------------------------------------------
 
-type Tile     = { tileKind : TileKind, number : Int, aka : Bool }
+data Tile = Suited Suit Int Bool
+          | Honor Honor
+data Suit = Man | Pin | Sou
+data Honor =  Kazehai Kaze
+           | Sangenpai Sangen
 data Kaze     = Ton | Nan | Shaa | Pei
 data Sangen   = Haku | Hatsu | Chun
-data TileKind = Man | Pin | Sou | Kazehai Kaze | Sangenpai Sangen
 
 readKaze x = case x of
     "Ton" -> Ton
