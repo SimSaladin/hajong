@@ -4,7 +4,9 @@ import GameTypes (..)
 import State (..)
 import Connection as Conn
 
+import Maybe (maybe)
 import Set
+import Text
 import Graphics.Input (..)
 import Graphics.Input.Field as Field
 
@@ -23,7 +25,7 @@ maybeEvent f s = maybe Conn.Noop f <~ s
 events : Signal Conn.Event
 events = merges
     [ Conn.createGame <~ newGameCreated
-    , maybeEvent (Conn.joinGame . .ident) joined
+    , maybeEvent (Conn.joinGame << .ident) joined
     , forceStartEvent
     ]
 
@@ -41,7 +43,7 @@ display : View -> GameState -> Element
 display v gs = doDraw { v | game = gs }
 
 doDraw o = flow down
-    [ maybe (spacer 10 10 |> color red) (waitView . lookupGameInfo o.game) o.game.gameWait
+    [ maybe (spacer 10 10 |> color red) (waitView << lookupGameInfo o.game) o.game.gameWait
     , toText "Lounge" |> bold |> centered
     , blockElement 250 400 (gameListView o)
         `beside` spacer 5 5 `beside`
@@ -74,7 +76,7 @@ blockElement w h e = size w h (color gray e)
 -- | `active_game all_games`
 buildGameList : Maybe GameInfo -> [GameInfo] -> [Element]
 buildGameList act =
-    let active gi = if act == Just gi then color blue else id
+    let active gi = if act == Just gi then color blue else identity
     in  map (\gi -> active gi <| gameListElement gi <| gameInfoView gi)
 
 gameInfoView : GameInfo -> Element
@@ -99,7 +101,7 @@ topicField = input Field.noContent
 newGameCreated = .string <~ sampleOn (isSubmit createGame.signal) topicField.signal
 topicfs = topicField.signal
 newGameForm    = flow down <~ combine
-   [ Field.field Field.defaultStyle topicField.handle id "Topic" <~ topicField.signal
+   [ Field.field Field.defaultStyle topicField.handle identity "Topic" <~ topicField.signal
    , constant <| button createGame.handle Submit "Create"
    ]
 

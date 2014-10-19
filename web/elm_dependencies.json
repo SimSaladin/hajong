@@ -4,7 +4,7 @@
     "description": "full description of this project, describe your use case",
     "license": "BSD3",
     "exposed-modules": [],
-    "elm-version": "0.12.3",
+    "elm-version": "0.13",
     "dependencies": {
         "maxsnew/Error": "0.1",
         "evancz/elm-html": "0.1.2"

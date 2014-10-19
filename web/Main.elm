@@ -2,6 +2,7 @@ module Main where
 
 import Set
 import Mouse
+import Text
 import Graphics.Input.Field as Field
 
 import Connection (..)

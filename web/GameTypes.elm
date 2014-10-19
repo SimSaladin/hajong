@@ -15,40 +15,61 @@ defaultLounge = { idle = Set.empty, games = [] }
 
 -- Tiles ---------------------------------------------------------------------
 
-data Tile = Suited Suit Int Bool
-          | Honor Honor
-data Suit = Man | Pin | Sou
-data Honor =  Kazehai Kaze
-           | Sangenpai Sangen
-data Kaze     = Ton | Nan | Shaa | Pei
-data Sangen   = Haku | Hatsu | Chun
+data Tile   = Suited Suit Int Bool | Honor Honor
+data Suit   = Man | Pin | Sou
+data Honor  = Kazehai Kaze | Sangenpai Sangen
+data Kaze   = Ton | Nan | Shaa | Pei
+data Sangen = Haku | Hatsu | Chun
 
 readKaze x = case x of
-    "Ton" -> Ton
-    "Nan" -> Nan
+    "Ton"  -> Ton
+    "Nan"  -> Nan
     "Shaa" -> Shaa
-    "Pei" -> Pei
+    "Pei"  -> Pei
 
 -- Hands ---------------------------------------------------------------------
 
-type Hand = { called : [Mentsu], concealed : [Tile] }
+type Hand = HandPublic' { concealed : [Tile]
+                        , pick      : Maybe Tile
+                        , furiten   : Maybe Bool
+                        }
 
-type Mentsu     = { mentsuKind : MentsuKind, tile : Tile, from : Maybe (Shout, Kaze, Tile) }
+type HandPublic = HandPublic' {}
+
+type HandPublic' a =
+   { a
+   | called      : [Mentsu]
+   , discards    : [Tile]
+   , riichi      : Bool
+   , turnDiscard : Maybe Tile
+   }
+
 data MentsuKind = Shuntsu | Koutsu | Kantsu | Jantou
-data Shout      = Pon | Kan | Chi | Ron
+type Mentsu = { mentsuKind : MentsuKind
+              , tile       : Tile
+              , from       : Maybe Shout
+              }
+
+data ShoutKind  = Pon | Kan | Chi | Ron
+type Shout = { shoutKind : ShoutKind
+             , shoutFrom : Kaze
+             , shoutTile : Tile
+             , shoutTo   : [Tile]
+             }
 
 -- Round ---------------------------------------------------------------------
 
 -- This duplicates Hajong.Game.Round.GamePlayer
 type RoundState = 
         { mypos     : Kaze
+        , myhand    : Hand
         , round     : Kaze
         , dealer    : Kaze
         , turn      : Kaze
         , dora      : [Tile]
         , tilesleft : Int
-        , hands     : Dict.Dict Kaze Hand
-        , points    : Dict.Dict Kaze Int
+        , hands     : [(Kaze, HandPublic)]
+        , players   : [(Kaze, String, Int)]
         , results   : Maybe RoundResult
         }
 

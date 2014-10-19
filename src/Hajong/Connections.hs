@@ -60,9 +60,9 @@ instance ToJSON Event where
     toJSON (LoungeInfo lounge)     = atType "lounge"       (loungeJSON lounge)
     toJSON (GameCreated (i,t,n))   = atType "game-created" ["ident" .= i, "topic" .= t, "players" .= n]
     toJSON (JoinGame nth nick)     = atType "game-join"    ["nick" .= nick, "ident" .= nth]
-    toJSON (InGamePrivateEvent ge) = atType "game-event"   ["events" .= ge]
-    toJSON (InGameEvents xs)       = atType "game-event"   ["events" .= xs]
-    toJSON _ = error "toJSON called for an Event that shouldn't be deserialized on server"
+    toJSON (InGamePrivateEvent x)  = atType "game-event"   ["events" .= [x] ]
+    toJSON (InGameEvents xs)       = atType "game-event"   ["events" .= xs  ]
+    toJSON x                       = error $ "toJSON called for an Event that shouldn't be deserialized on server: " ++ show x
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
@@ -79,7 +79,7 @@ gamePlayerJSON x =
     [ "player"    .= _playerPlayer x
     , "gamestate" .= _playerPublic x
     , "hands"     .= object (map (tshow *** toJSON) $ M.toList $ _playerPublicHands x)
-    -- , "players"   .= _playerPlayers x
+    , "players"   .= _playerPlayers x
     , "myhand"    .= _playerMyHand x
     ]
 
@@ -98,16 +98,16 @@ instance ToJSON Kazehai  where
 instance ToJSON Hand where
     toJSON h = object 
         [ "concealed" .= _handConcealed h
-        , "pick" .= _handPick h
-        , "furiten" .= _handFuriten h
-        , "public" .= _handPublic h
+        , "pick"      .= _handPick h
+        , "furiten"   .= _handFuriten h
+        , "public"    .= _handPublic h
         ]
 
 instance ToJSON HandPublic where
     toJSON p = object
-        [ "open" .= _handOpen p
-        , "discards" .= _handDiscards p
-        , "riichi" .= _handRiichi p
+        [ "called"       .= _handOpen p
+        , "discards"     .= _handDiscards p
+        , "riichi"       .= _handRiichi p
         , "turn-discard" .= _handTurnDiscard p
         ]
 
@@ -117,10 +117,10 @@ instance ToJSON Mentsu where
 instance ToJSON MentsuKind where toJSON = toJSON . tshow
 
 instance ToJSON Shout where
-    toJSON (Pon p tile) = atType "pon" ["from" .= p, "tile" .= tile]
-    toJSON (Kan p tile) = atType "pon" ["from" .= p, "tile" .= tile]
-    toJSON (Chi p tile xs) = atType "pon" ["from" .= p, "tile" .= tile, "to" .= xs]
-    toJSON (Ron p tile xs) = atType "pon" ["from" .= p, "tile" .= tile, "to" .= xs]
+    toJSON (Pon p tile) = atType "pon"    ["from" .= p, "tile" .= tile, "to" .= ([] :: [Tile])]
+    toJSON (Kan p tile) = atType "kan"    ["from" .= p, "tile" .= tile, "to" .= ([] :: [Tile])]
+    toJSON (Chi p tile xs) = atType "chi" ["from" .= p, "tile" .= tile, "to" .= xs]
+    toJSON (Ron p tile xs) = atType "ron" ["from" .= p, "tile" .= tile, "to" .= xs]
 
 instance ToJSON Tile where
     toJSON (Suited tk n a) = object [ "type" .= tk, "number" .= n, "aka" .= a ]
@@ -134,7 +134,12 @@ instance ToJSON Honor where
     toJSON (Kazehai k) = toJSON k
 
 instance ToJSON RoundResults where
-    toJSON results = undefined
+    toJSON res = atType getType ["winners" .= winners res, "payers" .= payers res]
+        where
+            getType = case res of RoundTsumo{} -> "tsumo"
+                                  RoundRon{}   -> "ron"
+                                  RoundDraw{}  -> "draw"
+
 
 instance ToJSON RiichiPublic where
     toJSON x = object
@@ -148,10 +153,13 @@ instance ToJSON RiichiPublic where
         ]
 
 gamePairs :: (Int, (Text, Set Nick)) -> Value
-gamePairs (i,(t,n)) = object ["ident" .= i, "topic" .= t, "players" .= n]
+gamePairs (i,(t,n)) = object [ "ident"   .= i
+                             , "topic"   .= t
+                             , "players" .= n
+                             ]
 
 atType, atEvent :: Text -> [(Text, Value)] -> Value
-atType t xs = object ("type" .= t : xs)
+atType  t xs = object ("type"  .= t : xs)
 atEvent t xs = object ("event" .= t : xs)
 
 instance FromJSON Event where
