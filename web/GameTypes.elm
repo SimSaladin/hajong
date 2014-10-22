@@ -4,6 +4,44 @@ import Dict
 import Set (Set)
 import Set
 
+-- GameState -----------------------------------------------------------------
+type GameState = { status   : Status
+                 , mynick   : String
+                 , lounge   : LoungeData
+                 , gameWait : Maybe Int
+                 , mousepos : (Int, Int)
+                 , eventlog : [Event]
+                 , debuglog : [String]
+                 }
+data Status = InLounge | InGame
+
+-- Event ---------------------------------------------------------------------
+
+-- | Communication with server
+data Event = JoinServer  { nick : String } -- ^ Nick
+           | PartServer  { nick : String }
+           | Message     { from : String, content : String } -- ^ from, content
+           | Invalid     { content : String }
+           | LoungeInfo  { lounge : LoungeData }
+           | GameCreated { game : GameInfo }
+           | JoinGame    { ident : Int, nick : String }
+           | InGameEvents [GameEvent]
+
+            -- To server only
+           | CreateGame String
+           | ForceStart  { ident : Int }
+           | InGameAction GameAction
+           | Noop -- TODO work around elm WS lib signal limitations
+
+data GameEvent = RoundPrivateStarts RoundState
+               | RoundPrivateWaitForShout { seconds : Int }
+               | RoundPrivateChange { player : Kaze, hand : Hand }
+               | RoundTurnBegins    { player : Kaze }
+               | RoundTurnAction    { player : Kaze, action : TurnAction }
+               | RoundTurnShouted   { player : Kaze, shout : Shout }
+               | RoundHandChanged   { player : Kaze, hand : Hand }
+               | RoundEnded         RoundResult
+
 -- Lounge --------------------------------------------------------------------
 
 type LoungeData = { idle : Set String
@@ -79,15 +117,6 @@ data EndKind = Tsumo | ByRon | Draw
 data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile
-
-data GameEvent = RoundPrivateStarts RoundState
-               | RoundPrivateWaitForShout { seconds : Int }
-               | RoundPrivateChange { player : Kaze, hand : Hand }
-               | RoundTurnBegins    { player : Kaze }
-               | RoundTurnAction    { player : Kaze, action : TurnAction }
-               | RoundTurnShouted   { player : Kaze, shout : Shout }
-               | RoundHandChanged   { player : Kaze, hand : Hand }
-               | RoundEnded         RoundResult
 
 data GameAction = GameTurn TurnAction
                 | GameShout Shout

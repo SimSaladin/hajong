@@ -1,8 +1,8 @@
 module Lounge where
 
 import GameTypes (..)
-import State (..)
-import Connection as Conn
+import Events
+import Util
 
 import Maybe (maybe)
 import Set
@@ -12,38 +12,36 @@ import Graphics.Input.Field as Field
 
 data ButtonState = Submit | Clear
 
--- Helpers
+-- Helpers ---------------------------------------------------------------------
 
 isSubmit : Signal ButtonState -> Signal Bool
 isSubmit s = (\x -> x == Submit) <~ s
 
-maybeEvent : (a -> Conn.Event) -> Signal (Maybe a) -> Signal Conn.Event
-maybeEvent f s = maybe Conn.Noop f <~ s
+maybeEvent : (a -> Event) -> Signal (Maybe a) -> Signal Event
+maybeEvent f s = maybe Noop f <~ s
 
--- Upstream events --------------------------------
-
-events : Signal Conn.Event
+-- Upstream events -------------------------------------------------------------
+events : Signal Event
 events = merges
-    [ Conn.createGame <~ newGameCreated
-    , maybeEvent (Conn.joinGame << .ident) joined
+    [ Events.createGame <~ newGameCreated
+    , maybeEvent (Events.joinGame << .ident) joined
     , forceStartEvent
     ]
 
--- views ------------------------------------------
-
+-- View ------------------------------------------------------------------------
 type View = { chosenGame  : Maybe GameInfo
             , newGameForm : Element
             }
 
 view : Signal View
 view = View <~ chosenGame.signal
-              ~ newGameForm
+             ~ newGameForm
 
 display : View -> GameState -> Element
 display v gs = doDraw { v | game = gs }
 
 doDraw o = flow down
-    [ maybe (spacer 10 10 |> color red) (waitView << lookupGameInfo o.game) o.game.gameWait
+    [ maybe (spacer 10 10 |> color red) (waitView << Util.lookupGameInfo o.game) o.game.gameWait
     , toText "Lounge" |> bold |> centered
     , blockElement 250 400 (gameListView o)
         `beside` spacer 5 5 `beside`
@@ -92,14 +90,14 @@ gameInfoView {ident,topic,players} =
 
 -- Force start
 forceStart         = input Nothing
-forceStartEvent    = maybeEvent Conn.forceStart forceStart.signal
+forceStartEvent    = maybeEvent Events.forceStart forceStart.signal
 forceStartButton n = button forceStart.handle (Just n) "Force start"
 
 -- New game
-createGame = input Clear
-topicField = input Field.noContent
+createGame     = input Clear
+topicField     = input Field.noContent
 newGameCreated = .string <~ sampleOn (isSubmit createGame.signal) topicField.signal
-topicfs = topicField.signal
+topicfs        = topicField.signal
 newGameForm    = flow down <~ combine
    [ Field.field Field.defaultStyle topicField.handle identity "Topic" <~ topicField.signal
    , constant <| button createGame.handle Submit "Create"
