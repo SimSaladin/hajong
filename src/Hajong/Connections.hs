@@ -77,10 +77,10 @@ instance ToJSON GameEvent where
 
 gamePlayerJSON x =
     [ "player"    .= _playerPlayer x
-    , "gamestate" .= _playerPublic x
-    , "hands"     .= object (map (tshow *** toJSON) $ M.toList $ _playerPublicHands x)
-    , "players"   .= _playerPlayers x
+    , "hands"     .= map (toJSON *** toJSON) (M.toList $ _playerPublicHands x)
     , "myhand"    .= _playerMyHand x
+    , "players"   .= _playerPlayers x
+    , "gamestate" .= _playerPublic x
     ]
 
 loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
@@ -90,18 +90,20 @@ instance ToJSON TurnAction where
     toJSON (TurnTileDraw w mt)   = atType "draw" ["wanpai" .= w, "tile" .= mt]
     toJSON (TurnAnkan t)         = atType "ankan" ["tile" .= t]
 
-instance ToJSON Player where toJSON (Player k) = toJSON k
+instance ToJSON Player where
+    toJSON (Player k) = toJSON k
 
 instance ToJSON Kazehai  where
     toJSON = toJSON . tshow
 
 instance ToJSON Hand where
-    toJSON h = object 
-        [ "concealed" .= _handConcealed h
-        , "pick"      .= _handPick h
-        , "furiten"   .= _handFuriten h
-        , "public"    .= _handPublic h
-        ]
+    toJSON h = Object $
+        (\(Object o) -> o) (object
+            [ "concealed" .= _handConcealed h
+            , "pick"      .= _handPick h
+            , "furiten"   .= _handFuriten h
+            ])
+        <> (\(Object o) -> o) (toJSON (_handPublic h))
 
 instance ToJSON HandPublic where
     toJSON p = object

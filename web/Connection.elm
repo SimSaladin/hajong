@@ -202,9 +202,9 @@ parseHand v =
    in
       case v of
          Object o ->
-            { concealed   = "cocealed" .: o |> withArray parseTile
-            , pick        = "pick" .: o |> parseTileMaybe
-            , furiten     = "furiten"  .: o |> parseBoolMaybe
+            { concealed   = "concealed" .: o |> withArray parseTile
+            , pick        = "pick"      .: o |> parseTileMaybe
+            , furiten     = "furiten"   .: o |> parseBoolMaybe
             , called      = x.called
             , discards    = x.discards
             , riichi      = x.riichi
@@ -213,10 +213,10 @@ parseHand v =
 
 parsePublicHand : Value -> HandPublic
 parsePublicHand (Object o) = 
-   { called      = "called"      .: o |> withArray parseMentsu
-   , discards    = "discards"    .: o |> withArray parseTile
-   , riichi      = "riichi"      .: o |> parseBool
-   , turnDiscard = "turnDiscard" .: o |> parseTileMaybe
+   { called      = "called"       .: o |> withArray parseMentsu
+   , discards    = "discards"     .: o |> withArray parseTile
+   , riichi      = "riichi"       .: o |> parseBool
+   , turnDiscard = "turn-discard" .: o |> parseTileMaybe
    }
 
 parsePlayerHand : Value -> (Kaze, HandPublic)
