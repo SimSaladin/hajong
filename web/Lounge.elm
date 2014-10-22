@@ -30,8 +30,7 @@ events = merges
 
 -- View ------------------------------------------------------------------------
 type View = { chosenGame  : Maybe GameInfo
-            , newGameForm : Element
-            }
+            , newGameForm : Element }
 
 view : Signal View
 view = View <~ chosenGame.signal

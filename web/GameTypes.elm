@@ -5,19 +5,18 @@ import Set (Set)
 import Set
 
 -- GameState -----------------------------------------------------------------
-type GameState = { status   : Status
-                 , mynick   : String
-                 , lounge   : LoungeData
-                 , gameWait : Maybe Int
-                 , mousepos : (Int, Int)
-                 , eventlog : [Event]
-                 , debuglog : [String]
+type GameState = { status     : Status
+                 , mynick     : String
+                 , lounge     : LoungeData
+                 , gameWait   : Maybe Int
+                 , roundState : Maybe RoundState
+                 , mousepos   : (Int, Int)
+                 , eventlog   : [Event]
+                 , debuglog   : [String]
                  }
 data Status = InLounge | InGame
 
 -- Event ---------------------------------------------------------------------
-
--- | Communication with server
 data Event = JoinServer  { nick : String } -- ^ Nick
            | PartServer  { nick : String }
            | Message     { from : String, content : String } -- ^ from, content
@@ -39,11 +38,10 @@ data GameEvent = RoundPrivateStarts RoundState
                | RoundTurnBegins    { player : Kaze }
                | RoundTurnAction    { player : Kaze, action : TurnAction }
                | RoundTurnShouted   { player : Kaze, shout : Shout }
-               | RoundHandChanged   { player : Kaze, hand : Hand }
+               | RoundHandChanged   { player : Kaze, hand : HandPublic }
                | RoundEnded         RoundResult
 
 -- Lounge --------------------------------------------------------------------
-
 type LoungeData = { idle : Set String
                   , games : [GameInfo]
                   }
@@ -52,7 +50,6 @@ type GameInfo = { ident : Int, topic : String, players : Set String}
 defaultLounge = { idle = Set.empty, games = [] }
 
 -- Tiles ---------------------------------------------------------------------
-
 data Tile   = Suited Suit Int Bool | Honor Honor
 data Suit   = Man | Pin | Sou
 data Honor  = Kazehai Kaze | Sangenpai Sangen
@@ -66,7 +63,6 @@ readKaze x = case x of
     "Pei"  -> Pei
 
 -- Hands ---------------------------------------------------------------------
-
 type Hand = HandPublic' { concealed : [Tile]
                         , pick      : Maybe Tile
                         , furiten   : Maybe Bool
@@ -96,7 +92,6 @@ type Shout = { shoutKind : ShoutKind
              }
 
 -- Round ---------------------------------------------------------------------
-
 -- This duplicates Hajong.Game.Round.GamePlayer
 type RoundState = 
         { mypos     : Kaze
@@ -109,11 +104,13 @@ type RoundState =
         , hands     : [(Kaze, HandPublic)]
         , players   : [(Kaze, String, Int)]
         , results   : Maybe RoundResult
+        , actions   : [(Kaze, TurnAction)]
         }
 
 type RoundResult = { endKind : EndKind, winners : [Kaze], payers : [Kaze] }
 data EndKind = Tsumo | ByRon | Draw
 
+-- Actions -------------------------------------------------------------------
 data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile

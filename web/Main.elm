@@ -56,6 +56,7 @@ defaultGame = { status = InLounge
               , mynick = "mynick" -- TODO
               , lounge = defaultLounge
               , gameWait = Nothing
+              , roundState = Nothing
               , mousepos = (0,0)
               , eventlog = []
               , debuglog = []
@@ -111,8 +112,8 @@ upstream = merges
 
 display : GameState -> Element -> Element
 display game view = flow down
-   [ container 800 300 midTop view
-   , container 800 300 bottomRight <| logView game
+   [ view
+   , logView game
    ]
 
 -- main -------------------------------------------------------

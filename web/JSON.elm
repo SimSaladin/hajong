@@ -115,7 +115,7 @@ parseGameEvent (Object o) = case "event" .: o |> parseString of
     "turn-changed" -> RoundTurnBegins          <| hasPlayer o { }
     "turn-action"  -> RoundTurnAction          <| hasPlayer o { action  = "action"  .: o |> parseTurnAction }
     "shout"        -> RoundTurnShouted         <| hasPlayer o { shout   = "shout"   .: o |> parseShout }
-    "hand"         -> RoundHandChanged         <| hasPlayer o { hand    = "hand"    .: o |> parseHand }
+    "hand"         -> RoundHandChanged         <| hasPlayer o { hand    = "hand" .: o |> parsePublicHand }
     "end"          -> RoundEnded               <| fromJust <| parseResults <| "results" .: o
 
 -- * Hand -------------------------------------------------------
@@ -194,6 +194,7 @@ parseRoundState o = case "gamestate" .: o of
         , dora      = "dora"       .: game |> withArray parseTile
         , tilesleft = "tiles-left" .: game |> parseInt
         , results   = "results"    .: game |> parseResults
+        , actions   = [] -- TODO receive actions?
         }
 
 parsePlayer : Value -> (Kaze, String, Int)
