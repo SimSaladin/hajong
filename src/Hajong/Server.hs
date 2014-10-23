@@ -22,7 +22,7 @@ import Hajong.Connections
 import Hajong.Worker
 import Mahjong
 
--- * Common ServerState
+-- * ServerState
 
 data ServerState = ServerState
                  { _serverConnections :: Map Nick (Client, Maybe Int)

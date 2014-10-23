@@ -10,6 +10,7 @@
 module Mahjong
     ( module Mahjong.Mechanics
     , module Mahjong.Round
+    , module Mahjong.State
     , module Mahjong.Hand
     , module Mahjong.Hand.Mentsu
     , module Mahjong.Hand.Algo
@@ -18,6 +19,7 @@ module Mahjong
 
 import Mahjong.Mechanics
 import Mahjong.Round
+import Mahjong.State
 import Mahjong.Hand
 import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Algo

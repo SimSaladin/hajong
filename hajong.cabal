@@ -25,6 +25,7 @@ library
                      , Mahjong
                      , Mahjong.Tiles
                      , Mahjong.Round
+                     , Mahjong.State
                      , Mahjong.Mechanics
                      , Mahjong.Hand
                      , Mahjong.Hand.Mentsu

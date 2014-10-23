@@ -13,6 +13,10 @@
 ------------------------------------------------------------------------------
 module Hajong.Connections where
 
+------------------------------------------------------------------------------
+import           Mahjong
+
+------------------------------------------------------------------------------
 import           Prelude hiding ((.=))
 import qualified Data.Map as M
 import           Control.Monad.Trans.Either
@@ -20,22 +24,12 @@ import qualified Network.WebSockets         as WS
 import           Data.Aeson
 import           Data.Aeson.Types (Pair)
 
---------------------------------------------------------
-import Mahjong
+------------------------------------------------------------------------------
 
 (?) :: Monad m => Maybe a -> e -> EitherT e m a
 mr ? err = maybe (left err) return mr
 
--- * Events 'n stuff
-
-type Nick = Text
-
-data Lounge = Lounge
-            { _loungeNicksIdle :: Set Nick
-            , _loungeGames :: Map Int (Text, Set Nick)
-            } deriving (Show, Read)
-
-makeLenses ''Lounge
+-- * Event
 
 data Event = JoinServer Nick
            | PartServer Nick
@@ -53,6 +47,86 @@ data Event = JoinServer Nick
            | InGameEvents [GameEvent]
            | InGameAction GameAction
            deriving (Show, Read)
+
+-- * Clients
+
+type Nick = Text
+
+data Lounge = Lounge
+            { _loungeNicksIdle :: Set Nick
+            , _loungeGames :: Map Int (Text, Set Nick)
+            } deriving (Show, Read)
+
+makeLenses ''Lounge
+
+-- | NOTE: Client equality is decided by getNick exclusively, and show
+-- = unpack . getNick.
+data Client = Client
+            { getNick :: Nick
+            , isReal  :: Bool
+            , isReady :: Bool
+            , unicast :: MonadIO m => Event -> m ()
+            , receive :: MonadIO m => m Event
+            }
+
+instance Eq Client where a == b = getNick a == getNick b
+instance Ord Client where a <= b = getNick a <= getNick b
+instance Show Client where show = unpack . getNick
+
+dummyClient :: Nick -> Client
+dummyClient nick = Client nick False False (const (return ())) (error "called receive of dummy Client")
+
+-- * Sending to client(s)
+
+multicast :: MonadIO m => GameState Client -> Event -> m ()
+multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
+    -- TODO Just move this to server already
+
+unicastError :: MonadIO m => Client -> Text -> m ()
+unicastError c = unicast c . Invalid
+
+clientEither :: MonadIO m => Client -> Either Text a -> (a -> m ()) -> m ()
+clientEither client (Left err) _ = unicastError client err
+clientEither _ (Right a) f  = f a
+
+-- * Web socket specific
+
+websocketClient :: Nick -> WS.Connection -> Client
+websocketClient nick conn = Client nick True True
+    (liftIO . WS.sendTextData conn)
+    (liftIO $ WS.receiveData conn)
+
+instance WS.WebSocketsData Event where
+    toLazyByteString   = encode
+    fromLazyByteString = fromMaybe (Invalid "Malformed event") . decode
+
+-- ToJSON boilerplate - TODO derive us instead? ------------------------------
+
+-- Helpers -------------------------------------------------------------------
+
+atType, atEvent :: Text -> [(Text, Value)] -> Value
+atType  t xs = object ("type"  .= t : xs)
+atEvent t xs = object ("event" .= t : xs)
+
+gamePlayerJSON :: GamePlayer -> [Pair]
+gamePlayerJSON x =
+    [ "player"    .= _playerPlayer x
+    , "hands"     .= map (toJSON *** toJSON) (M.toList $ _playerPublicHands x)
+    , "myhand"    .= _playerMyHand x
+    , "players"   .= _playerPlayers x
+    , "gamestate" .= _playerPublic x
+    ]
+
+loungeJSON :: Lounge -> [Pair]
+loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
+
+gamePairs :: (Int, (Text, Set Nick)) -> Value
+gamePairs (i,(t,n)) = object [ "ident"   .= i
+                             , "topic"   .= t
+                             , "players" .= n
+                             ]
+
+-- Instances -----------------------------------------------------------------
 
 instance ToJSON Event where
     toJSON (ClientIdentity nick)   = atType "identity"     ["nick" .= nick]
@@ -77,18 +151,6 @@ instance ToJSON GameEvent where
         RoundTurnShouted kaze shout     -> atEvent "shout"        ["player" .= kaze, "shout" .= shout]
         RoundHandChanged kaze hand      -> atEvent "hand"         ["player" .= kaze, "hand" .= hand]
         RoundEnded results              -> atEvent "end"          ["results" .= results]
-
-gamePlayerJSON :: GamePlayer -> [Pair]
-gamePlayerJSON x =
-    [ "player"    .= _playerPlayer x
-    , "hands"     .= map (toJSON *** toJSON) (M.toList $ _playerPublicHands x)
-    , "myhand"    .= _playerMyHand x
-    , "players"   .= _playerPlayers x
-    , "gamestate" .= _playerPublic x
-    ]
-
-loungeJSON :: Lounge -> [Pair]
-loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard r t) = atType "discard" ["riichi" .= r, "tile" .= t]
@@ -147,7 +209,6 @@ instance ToJSON RoundResults where
                                   RoundRon{}   -> "ron"
                                   RoundDraw{}  -> "draw"
 
-
 instance ToJSON RiichiPublic where
     toJSON x = object
         [ "dora"       .= _riichiDora x
@@ -159,16 +220,7 @@ instance ToJSON RiichiPublic where
         , "results"    .= _riichiResults x
         ]
 
-gamePairs :: (Int, (Text, Set Nick)) -> Value
-gamePairs (i,(t,n)) = object [ "ident"   .= i
-                             , "topic"   .= t
-                             , "players" .= n
-                             ]
-
-atType, atEvent :: Text -> [(Text, Value)] -> Value
-atType  t xs = object ("type"  .= t : xs)
-atEvent t xs = object ("event" .= t : xs)
-
+-- TODO This is used by CLI?
 instance FromJSON Event where
     parseJSON (Object o) = do
         t <- o .: "type"
@@ -186,45 +238,4 @@ instance FromJSON Event where
             _              -> pure (Invalid ("Unknown or unsupported type: " <> t))
     parseJSON _ = pure (Invalid "Top-level object expected")
 
--- * Clients
 
-data Client = Client
-            { getNick :: Nick
-            , isReal  :: Bool
-            , isReady :: Bool
-            , unicast :: MonadIO m => Event -> m ()
-            , receive :: MonadIO m => m Event
-            }
-
-instance Eq Client where a == b = getNick a == getNick b
-instance Ord Client where a <= b = getNick a <= getNick b
-instance Show Client where show = unpack . getNick
-
-dummyClient :: Nick -> Client
-dummyClient nick = Client nick False False (const (return ())) (error "called receive of dummy Client")
-
--- * Sending to client(s)
-
-multicast :: MonadIO m => GameState Client -> Event -> m ()
-multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
-    -- TODO Just move this to server already
-
-unicastError :: MonadIO m => Client -> Text -> m ()
-unicastError c = unicast c . Invalid
-
-clientEither :: MonadIO m => Client -> Either Text a -> (a -> m ()) -> m ()
-clientEither client (Left err) _ = unicastError client err
-clientEither _ (Right a) f  = f a
-
--- * Web socket specific
-
-websocketClient :: Nick -> WS.Connection -> Client
-websocketClient nick conn = Client nick True True
-    (\e -> do print e >> print (encode e) -- TODO
-              liftIO . WS.sendTextData conn $ encode e)
-    (liftIO $ fromMaybe (Invalid "No parse") . decode <$> WS.receiveData conn)
-
-instance WS.WebSocketsData Event where
-    -- XXX: This should probably be json instead in the future.
-    toLazyByteString   = WS.toLazyByteString . tshow
-    fromLazyByteString = fromMaybe (Invalid "Malformed event") .  readMay . asText . WS.fromLazyByteString

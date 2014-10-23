@@ -39,6 +39,7 @@ default (Text)
 
 -- * Types
 
+--  TODO This could probably use ContT.
 newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerState IO) a }
                    deriving ( Functor, Applicative, Monad, MonadIO
                             , MonadLogger, MonadReader WorkerState)
@@ -205,6 +206,7 @@ workerProcessTurnAction ta c = do
 -- | "workerRace n ma mb" races between "ma" and "threadDelay n" (execute mb)
 workerRace :: Int -> Worker a -> Worker a -> Worker a
 workerRace secs ma mb = do
+    $logInfo $ "Worker race - timeout in " <> tshow secs  <> " seconds."
     s   <- view id
     res <- liftIO $ runWCont s ma `race` threadDelay (secs * 1000000)
     either return (const mb) res
@@ -216,8 +218,7 @@ waitPlayersAndBegin :: WCont
 waitPlayersAndBegin = $logInfo "Waiting for players" >> go
     where
         go = rview gameVar >>= maybe (takeInput >>= runOtherAction >> go)
-                                    (liftIO >=> beginRound)
-                                    . maybeNextRound isReady
+                                     (liftIO >=> beginRound) . maybeNextRound isReady
 
 beginRound :: GameState Client -> WCont
 beginRound gs = do
@@ -232,7 +233,6 @@ beginRound gs = do
 -- automatically end the turn with a default action.
 turnActionOrTimeout :: WCont
 turnActionOrTimeout = do
-    $logInfo $ "Waiting for a turn action, or timeout in " <> show secs  <> " seconds."
 
     -- TODO notify of the timeout to client too
 
