@@ -47,6 +47,7 @@ withArray f (Array xs) = map f xs
 -- ** Event ------------------------------------------------------
 parseEvent : Value -> Event
 parseEvent (Object o) = case "type" .: o |> parseString of
+    "identity"     -> Identity     <| hasNick o {}
     "join"         -> JoinServer   <| hasNick o {}
     "part"         -> PartServer   <| hasNick o {}
     "msg"          -> Message      <| hasContent o <| hasFrom o {}

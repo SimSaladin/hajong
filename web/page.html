@@ -3,16 +3,38 @@
   <head>
     <title>Embedding Elm in HTML!</title>
     <script type="text/javascript" src="http://elm-lang.org/elm-runtime.js"></script>
+    <script type="text/javascript" src="/debugger.js"></script>
     <script type="text/javascript" src="build/Main.js"></script>
   </head>
  
   <body>
-    <div id="game" style="height:100%"></div>
+     <div id="game" style="height:100%"></div>
   </body>
  
   <script type="text/javascript">
     var mainDiv = document.getElementById('game');
-    var game = Elm.embed(Elm.Main, mainDiv, { mynick : "mynick" });
+
+    var game = Elm.embed(Elm.Main, mainDiv, { downstream : "" });
+
+    // var game = Elm.debugFullscreen(Elm.Main, "Main.elm");
+
+    var socket = new WebSocket("ws://localhost:9160");
+
+    socket.onmessage = function (e) {
+       console.log("in ", JSON.parse(e.data));
+       game.ports.downstream.send(e.data);
+    }
+
+    socket.onopen = function () {
+       game.ports.upstream.subscribe(function(e) {
+          console.log("out", JSON.parse(e));
+          socket.send(e);
+       });
+
+       mynick = localStorage.getItem("nick");
+
+       socket.send( '{ "type" : "join", "nick": "' + mynick + '" }' );
+    }
 
   </script>
  

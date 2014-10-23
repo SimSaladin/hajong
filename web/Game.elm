@@ -9,7 +9,7 @@ display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
    Just rs -> flow down
       [ asText "In a game"
-      , asText <| "I am " ++ show rs.mypos
+      , asText <| "I am a..." ++ show rs.mypos
       , asText <| "Round is " ++ show rs.round
       , asText <| "dealer is " ++ show rs.dealer
       , asText <| "My hand: " ++ show rs.myhand

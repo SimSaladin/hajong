@@ -73,6 +73,9 @@ addClient client f = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) g
         go s c | isNothing s && f c = (Just (), client)
                | otherwise          = (s, c)
 
+setClient :: Eq playerID => playerID -> Player -> GameState playerID -> GameState playerID
+setClient client player = gamePlayers.at player .~ Just client
+
 removeClient :: Eq playerID => playerID -> GameState playerID -> Maybe (GameState playerID)
 removeClient client gs = do
     p <- clientToPlayer client gs

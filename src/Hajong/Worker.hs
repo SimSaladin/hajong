@@ -18,26 +18,23 @@
 --  to end his turn).
 ------------------------------------------------------------------------------
 module Hajong.Worker
-    ( WorkerState(..), WorkerInput(WorkerClientAction)
+    ( WorkerState(..)
+    , WorkerInput(..)
     , startWorker
-    , workerAddPlayer
-    , workerPartPlayer
-    , workerForceStart
     ) where
 
-import           Data.Maybe (fromJust)
 import           Control.Concurrent
 import           Control.Monad.Trans.Either
 import           Control.Monad.Logger
 import           Control.Concurrent.Async
-import           Control.Monad.Reader       (runReaderT, ReaderT)
+import           Data.Maybe (fromJust)
 import qualified Data.List as L
+import           System.Log.FastLogger
 
-----------------------------------------------
-import Hajong.Connections hiding (multicast)
+--------------------------------------------------------------
+import           Hajong.Connections hiding (multicast)
 import qualified Hajong.Connections as Con (multicast)
-import Mahjong
-
+import           Mahjong
 default (Text)
 
 -- * Types
@@ -48,15 +45,15 @@ newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerState IO) a }
 
 -- type WorkerState = (TVar (GameState Client), TMVar WorkerInput)
 data WorkerState = WorkerState
-                 { _gameVar :: TVar (GameState Client)
+                 { _gameVar  :: TVar (GameState Client)
                  , _inputVar :: TMVar WorkerInput
-                 , _loggerFun :: forall a. LoggingT (ReaderT WorkerState IO) a -> (ReaderT WorkerState IO) a
-                    -- TODO supply only a LoggerSet or something, instead
-                    -- of unwrapping LoggingT's every time in threads!
+                 , loggerSet :: LoggerSet
                  }
 
-data WorkerInput = WorkerAction (Worker ())
-                 | WorkerClientAction Client GameAction
+data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
+                 | WorkerPartPlayer Client (GameState Client -> IO ())
+                 | WorkerGameAction Client GameAction
+                 | WorkerForceStart
 
 type WCont = Worker ()
 
@@ -65,44 +62,20 @@ makeLenses ''WorkerState
 -- * Entry points
 
 -- | Fork a new worker thread
-startWorker :: (m ~ ReaderT WorkerState IO)
-            => TMVar WorkerInput -> GameState Client -> (forall a. LoggingT m a -> m a)
+startWorker :: TMVar WorkerInput
+            -> GameState Client
+            -> LoggerSet
             -> IO ThreadId
 startWorker input gs logger = do
     gsvar <- newTVarIO gs
     forkIO $ runWCont (WorkerState gsvar input logger) waitPlayersAndBegin
 
--- ** Injecting to worker
-
-workerAddPlayer :: Client -> (GameState Client -> IO ()) -> WorkerInput
-workerAddPlayer client callback = WorkerAction $ do
-    gsv <- view gameVar
-    e_gs <- atomically $ runEitherT $ do
-        gs  <- lift $ readTVar gsv
-        gs' <- addClient client (not . isReal) gs ? "Game is full" 
-        lift $ writeTVar gsv gs'
-        return gs'
-
-    clientEither client e_gs (liftIO . callback)
-
-workerPartPlayer :: Client -> (GameState Client -> IO ()) -> WorkerInput
-workerPartPlayer client callback = WorkerAction $ do
-    gsv <- view gameVar
-    mgs <- atomically $ do
-        gs  <- readTVar gsv
-        let mgs = removeClient client gs
-        maybe (return ()) (writeTVar gsv) mgs
-        return mgs
-    maybe (return ()) (liftIO . callback) mgs
-
-workerForceStart :: WorkerInput
-workerForceStart = WorkerAction $
-    rmodify gameVar $ over (gamePlayers.each) (\c -> c { isReady = True })
-
 -- * Unwrap monads
 
 runWCont :: WorkerState -> Worker a -> IO a
-runWCont st cont = runReaderT (st ^. loggerFun $ runWorker cont) st
+runWCont st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
+    where
+        logger loc src level = pushLogStr (loggerSet st) . defaultLogStr loc src level
 
 workerRoundM :: RoundM' a -> Worker (Either Text (a, Worker ()))
 workerRoundM ma = liftM (fmap tores . runRoundM ma) $ rview gameVar
@@ -151,7 +124,6 @@ takeInputTurnAction = workerAction'
 
 -- * Helper combinators
 
--- | Combinator to processing a WorkerAction.
 workerAction' :: (TurnAction -> Client -> Worker a) -- ^ TurnAction
               -> (Client -> Shout -> Worker a) -- ^ Shout
               -> (Client -> Worker a) -- ^ GameDontCare
@@ -160,11 +132,43 @@ workerAction' :: (TurnAction -> Client -> Worker a) -- ^ TurnAction
 workerAction' f_ta f_sh f_dc f_ac = do
     wi <- takeInput
     case wi of
-        WorkerAction m          -> m >> f_ac
-        WorkerClientAction c ga -> case ga of
+        WorkerGameAction c ga -> case ga of
             GameTurn ta     -> f_ta ta c
             GameShout shout -> f_sh c shout
             GameDontCare    -> f_dc c
+        _ -> runOtherAction wi >> f_ac
+
+runOtherAction :: WorkerInput -> Worker ()
+runOtherAction wi = case wi of
+    WorkerAddPlayer client callback -> do
+        gsv  <- view gameVar
+        e_gs <- atomically $ runEitherT $ do
+            gs  <- lift $ readTVar gsv
+            gs' <- case clientToPlayer client gs of
+                Nothing -> addClient client (not . isReal) gs ? "Game is full" 
+                Just p  -> return $ setClient client p gs
+            lift $ writeTVar gsv gs'
+            return gs'
+        clientEither client e_gs (liftIO . callback)
+
+    WorkerPartPlayer client callback -> do
+        gsv <- view gameVar
+
+        mgs <- atomically $ do
+            gs <- readTVar gsv
+            case clientToPlayer client gs of
+                Just p  -> do
+                    let gs' = setClient (dummyClient $ getNick client ++ " (n/a)") p gs
+                    writeTVar gsv gs'
+                    return (Just gs')
+                Nothing ->
+                    return Nothing
+
+        maybe ($logError $ "Parting client " ++ getNick client ++ ", but it doesn't exist.")
+              (liftIO . callback) mgs
+
+    WorkerForceStart     -> rmodify gameVar $ over (gamePlayers.each) (\c -> c { isReady = True })
+    WorkerGameAction _ _ -> $logWarn "WorkerGameAction when other was expected"
 
 -- | Attempt to apply the TurnAction. Return the continuation if it
 -- succeeded.
@@ -197,18 +201,15 @@ workerRace n a b = do
 
 -- | Begin the game including the first round when all players have joined.
 waitPlayersAndBegin :: WCont
-waitPlayersAndBegin = logInfoN "Waiting for players" >> go
+waitPlayersAndBegin = $logInfo "Waiting for players" >> go
     where
-        go = rview gameVar >>= maybe (takeInput >>= process >> go)
+        go = rview gameVar >>= maybe (takeInput >>= runOtherAction >> go)
                                     (liftIO >=> beginRound)
                                     . maybeNextRound isReady
 
-        process (WorkerAction m) = m
-        process _                = logWarnN "Got ingame action when not in game"
-
 beginRound :: GameState Client -> WCont
 beginRound gs = do
-    logInfoN "Round begins"
+    $logInfo "Round begins"
     rswap gameVar gs >> workerRoundM startRound >>= either (const $ error "startRound failed. (The Impossible happened)") snd
     turnActionOrTimeout
 
@@ -229,15 +230,15 @@ turnActionOrTimeout =
 -- | Advance turn to the next player.
 advanceTurn :: WCont
 advanceTurn = do
-    logDebugN "Advancing turn after a discard"
-    workerRoundM advanceAfterDiscard >>= either logErrorN go -- TODO Info client too
+    $logDebug "Advancing turn after a discard"
+    workerRoundM advanceAfterDiscard >>= either $logError go -- TODO Info client too
     where
-        go (r, ma) = ma >> maybe (logDebugN "New turn begins" >> turnActionOrTimeout) endRound r
+        go (r, ma) = ma >> maybe ($logDebug "New turn begins" >> turnActionOrTimeout) endRound r
 
 advanceWithShout :: Player -> Shout -> WCont
 advanceWithShout p sh = do
-    logDebugN "Advancing with a shout"
-    workerRoundM (runShout sh p) >>= either logErrorN (go . snd)
+    $logDebug "Advancing with a shout"
+    workerRoundM (runShout sh p) >>= either $logError (go . snd)
     where
         go ma = ma >> turnActionOrTimeout
 
@@ -251,7 +252,7 @@ advanceWithShout p sh = do
 --      limit reached: advance to next turn.
 waitForShouts :: [Player] -> WCont
 waitForShouts players = do
-    logDebugN "Waiting for shouts after the discard"
+    $logDebug "Waiting for shouts after the discard"
     gs  <- rview gameVar
     shv <- liftIO newEmptyTMVarIO
 
@@ -287,9 +288,9 @@ waitForShouts players = do
 -- | The round ended.
 endRound :: RoundResults -> WCont
 endRound results = do
-    logInfoN $ "Round ended (" ++ tshow results ++ ")"
+    $logInfo $ "Round ended (" ++ tshow results ++ ")"
     maybe endGame (liftIO >=> beginRound) . maybeNextRound isReady =<< rview gameVar
 
 endGame :: WCont
-endGame = logInfoN "Game ended, stopping worker."
+endGame = $logInfo "Game ended, stopping worker."
     -- TODO: Inform the main server process?

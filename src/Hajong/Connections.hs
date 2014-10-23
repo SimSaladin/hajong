@@ -18,6 +18,7 @@ import qualified Data.Map as M
 import           Control.Monad.Trans.Either
 import qualified Network.WebSockets         as WS
 import           Data.Aeson
+import           Data.Aeson.Types (Pair)
 
 --------------------------------------------------------
 import Mahjong
@@ -36,15 +37,16 @@ data Lounge = Lounge
 
 makeLenses ''Lounge
 
-data Event = JoinServer Text -- ^ Nick
-           | PartServer Text
-           | Message Text Text -- ^ from, content
+data Event = JoinServer Nick
+           | PartServer Nick
+           | ClientIdentity Nick
+           | Message Nick Text -- ^ from, content
            | Invalid Text
 
            | LoungeInfo Lounge
-           | GameCreated (Int, Text, Set Nick) -- name, nicks
+           | GameCreated (Int, Text, Set Nick) -- id, name, nicks
            | CreateGame Text
-           | JoinGame Int Text -- ^ Game lounge
+           | JoinGame Int Nick -- ^ game num, nick
            | ForceStart Int
 
            | InGamePrivateEvent GameEvent
@@ -53,6 +55,7 @@ data Event = JoinServer Text -- ^ Nick
            deriving (Show, Read)
 
 instance ToJSON Event where
+    toJSON (ClientIdentity nick)   = atType "identity"     ["nick" .= nick]
     toJSON (JoinServer nick)       = atType "join"         ["nick" .= nick]
     toJSON (PartServer nick)       = atType "part"         ["nick" .= nick]
     toJSON (Message sender cnt)    = atType "msg"          ["from" .= sender, "content" .= cnt]
@@ -75,6 +78,7 @@ instance ToJSON GameEvent where
         RoundHandChanged kaze hand      -> atEvent "hand"         ["player" .= kaze, "hand" .= hand]
         RoundEnded results              -> atEvent "end"          ["results" .= results]
 
+gamePlayerJSON :: GamePlayer -> [Pair]
 gamePlayerJSON x =
     [ "player"    .= _playerPlayer x
     , "hands"     .= map (toJSON *** toJSON) (M.toList $ _playerPublicHands x)
@@ -83,6 +87,7 @@ gamePlayerJSON x =
     , "gamestate" .= _playerPublic x
     ]
 
+loungeJSON :: Lounge -> [Pair]
 loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
 
 instance ToJSON TurnAction where
@@ -178,8 +183,7 @@ instance FromJSON Event where
             "game-action"  -> InGameAction       <$> undefined
             "game-create"  -> CreateGame         <$> o .: "topic"
             "game-fstart"  -> ForceStart         <$> o .: "ident"
-            "lounge"       -> LoungeInfo         <$> undefined
-            _              -> pure (Invalid ("Unknown type: " <> t))
+            _              -> pure (Invalid ("Unknown or unsupported type: " <> t))
     parseJSON _ = pure (Invalid "Top-level object expected")
 
 -- * Clients
@@ -196,8 +200,8 @@ instance Eq Client where a == b = getNick a == getNick b
 instance Ord Client where a <= b = getNick a <= getNick b
 instance Show Client where show = unpack . getNick
 
-dummyClient :: Client
-dummyClient = Client "dummy" False False (const (return ())) undefined
+dummyClient :: Nick -> Client
+dummyClient nick = Client nick False False (const (return ())) (error "called receive of dummy Client")
 
 -- * Sending to client(s)
 

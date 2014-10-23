@@ -1,3 +1,9 @@
-- Implement client in-game actions
-- Split the Event from Hajong.Server into client->server nad server->client
-- Implement Hajong.Client.CLI handleRoundEvent
+[ ] (web) in-game actions
+[ ] (web) in-game view
+[ ] (web) retain nick on refresh
+[ ] (web) re-enter game on refresh
+[ ] (server) worker logging
+[ ] (server) games/worker status query
+[ ] (connections) revisit json instances - possibly derive?
+[ ] (docs) write json channel spec
+[ ] (web) nick set/change dialog

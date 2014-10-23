@@ -19,6 +19,7 @@ data Status = InLounge | InGame
 -- Event ---------------------------------------------------------------------
 data Event = JoinServer  { nick : String } -- ^ Nick
            | PartServer  { nick : String }
+           | Identity    { nick : String }
            | Message     { from : String, content : String } -- ^ from, content
            | Invalid     { content : String }
            | LoungeInfo  { lounge : LoungeData }

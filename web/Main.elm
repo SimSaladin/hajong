@@ -4,12 +4,14 @@ import Lounge
 import Game
 import Events
 import Util
-import Connection
+-- import Connection
 import GameTypes (..)
+import JSON (fromJSON_Event, toJSON_Event)
 
 import Set
 import Mouse
 import Text
+import Json
 import Graphics.Input.Field as Field
 
 data GameInput = InputDelta { userInput : UserInput }
@@ -41,25 +43,31 @@ eventView ev = case ev of
 
 -- view: lounge -----------------------------------------------
 
--- nick hack --------------------------------------------------
-port mynick : Signal String
-
 -- main input -------------------------------------------------
+
+port downstream : Signal String
+
 gameInput : Signal GameInput
 gameInput = merge
-    (InputEvent <~ Connection.connect upstream)
-    (lift (\x -> InputDelta { userInput = x}) userInput)
+    (InputEvent << fromJSON_Event <~ downstream)
+    ((\x -> InputDelta { userInput = x }) <~ userInput)
+
+-- upstream signal --------------------------------------------
+
+port upstream : Signal String
+port upstream = (toJSON_Event >> Json.toString "") <~ merges
+    [ Lounge.events ]
 
 -- start state ------------------------------------------------
 defaultGame : GameState
-defaultGame = { status = InLounge
-              , mynick = "mynick" -- TODO
-              , lounge = defaultLounge
-              , gameWait = Nothing
+defaultGame = { status     = InLounge
+              , mynick     = ""
+              , lounge     = defaultLounge
+              , gameWait   = Nothing
               , roundState = Nothing
-              , mousepos = (0,0)
-              , eventlog = []
-              , debuglog = []
+              , mousepos   = (0,0)
+              , eventlog   = []
+              , debuglog   = []
               }
 
 -- logic ------------------------------------------------------
@@ -73,21 +81,22 @@ stepGame gameInput gs = case gameInput of
 
 stepEvent : Event -> GameState -> GameState
 stepEvent event gameState = case event of
-        JoinServer {nick}   -> { gameState | lounge <- addIdle nick gameState.lounge }
-        PartServer {nick}   -> { gameState | lounge <- deleteNick nick gameState.lounge }
-        -- Message {from,content} ->
-        -- Invalid {content} ->
-        LoungeInfo {lounge} -> { gameState | lounge <- lounge }
-        GameCreated {game}  -> { gameState | lounge <- addGame game gameState.lounge }
-        JoinGame {nick, ident} ->
-            { gameState | lounge   <- addJoinedGame ident nick gameState.lounge
-                        , gameWait <-
-                            if gameState.mynick == nick
-                                then Just ident
-                                else gameState.gameWait
-            }
-        InGameEvents events -> foldl Game.processInGameEvent gameState events
-        _ -> gameState
+   Identity   {nick}   -> { gameState | mynick <- nick }
+   JoinServer {nick}   -> { gameState | lounge <- addIdle nick gameState.lounge }
+   PartServer {nick}   -> { gameState | lounge <- deleteNick nick gameState.lounge }
+   -- Message {from,content} ->
+   -- Invalid {content} ->
+   LoungeInfo {lounge} -> { gameState | lounge <- lounge }
+   GameCreated {game}  -> { gameState | lounge <- addGame game gameState.lounge }
+   JoinGame {nick, ident} ->
+       { gameState | lounge   <- addJoinedGame ident nick gameState.lounge
+                   , gameWait <-
+                       if gameState.mynick == nick
+                           then Just ident
+                           else gameState.gameWait
+       }
+   InGameEvents events -> foldl Game.processInGameEvent gameState events
+   _ -> gameState
 
 addGame g l = { l | games <- l.games ++ [g] }
 addIdle n l = { l | idle  <- Set.insert n l.idle }
@@ -99,14 +108,6 @@ addJoinedGame i n l =
 deleteNick n l =
    { l | idle  <- Set.remove n l.idle
        , games <- map (\g -> { g | players <- Set.remove n g.players }) l.games }
-
--- upstream signal --------------------------------------------
-
-upstream : Signal Event
-upstream = merges
-    [ Events.joinServer <~ mynick
-    , Lounge.events
-    ]
 
 -- main display -----------------------------------------------
 
