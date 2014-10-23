@@ -74,7 +74,7 @@ type HandPublic = HandPublic' {}
 type HandPublic' a =
    { a
    | called      : [Mentsu]
-   , discards    : [Tile]
+   , discards    : [(Tile, Maybe Kaze)]
    , riichi      : Bool
    , turnDiscard : Maybe Tile
    }

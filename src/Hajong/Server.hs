@@ -225,7 +225,7 @@ joinGame n = do
     c  <- view client
     let nick = getNick c
 
-    $logDebug $ nick <> " joining game " <> tshow n
+    $logInfo $ "Nick " <> nick <> " joins game " <> tshow n
 
     case ss^?gameId nick of
         Just n'

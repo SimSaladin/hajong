@@ -77,7 +77,7 @@ discardRiichi tile hand
 handAutoDiscard :: Hand -> Tile
 handAutoDiscard hand
     | Just tile <- _handPick hand = tile
-    | otherwise                  = error "Nothing to do"
+    | otherwise                   = error "handAutoDiscard: nothing to do"
         -- TODO what if he just ankan with the discard?
         -- .. wait, that should bring automatically a new pick to his hand
         -- from wanpai.

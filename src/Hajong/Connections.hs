@@ -220,7 +220,8 @@ clientEither _ (Right a) f  = f a
 
 websocketClient :: Nick -> WS.Connection -> Client
 websocketClient nick conn = Client nick True True
-    (liftIO . WS.sendTextData conn . encode)
+    (\e -> do print e >> print (encode e) -- TODO
+              liftIO . WS.sendTextData conn $ encode e)
     (liftIO $ fromMaybe (Invalid "No parse") . decode <$> WS.receiveData conn)
 
 instance WS.WebSocketsData Event where

@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Worker
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
@@ -77,11 +77,16 @@ runWCont st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
     where
         logger loc src level = pushLogStr (loggerSet st) . defaultLogStr loc src level
 
-workerRoundM :: RoundM' a -> Worker (Either Text (a, Worker ()))
-workerRoundM ma = liftM (fmap tores . runRoundM ma) $ rview gameVar
+roundM :: RoundM' a -> Worker (Either Text (a, Worker ()))
+roundM ma = liftM (fmap tores . runRoundM ma) $ rview gameVar
     where
         tores (res, secret, events) =
             (res, updateState secret events >> sendGameEvents events)
+
+unsafeRoundM :: RoundM' () -> Worker ()
+unsafeRoundM = roundM >=> either failed snd
+  where
+    failed e = error $ "unsafeRoundM: unexpected Left: " <> unpack e
 
 -- * Update state and emit events
 
@@ -92,7 +97,9 @@ multicast ev = rview gameVar >>= (`Con.multicast` ev)
 -- | The game state has changed.
 updateState :: RiichiSecret -> [GameEvent] -> Worker ()
 updateState secret events = rmodify gameVar $
-    gameRound._Just %~ ((riichiSecret .~ secret) . (riichiPublic %~ applyGameEvents' events))
+    gameRound._Just %~
+        ( (riichiSecret .~ secret)
+        . (riichiPublic %~ applyGameEvents' events) )
 
 -- | Hide sensitive info per player
 sendGameEvents :: [GameEvent] -> Worker ()
@@ -142,14 +149,19 @@ runOtherAction :: WorkerInput -> Worker ()
 runOtherAction wi = case wi of
     WorkerAddPlayer client callback -> do
         gsv  <- view gameVar
+
         e_gs <- atomically $ runEitherT $ do
             gs  <- lift $ readTVar gsv
             gs' <- case clientToPlayer client gs of
-                Nothing -> addClient client (not . isReal) gs ? "Game is full" 
+                Nothing -> addClient client (not . isReal) gs ? "Game is full"
                 Just p  -> return $ setClient client p gs
             lift $ writeTVar gsv gs'
             return gs'
-        clientEither client e_gs (liftIO . callback)
+
+        clientEither client e_gs $ \gs -> do
+            when (gs^.gameRound.to isJust) $
+                unsafeRoundM $ tellPlayerState $ fromJust $ clientToPlayer client gs
+            liftIO $ callback gs
 
     WorkerPartPlayer client callback -> do
         gsv <- view gameVar
@@ -179,7 +191,7 @@ workerProcessTurnAction ta c = do
     case clientToPlayer c gs of
         Nothing     -> unicastError c "You are not a player in this game!" >> return Nothing
         Just player -> do
-            res <- workerRoundM (runTurn player ta)
+            res <- roundM (runTurn player ta)
             case res of
                 Left err      -> unicastError c err >> return Nothing
                 Right (_, ma) -> return $ Just $ do
@@ -190,12 +202,12 @@ workerProcessTurnAction ta c = do
                         TurnTileDiscard _ _ -> waitForShouts $
                             gs^?!gameRound._Just^.riichiSecret.riichiWaitShoutsFrom
 
--- | "workerRace n ma mb" races between "ma" and "delay n >> mb"
+-- | "workerRace n ma mb" races between "ma" and "threadDelay n" (execute mb)
 workerRace :: Int -> Worker a -> Worker a -> Worker a
-workerRace n a b = do
-    s <- view id
-    res <- liftIO $ runWCont s a `race` threadDelay n --  >> runWCont s b)
-    either return (const b) res
+workerRace secs ma mb = do
+    s   <- view id
+    res <- liftIO $ runWCont s ma `race` threadDelay (secs * 1000000)
+    either return (const mb) res
 
 -- * Game flow continuations
 
@@ -209,41 +221,50 @@ waitPlayersAndBegin = $logInfo "Waiting for players" >> go
 
 beginRound :: GameState Client -> WCont
 beginRound gs = do
+    void $ rswap gameVar gs
     $logInfo "Round begins"
-    rswap gameVar gs >> workerRoundM startRound >>= either (const $ error "startRound failed. (The Impossible happened)") snd
+    unsafeRoundM startRound
     turnActionOrTimeout
 
 -- | A new turn begins.
 --
--- | Expect an action in the queue, or timeout and automatically end the
--- turn with a default action.
+-- | Expect an action in the queue, or timeout after the n seconds and
+-- automatically end the turn with a default action.
 turnActionOrTimeout :: WCont
-turnActionOrTimeout =
-    -- TODO notify of timeout to client
-    join $ workerRace 10000000 takeInputTurnAction $ return $ do
+turnActionOrTimeout = do
+    $logInfo $ "Waiting for a turn action, or timeout in " <> show secs  <> " seconds."
+
+    -- TODO notify of the timeout to client too
+
+    -- TODO configurable secs
+
+    join $ workerRace 30 takeInputTurnAction $ return $ do
         gs <- rview gameVar
+
         let Just tp = gs ^? gameRound._Just.riichiPublic.riichiTurn
             Just c  = gs ^? gamePlayers.at tp._Just
             Just a  = gs ^? gameRound._Just.to advanceAuto
+
         join $ fromJust <$> workerProcessTurnAction a c
 
--- | Advance turn to the next player.
+-- | Advance turn to the next player. After a discard by previous player.
 advanceTurn :: WCont
 advanceTurn = do
     $logDebug "Advancing turn after a discard"
-    workerRoundM advanceAfterDiscard >>= either $logError go -- TODO Info client too
-    where
-        go (r, ma) = ma >> maybe ($logDebug "New turn begins" >> turnActionOrTimeout) endRound r
+    roundM advanceAfterDiscard >>= either $logError go -- TODO Info client too
+  where
+    go (r, ma) =
+        ma >> maybe ($logDebug "New turn begins" >> turnActionOrTimeout) endRound r
 
 advanceWithShout :: Player -> Shout -> WCont
 advanceWithShout p sh = do
     $logDebug "Advancing with a shout"
-    workerRoundM (runShout sh p) >>= either $logError (go . snd)
+    roundM (runShout sh p) >>= either $logError (go . snd)
     where
         go ma = ma >> turnActionOrTimeout
 
 -- | After a discard, there are three possible branchings:
---  
+--
 --  * Highest priority shout is called: it is then processed immediately.
 --  * At least one of plausible shouts is called AND
 --      (all shouts are called OR pass confirmed OR time limit is reached):
@@ -281,7 +302,7 @@ waitForShouts players = do
                         passOn xs c
                     Nothing -> error "WTF? an afk player just shouted?"
 
-    join $ workerRace 10000000
+    join $ workerRace 20 -- TODO Configurable
         (waitAll players)
         (return $ atomically (tryTakeTMVar shv) >>= fromMaybe advanceTurn)
 

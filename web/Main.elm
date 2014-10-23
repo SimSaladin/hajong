@@ -24,22 +24,24 @@ type UserInput = { mousePos   : (Int,Int)
 userInput : Signal UserInput
 userInput = UserInput <~ Mouse.position ~ Lounge.view
 
--- view: log --------------------------------------------------
-
+-- {{{ Log view ---------------------------------------------------
 logView : GameState -> Element
 logView game =
    (flow  down <| map (toText >> Text.color red >> leftAligned) game.debuglog)
-   `above` (flow down <| map eventView game.eventlog)
+   `above` (flow down <| map (eventView >> leftAligned) game.eventlog)
 
-eventView : Event -> Element
+eventView : Event -> Text.Text
 eventView ev = case ev of
-    JoinServer {nick}      -> nick ++ " joined server." |> toText |> Text.color green |> leftAligned
-    PartServer {nick}      -> nick ++ " has left." |> toText |> Text.color red |> leftAligned
-    Message {from,content} -> toText "<" ++ (toText from |> bold) ++ toText "> " ++ toText content |> leftAligned
-    Invalid {content}      -> toText content |> Text.color white |> leftAligned |> color red
-    LoungeInfo {lounge}    -> toText "Lounge updated - connection established!" |> Text.color blue |> leftAligned
-    GameCreated {game}     -> join " " ["Game", game.topic, show game.ident, join " " <| Set.toList game.players] |> toText |> leftAligned
-    _                      -> asText ev |> color orange
+    Identity {nick}        -> "I am `" ++ nick ++ "'"    |> toText |> Text.color blue
+    JoinServer {nick}      -> nick ++ " joined server."  |> toText |> Text.color green
+    PartServer {nick}      -> nick ++ " has left."       |> toText |> Text.color red
+    Message {from,content} -> toText "<" ++ (toText from |> bold) ++ toText "> " ++ toText content
+    Invalid {content}      -> content                    |> toText |> Text.color white
+    LoungeInfo {lounge}    -> toText "Lounge updated - connection established!" |> Text.color blue
+    GameCreated {game}     -> join " " ["Game", game.topic, show game.ident, join " " <| Set.toList game.players] |> toText
+    InGameEvents _         -> "" |> toText
+    _                      -> show ev |> toText |> Text.color orange
+-- }}}
 
 -- view: lounge -----------------------------------------------
 

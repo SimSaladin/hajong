@@ -8,33 +8,54 @@
   </head>
  
   <body>
-     <div id="game" style="height:100%"></div>
+    <div id="wait">Connecting...</div>
+    <div id="game" style="height:100%"></div>
   </body>
  
   <script type="text/javascript">
     var mainDiv = document.getElementById('game');
+    var waitDiv = document.getElementById('wait');
+    var game;
 
-    var game = Elm.embed(Elm.Main, mainDiv, { downstream : "" });
+    mainDiv.hidden = true;
 
-    // var game = Elm.debugFullscreen(Elm.Main, "Main.elm");
+    function startGame(debugging) {
+      if (debugging) {
+        return Elm.debugFullscreen(Elm.Main, "Main.elm");
+      } else {
+        return Elm.embed(Elm.Main, mainDiv, { downstream : "" });
+      }
+    }
 
     var socket = new WebSocket("ws://localhost:9160");
 
-    socket.onmessage = function (e) {
-       console.log("in ", JSON.parse(e.data));
-       game.ports.downstream.send(e.data);
-    }
-
     socket.onopen = function () {
-       game.ports.upstream.subscribe(function(e) {
-          console.log("out", JSON.parse(e));
-          socket.send(e);
-       });
 
-       mynick = localStorage.getItem("nick");
+      waitDiv.hidden = true;
+      mainDiv.hidden = false;
+      game = startGame();
 
-       socket.send( '{ "type" : "join", "nick": "' + mynick + '" }' );
+      socket.onclose = function () {
+        game.dispose();
+        mainDiv.hidden = true;
+        waitDiv.hidden = false;
+        console.log("Connection to server has been lost!");
+      }
+
+      socket.onmessage = function (e) {
+         console.log("in ", JSON.parse(e.data));
+         game.ports.downstream.send(e.data);
+      }
+
+      game.ports.upstream.subscribe(function(e) {
+        console.log("out", JSON.parse(e));
+        socket.send(e);
+      });
+
+      mynick = localStorage.getItem("nick");
+      socket.send( '{ "type" : "join", "nick": "' + mynick + '" }' );
     }
+
 
   </script>
  

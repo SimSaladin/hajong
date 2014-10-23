@@ -71,6 +71,13 @@ parseTileMaybe x = case x of
    Object _  -> Just <| parseTile x
    Null      -> Nothing
 
+parseDiscardTile : Value -> (Tile, Maybe Kaze)
+parseDiscardTile (Array [a, b]) =
+   let player = case b of
+         Null -> Nothing
+         String s -> readKaze s |> Just
+      in (parseTile a, player)
+
 parseKaze = readKaze << parseString
 
 hasHonor o = case "ident" .: o |> parseString of
@@ -138,7 +145,7 @@ parseHand v =
 parsePublicHand : Value -> HandPublic
 parsePublicHand (Object o) = 
    { called      = "called"       .: o |> withArray parseMentsu
-   , discards    = "discards"     .: o |> withArray parseTile
+   , discards    = "discards"     .: o |> withArray parseDiscardTile
    , riichi      = "riichi"       .: o |> parseBool
    , turnDiscard = "turn-discard" .: o |> parseTileMaybe
    }

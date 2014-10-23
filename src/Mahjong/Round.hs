@@ -54,7 +54,7 @@ data GamePlayer = GamePlayer
                 } deriving (Show, Read)
 
 data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
-                | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
+                | TurnTileDraw Bool (Maybe Tile) -- ^ wanpai?, tile
                 | TurnAnkan Tile
                 deriving (Show, Read)
 
@@ -149,8 +149,14 @@ nextRound rs = do
 
 startRound :: RoundM m => m ()
 startRound = do
-    view riichiPlayers >>= mapM (getPlayerState . view _1) >>= tell . map RoundPrivateStarts
-    view riichiTurn >>= tell . return . RoundTurnBegins
+    view riichiPlayers >>= mapM (getPlayerState . view _1)
+                       >>= tell . map RoundPrivateStarts
+    view riichiTurn >>= startTurnOfPlayer
+
+startTurnOfPlayer :: RoundM m => Player -> m ()
+startTurnOfPlayer tp = do
+    tellEvent $ RoundTurnBegins tp
+    runTurn tp $ TurnTileDraw False Nothing
 
 -- | Attempt to run a @TurnAction@ as the given user. Fails if it is not
 -- his turn.
@@ -169,12 +175,12 @@ runTurn p ta = do
 
 runShout :: RoundM m => Shout -> Player -> m ()
 runShout shout shouter = do
-    turn <- view riichiTurn
+    turn      <- view riichiTurn
     (m, hand) <- shoutFromHand shout =<< handOf' turn
     updateHand turn hand
 
     handOf' shouter >>= meldTo shout m >>= updateHand shouter
-    tell [RoundTurnShouted shouter shout]
+    tellEvent $ RoundTurnShouted shouter shout
 
 -- | If win(s) were declared, wall was exhausted or four kans were declared
 -- (and TODO declarer is not in the yakuman tenpai): return "RoundResults".
@@ -184,12 +190,11 @@ runShout shout shouter = do
 advanceAfterDiscard :: RoundM m => m (Maybe RoundResults)
 advanceAfterDiscard = do
     tilesLeft <- view riichiWallTilesLeft
-    doras     <- view riichiDora
+    dora      <- view riichiDora
     case () of
-        _ | tilesLeft == 0 || length doras == 5 -> Just <$> roundEndedDraw
-          | otherwise                           -> do
-                turnOf <- view riichiTurn
-                tell [RoundTurnBegins $ nextPlayer turnOf]
+        _ | tilesLeft == 0 || length dora == 5 -> Just <$> roundEndedDraw
+          | otherwise                          -> do
+                startTurnOfPlayer . nextPlayer =<< view riichiTurn
                 return Nothing
 
 -- * Auxilary
@@ -216,6 +221,9 @@ getPlayerState p = GamePlayer
     <*> use (riichiHands.to (map _handPublic))
     <*> view riichiPlayers
     <*> use (riichiHands.at p.to fromJust)
+
+tellPlayerState :: RoundM m => Player -> m ()
+tellPlayerState = getPlayerState >=> tell . return . RoundPrivateStarts
 
 applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
 applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs $ GamePlayer
@@ -263,6 +271,9 @@ publishTurnAction :: RoundM m => Player -> TurnAction -> m ()
 publishTurnAction player ra = tell $ case ra of
     TurnTileDraw b _ -> [ RoundTurnAction player $ TurnTileDraw b Nothing ]
     _                -> [ RoundTurnAction player ra ]
+
+tellEvent :: RoundM m => GameEvent -> m ()
+tellEvent = tell . return
 
 -- ** Get results
 
