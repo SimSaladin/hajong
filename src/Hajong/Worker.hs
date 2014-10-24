@@ -84,10 +84,13 @@ roundM ma = liftM (fmap tores . runRoundM ma) $ rview gameVar
         tores (res, secret, events) =
             (res, updateState secret events >> sendGameEvents events)
 
-unsafeRoundM :: RoundM' () -> Worker ()
-unsafeRoundM = roundM >=> either failed snd
+unsafeRoundM :: RoundM' a -> Worker (a, Worker ())
+unsafeRoundM = roundM >=> either failed return
   where
     failed e = error $ "unsafeRoundM: unexpected Left: " <> unpack e
+
+unsafeRoundM_ :: RoundM' () -> Worker ()
+unsafeRoundM_ = join . fmap snd . unsafeRoundM
 
 -- * Update state and emit events
 
@@ -161,7 +164,7 @@ runOtherAction wi = case wi of
 
         clientEither client e_gs $ \gs -> do
             when (gs^.gameRound.to isJust) $
-                unsafeRoundM $ tellPlayerState $ fromJust $ clientToPlayer client gs
+                unsafeRoundM_ $ tellPlayerState $ fromJust $ clientToPlayer client gs
             liftIO $ callback gs
 
     WorkerPartPlayer client callback -> do
@@ -200,16 +203,15 @@ workerProcessTurnAction ta c = do
                     case ta of
                         TurnTileDraw _ _    -> turnActionOrTimeout
                         TurnAnkan _         -> turnActionOrTimeout
-                        TurnTileDiscard _ _ -> waitForShouts $
-                            gs^?!gameRound._Just^.riichiSecret.riichiWaitShoutsFrom
+                        TurnTileDiscard _ _ -> waitForShouts
 
--- | "workerRace n ma mb" races between "ma" and "threadDelay n" (execute mb)
-workerRace :: Int -> Worker a -> Worker a -> Worker a
-workerRace secs ma mb = do
-    $logInfo $ "Worker race - timeout in " <> tshow secs  <> " seconds."
+-- | "workerRace n ma b" races between "ma" and "threadDelay n" (return b)
+workerRace :: Int -> Worker a -> a -> Worker a
+workerRace secs ma b = do
     s   <- view id
     res <- liftIO $ runWCont s ma `race` threadDelay (secs * 1000000)
-    either return (const mb) res
+    either (\a -> $logDebug "Proceed before time out" >> return a)
+           (\_ -> return b) res
 
 -- * Game flow continuations
 
@@ -224,7 +226,7 @@ beginRound :: GameState Client -> WCont
 beginRound gs = do
     void $ rswap gameVar gs
     $logInfo "Round begins"
-    unsafeRoundM startRound
+    unsafeRoundM_ startRound >> unsafeRoundM_ autoDraw
     turnActionOrTimeout
 
 -- | A new turn begins.
@@ -233,28 +235,19 @@ beginRound gs = do
 -- automatically end the turn with a default action.
 turnActionOrTimeout :: WCont
 turnActionOrTimeout = do
-
     -- TODO notify of the timeout to client too
-
     -- TODO configurable secs
-
-    join $ workerRace 30 takeInputTurnAction $ return $ do
-        gs <- rview gameVar
-
-        let Just tp = gs ^? gameRound._Just.riichiPublic.riichiTurn
-            Just c  = gs ^? gamePlayers.at tp._Just
-            Just a  = gs ^? gameRound._Just.to advanceAuto
-
-        join $ fromJust <$> workerProcessTurnAction a c
+    $logDebug "Waiting for turn action"
+    join $ workerRace 30 takeInputTurnAction
+        ($logDebug "Time-out, auto-discarding" >> unsafeRoundM_ autoDiscard >> waitForShouts)
 
 -- | Advance turn to the next player. After a discard by previous player.
-advanceTurn :: WCont
-advanceTurn = do
+afterDiscard :: WCont
+afterDiscard = do
     $logDebug "Advancing turn after a discard"
-    roundM advanceAfterDiscard >>= either $logError go -- TODO Info client too
-  where
-    go (r, ma) =
-        ma >> maybe ($logDebug "New turn begins" >> turnActionOrTimeout) endRound r
+    (r, ma) <- unsafeRoundM advanceAfterDiscard
+    ma
+    maybe ($logDebug "New turn begins" >> unsafeRoundM_ autoDraw >> turnActionOrTimeout) endRound r
 
 advanceWithShout :: Player -> Shout -> WCont
 advanceWithShout p sh = do
@@ -271,17 +264,20 @@ advanceWithShout p sh = do
 --      the highest called shout is then processed.
 --  * No shouts plausible OR all plausible shouts are passed on OR time
 --      limit reached: advance to next turn.
-waitForShouts :: [Player] -> WCont
-waitForShouts players = do
+waitForShouts :: WCont
+waitForShouts = do
+
     $logDebug "Waiting for shouts after the discard"
-    gs  <- rview gameVar
-    shv <- liftIO newEmptyTMVarIO
+    gs           <- rview gameVar
+    winningShout <- liftIO newEmptyTMVarIO
+
+    let players = gs^?!gameRound._Just^.riichiSecret.riichiWaitShoutsFrom
 
     -- Important invariant of waitAll's first argument:
     --  Shout priorities must be in /decreasing/ order. (This whole thing
     --  is wrong as it takes players and not shouts - TODO)
 
-    let waitAll [] = return advanceTurn
+    let waitAll [] = return afterDiscard
         waitAll xs = workerAction' (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
 
         passOn xs c = waitAll $ maybe id L.delete (clientToPlayer c gs) xs
@@ -298,13 +294,13 @@ waitForShouts players = do
                 -- value - TODO
                 case clientToPlayer c gs of
                     Just p -> do
-                        atomically (putTMVar shv (advanceWithShout p sh))
+                        atomically (putTMVar winningShout (advanceWithShout p sh))
                         passOn xs c
                     Nothing -> error "WTF? an afk player just shouted?"
 
     join $ workerRace 20 -- TODO Configurable
         (waitAll players)
-        (return $ atomically (tryTakeTMVar shv) >>= fromMaybe advanceTurn)
+        (atomically (tryTakeTMVar winningShout) >>= fromMaybe afterDiscard)
 
 -- | The round ended.
 endRound :: RoundResults -> WCont

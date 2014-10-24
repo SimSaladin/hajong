@@ -46,9 +46,19 @@ startRound = do
     view riichiTurn >>= startTurnOfPlayer
 
 startTurnOfPlayer :: RoundM m => Player -> m ()
-startTurnOfPlayer tp = do
-    tellEvent $ RoundTurnBegins tp
-    runTurn tp $ TurnTileDraw False Nothing
+startTurnOfPlayer = tellEvent . RoundTurnBegins
+
+advanceTurn :: RoundM m => m ()
+advanceTurn = startTurnOfPlayer . nextPlayer =<< view riichiTurn
+
+autoDiscard :: RoundM m => m ()
+autoDiscard = do
+    tp <- view riichiTurn
+    hand <- handOf' tp
+    runTurn tp (TurnTileDiscard False (handAutoDiscard hand))
+
+autoDraw :: RoundM m => m ()
+autoDraw = flip runTurn (TurnTileDraw False Nothing) =<< view riichiTurn
 
 -- | Attempt to run a @TurnAction@ as the given user. Fails if it is not
 -- his turn.
@@ -65,12 +75,12 @@ runTurn p ta = do
             TurnTileDraw False _       -> drawWall
             TurnTileDraw True  _       -> drawDeadWall
 
+-- | @runShout shout shouter@
 runShout :: RoundM m => Shout -> Player -> m ()
 runShout shout shouter = do
-    turn      <- view riichiTurn
-    (m, hand) <- shoutFromHand shout =<< handOf' turn
-    updateHand turn hand
-
+    tp        <- view riichiTurn
+    (m, hand) <- shoutFromHand shout =<< handOf' tp
+    updateHand tp hand
     handOf' shouter >>= meldTo shout m >>= updateHand shouter
     tellEvent $ RoundTurnShouted shouter shout
 
@@ -85,21 +95,10 @@ advanceAfterDiscard = do
     dora      <- view riichiDora
     case () of
         _ | tilesLeft == 0 || length dora == 5 -> Just <$> roundEndedDraw
-          | otherwise                          -> do
-                startTurnOfPlayer . nextPlayer =<< view riichiTurn
-                return Nothing
+          | otherwise                          -> advanceTurn >> return Nothing
 
--- ** Auxilary
-
-advanceAuto :: RiichiState -> TurnAction
-advanceAuto = TurnTileDiscard False . handAutoDiscard . fromJust <$>
-    (view (riichiPublic.riichiTurn) >>= view . (riichiSecret . ) . handOf)
-
-nextPlayer :: Player -> Player
-nextPlayer = toEnum . (`mod` 4) . (+ 1) . fromEnum
-
-handOf :: Player -> Lens RiichiSecret RiichiSecret (Maybe Hand) (Maybe Hand)
-handOf player = riichiHands.at player
+tellPlayerState :: RoundM m => Player -> m ()
+tellPlayerState = getPlayerState >=> tellEvent . RoundPrivateStarts
 
 handOf' :: RoundM m => Player -> m Hand
 handOf' player = use (handOf player) >>= maybe (throwError "Player not found") return
@@ -114,60 +113,15 @@ getPlayerState p = GamePlayer
     <*> view riichiPlayers
     <*> use (riichiHands.at p.to fromJust)
 
-tellPlayerState :: RoundM m => Player -> m ()
-tellPlayerState = getPlayerState >=> tell . return . RoundPrivateStarts
-
-applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
-applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs $ GamePlayer
-    (error "Not accessed")
-    rp mempty mempty $ Hand [] Nothing Nothing $ HandPublic [] [(error "N/A", Nothing)] False Nothing
-
-applyGameEvents :: [GameEvent] -> GamePlayer -> GamePlayer
-applyGameEvents evs gp = foldr applyGameEvent gp evs
-
-applyGameEvent :: GameEvent -> GamePlayer -> GamePlayer
-applyGameEvent ev = case ev of
-    RoundTurnBegins p        -> playerPublic.riichiTurn .~ p
-    RoundTurnAction p ta     -> applyTurnAction p ta
-    RoundTurnShouted p shout ->
-        over (playerPublicHands.at p._Just.handOpen) (|> fromShout shout)
-        . set (playerPublic.riichiTurn) p
-        . set (playerPublicHands.at (shoutedFrom shout)._Just.handDiscards._last._2) (Just p)
-    RoundHandChanged p hp    -> playerPublicHands.at p._Just .~ hp
-    RoundEnded how           -> playerPublic.riichiResults .~ Just how
-    RoundPrivateChange _ h   -> playerMyHand .~ h
-    RoundPrivateStarts gp    -> const gp
-    RoundPrivateWaitForShout _ -> id
-
-applyTurnAction :: Player -> TurnAction -> GamePlayer -> GamePlayer
-applyTurnAction p ta = case ta of
-    TurnTileDiscard riichi tile ->
-        over (playerPublicHands.at p._Just.handDiscards) (|> (tile, Nothing))
-        . set (playerPublicHands.at p._Just.handRiichi) riichi
-    TurnTileDraw _ _  -> playerPublic.riichiWallTilesLeft -~ 1
-    TurnAnkan tile    -> over (playerPublicHands.at p._Just.handOpen) (|> kantsu tile)
-
--- * Operations
-
 -- | Set the hand of player
 updateHand :: RoundM m => Player -> Hand -> m ()
 updateHand p new = do
     old <- handOf' p
     handOf p ?= new
-    when (old /= new) $ tell [ RoundPrivateChange p new ]
-    when (_handPublic old /= _handPublic new) $ tell [RoundHandChanged p $ _handPublic new]
+    when (old /= new) $ tellEvent (RoundPrivateChange p new)
+    when (_handPublic old /= _handPublic new) $ tellEvent (RoundHandChanged p $ _handPublic new)
 
--- | Turn a possibly sensitive TurnAction to a non-sensitive (fully public)
--- RoundEvent.
-publishTurnAction :: RoundM m => Player -> TurnAction -> m ()
-publishTurnAction player ra = tell $ case ra of
-    TurnTileDraw b _ -> [ RoundTurnAction player $ TurnTileDraw b Nothing ]
-    _                -> [ RoundTurnAction player ra ]
-
-tellEvent :: RoundM m => GameEvent -> m ()
-tellEvent = tell . return
-
--- ** Get results
+-- ** Results
 
 roundEndedDraw :: RoundM m => m RoundResults
 roundEndedDraw =
@@ -178,7 +132,7 @@ roundEndsWith results = do
     tell [RoundEnded results]
     return results
 
--- ** Player in turn
+-- ** Player actions
 
 drawWall :: RoundM m => Hand -> m Hand
 drawWall hand = do
@@ -203,3 +157,58 @@ endTurn :: RoundM m => Tile -> m ()
 endTurn dt = do
     hands <- Map.filter (not . null . shoutsOn dt) <$> use riichiHands
     riichiWaitShoutsFrom .= Map.keys hands
+
+-- ** Helpers
+
+tellEvent :: RoundM m => GameEvent -> m ()
+tellEvent ev = tell [ev]
+
+-- | Turn a possibly sensitive TurnAction to a non-sensitive (fully public)
+-- RoundEvent.
+publishTurnAction :: RoundM m => Player -> TurnAction -> m ()
+publishTurnAction player ra = tellEvent $ case ra of
+    TurnTileDraw b _ -> RoundTurnAction player (TurnTileDraw b Nothing)
+    _                -> RoundTurnAction player ra
+
+-- * Functions
+
+nextPlayer :: Player -> Player
+nextPlayer = toEnum . (`mod` 4) . (+ 1) . fromEnum
+
+handOf :: Player -> Lens RiichiSecret RiichiSecret (Maybe Hand) (Maybe Hand)
+handOf player = riichiHands.at player
+
+-- ** Applying GameEvents
+
+applyGameEvents :: [GameEvent] -> GamePlayer -> GamePlayer
+applyGameEvents evs gp = foldr applyGameEvent gp evs
+
+applyGameEvent :: GameEvent -> GamePlayer -> GamePlayer
+applyGameEvent ev = case ev of
+    RoundTurnBegins p        -> playerPublic.riichiTurn .~ p
+    RoundTurnAction p ta     -> applyTurnAction p ta
+    RoundTurnShouted p shout ->
+        over (playerPublicHands.at p._Just.handOpen) (|> fromShout shout)
+        . set (playerPublic.riichiTurn) p
+        . set (playerPublicHands.at (shoutedFrom shout)._Just.handDiscards._last._2) (Just p)
+    RoundHandChanged p hp    -> playerPublicHands.at p._Just .~ hp
+    RoundEnded how           -> playerPublic.riichiResults .~ Just how
+    RoundPrivateChange _ h   -> playerMyHand .~ h
+    RoundPrivateStarts gp    -> const gp
+    RoundPrivateWaitForShout _ -> id
+
+applyTurnAction :: Player -> TurnAction -> GamePlayer -> GamePlayer
+applyTurnAction p ta = case ta of
+    TurnTileDiscard riichi tile ->
+        over (playerPublicHands.at p._Just.handDiscards) (|> (tile, Nothing))
+        . set (playerPublicHands.at p._Just.handRiichi) riichi
+    TurnTileDraw _ _ -> playerPublic.riichiWallTilesLeft -~ 1
+    TurnAnkan tile   -> over (playerPublicHands.at p._Just.handOpen) (|> kantsu tile)
+
+applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
+applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs $ GamePlayer
+    (error "Not accessed")
+    rp mempty mempty $ Hand [] Nothing Nothing $ HandPublic [] [(error "N/A", Nothing)] False Nothing
+
+applyGameEvent' :: GameEvent -> RiichiPublic -> RiichiPublic
+applyGameEvent' ev = applyGameEvents' [ev]
