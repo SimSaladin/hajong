@@ -17,17 +17,23 @@ display co gs = case gs.roundState of
           offset     = kazeNth (rs.mypos) - 1
           playerAt n = Array.getOrFail (n + offset % 4)
       in flow down
-         [ dispHand up <| playerAt 2 hands
+         [ collage 650 650
+            [ toForm <| dispInfoBlock rs
+            , dispDiscards playerAt hands
+            ]
          , dispWanpai rs
-         , dispHand left (playerAt 3 hands) `beside`
-            dispInfoBlock rs `beside`
-            dispHand right (playerAt 1 hands)
          , dispMyHand rs.myhand
-         , dispLog rs.actions
-         ]
+         ] `beside` dispLog rs.actions
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
 
-dispInfoBlock rs = color gray <| size (6 * t_w + 2) (6 * t_w + 2) <| flow down
+dispDiscards playerAt hands = group
+   [ moveY (-235) <|                         toForm <| dispHand <| playerAt 0 hands
+   , moveX 235    <| rotate (degrees 90)  <| toForm <| dispHand <| playerAt 1 hands
+   , moveY 235    <| rotate (degrees 180) <| toForm <| dispHand <| playerAt 2 hands
+   , moveX (-235) <| rotate (degrees 270) <| toForm <| dispHand <| playerAt 3 hands
+   ]
+
+dispInfoBlock rs = color gray <| size (6*(t_w+4)+2) (6*(t_w+4)+2) <| flow down
    [ plainText "Turn of " `beside` dispKaze rs.turn
    , plainText "I am " `beside` dispKaze rs.mypos
    , plainText "Round is " `beside` dispKaze rs.round
@@ -37,17 +43,28 @@ dispInfoBlock rs = color gray <| size (6 * t_w + 2) (6 * t_w + 2) <| flow down
    ]
    -- , asText <| "Results: " ++ show rs.results
 
-dispLog = container 600 150 topRight << flow down << map asText
+dispLog = flow up << map asText
 
-dispMyHand hand = flow down
-   [ dispTiles <| map fst hand.discards
-   , dispTiles hand.concealed
-   ]
+dispMyHand hand = dispTiles hand.concealed `beside` spacer 10 10 `beside` dispPick hand.pick
 
-dispHand dir (k, h) =
-   container (6 * (t_w + 2) + 2) (3 * (t_h + 2)) topRight
-   <| flow down <| map (dispTile << fst) h.discards
+dispPick mt = case mt of
+   Just t  -> dispTile t |> color lightGreen
+   Nothing -> empty
+
+dispHand (k, h) =
+   container (6*(t_w+4)+2) (3*(t_h+4)) topLeft
+   <| flow down
+   <| map (flow right)
+   <| groupInto 6
+   <| map (dispTile << fst) h.discards
+
+data Dir = Up | Down | Left | Right
    
+rotatedTo dir frm = case dir of
+   Up    -> color lightOrange <| collage (6*(t_w+4)+2) (3*(t_h+2)) [rotate (degrees 180) frm]
+   Down  -> color lightRed <| collage (6*(t_w+4)+2) (3*(t_h+4)) [frm]
+   Left  -> color lightGreen <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 270) frm]
+   Right -> color blue <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 90) frm]
 
 dispKaze kaze = asText kaze
 
@@ -60,7 +77,8 @@ dispTile tile = container (t_w + 4) (t_h + 4) middle
    <| size t_w t_h
    <| case tile of
          Suited suit n aka -> flow down [asText suit, asText n]
-         Honor honor       -> asText honor
+         Honor (Kazehai honor) -> asText honor
+         Honor (Sangenpai honor) -> asText honor
 
 -- Misc
 
@@ -69,6 +87,10 @@ kazeNth k = case k of
    Nan  -> 2
    Shaa -> 3
    Pei  -> 4
+
+groupInto n xs = case xs of
+   [] -> []
+   _  -> take n xs :: groupInto n (drop n xs)
 
 -- Controls
 
