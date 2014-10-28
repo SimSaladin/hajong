@@ -32,15 +32,16 @@ display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
    Just rs ->
       let hands      = Array.fromList <| sortBy (\(k,_) -> kazeNth k) rs.hands
-          offset     = kazeNth (rs.mypos) - 1
+          offset     = kazeNth rs.mypos - 1
           playerAt n = Array.getOrFail (n + offset % 4)
       in flow down
            [ container 1000 650 midTop <| collage 650 650
-               [ dispInfoBlock rs
+               [ dispInfoBlock playerAt rs
                , move (70, 70) <| scale 0.6 <| toForm <| dispWanpai co rs
                , scale 0.7 <| dispDiscards co playerAt hands
                ]
            , container 1000 100 midTop <| dispMyHand co rs.myhand
+           , asText (gs.waitTurnAction, gs.waitShout)
            ] `beside` dispLog rs.actions
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
 
@@ -51,17 +52,18 @@ dispDiscards co playerAt hands = group
    , moveX (-330) <| rotate (degrees 270) <| toForm <| dispHand co <| playerAt 3 hands
    ]
 
-dispInfoBlock rs =
+-- dispInfoBlock : (Int -> Array.Array Int -> Int) -> RoundState -> Form
+dispInfoBlock playerAt rs =
    toForm
    <| color black <| container 204 204 middle
    <| color white <| size 200 200
-   <| flow down
-      [ plainText "Turn of " `beside` dispKaze rs.turn
-      , plainText "I am " `beside` dispKaze rs.mypos
-      , plainText "Round is " `beside` dispKaze rs.round
-      , plainText "dealer is " `beside` dispKaze rs.dealer
-      , plainText "tiles left: " `beside` asText rs.tilesleft
-      , plainText "players: " `beside` (flow down <| map asText rs.players)
+   <| collage 200 200
+      [ toForm <| centered <| bold <| toText <| show rs.round
+      , toForm <| centered <|         toText <| show rs.tilesleft
+      , moveY (-100) <|                         toForm <| asText <| playerAt 0 <| Array.fromList rs.players
+      , moveX 100    <| rotate (degrees 90)  <| toForm <| asText <| playerAt 1 <| Array.fromList rs.players
+      , moveY 100    <| rotate (degrees 180) <| toForm <| asText <| playerAt 2 <| Array.fromList rs.players
+      , moveX (-100) <| rotate (degrees 270) <| toForm <| asText <| playerAt 3 <| Array.fromList rs.players
       ]
    -- , asText <| "Results: " ++ show rs.results
 
@@ -98,15 +100,15 @@ rotatedTo dir frm = case dir of
    Left  -> color lightGreen  <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 270) frm]
    Right -> color blue        <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 90) frm]
 
--- Tiles -----------------------------------------------------------------------
+-- {{{ Tiles -----------------------------------------------------------------------
+dispTile : Controls -> Tile -> Element
 dispTile co tile = container (t_w + 4) (t_h + 4) middle
    <| hoverable discardHover.handle (\h -> if h then Just tile else Nothing)
    <| color (if co.hoveredTile == Just tile then blue else lightBlue)
    <| size t_w t_h
    <| tileImage tile
 
-dispKaze kaze = asText kaze
-
+dispWanpai : Controls -> RoundState -> Element
 dispWanpai co = .dora >> map (dispTile co) >> flow right
 
 dispTileClickable : Controls -> Tile -> Element
@@ -121,16 +123,15 @@ tileImage tile =
                Honor (Sangenpai s) -> (707 + (sangenNth s - 1) * 97, 356)
    in
       croppedImage (row, col) 62 82 "Mahjong-tiles.jpg"
+-- }}}
 
-
--- Misc -------------------------------------------------------------------------
-
+-- {{{ Misc -------------------------------------------------------------------------
 groupInto n xs = case xs of
    [] -> []
    _  -> take n xs :: groupInto n (drop n xs)
+-- }}}
 
--- State
-
+-- {{{ Process GameEvents
 processInGameEvent : GameEvent -> GameState -> GameState
 processInGameEvent event gs = case event of
    RoundPrivateStarts rs ->
@@ -138,25 +139,26 @@ processInGameEvent event gs = case event of
              , gameWait <- Nothing
              , roundState <- Just rs }
 
-   RoundPrivateWaitForShout {seconds} ->
-      Util.log gs ("Waiting for shouts... " ++ show seconds)
+   RoundPrivateWaitForTurnAction {seconds} -> { gs | waitTurnAction <- Just seconds }
+
+   RoundPrivateWaitForShout {seconds} -> { gs | waitShout <- Just seconds }
 
    RoundPrivateChange {hand} -> setMyHand hand gs
 
-   RoundTurnBegins {player} ->
-      Util.log gs ("Turn of " ++ show player) |> setTurnPlayer player
+--   RoundTurnBegins {player} ->
+--      Util.log gs ("Turn of " ++ show player) |> setTurnPlayer player
 
    RoundTurnAction {player, action} ->
       addTurnAction player action gs
          |> processTurnAction player action
 
-   RoundTurnShouted {player, shout} ->
-      Util.log gs <| show player ++ " shouted: " ++ show shout -- TODO prettify
-
+--   RoundTurnShouted {player, shout} ->
+--      Util.log gs <| show player ++ " shouted: " ++ show shout -- TODO prettify
+--
    RoundHandChanged {player, hand} -> setPlayerHand player hand gs
 
-   RoundEnded res ->
-      Util.log gs (show res) -- TODO implement results logic
+--   RoundEnded res ->
+--      Util.log gs (show res) -- TODO implement results logic
 
 -- Field modify boilerplate --------------------------------------------------
 setMyHand hand gs = case gs.roundState of
@@ -171,7 +173,6 @@ addTurnAction player action gs = case gs.roundState of
 
 setPlayerHand player hand gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | hands <- updateHand player hand rs.hands } }
-
 
 -- Turn logic -----------------------------------------------------------------
 processTurnAction : Kaze -> TurnAction -> GameState -> GameState
@@ -201,3 +202,4 @@ atPlayer k f ((k', h) :: xs) = if k == k' then (k', f h) :: xs
 addDiscard disc h = { h | discards <- h.discards ++ [disc] }
 setRiichi riichi h = { h | riichi <- riichi }
 updateHand player hand = atPlayer player (\_ -> hand)
+-- }}}

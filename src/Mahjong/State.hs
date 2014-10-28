@@ -17,8 +17,15 @@ import           Mahjong.Hand.Mentsu
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
 import           System.Random.Shuffle (shuffleM)
+import           System.Random (randomRIO)
 
 ------------------------------------------------------------------------------
+
+-- * Players
+
+-- | 0..3
+newtype Player = Player Int
+                 deriving (Show, Read, Eq, Ord)
 
 -- * Points, results
 
@@ -29,7 +36,7 @@ data RoundResults = RoundTsumo { winners :: [Player], payers :: [Player] }
 
 type Points = Int
 
-type RiichiPlayers playerID = [(Player, playerID, Points)]
+type RiichiPlayers player = Map Kaze (Player, player, Points)
 
 -- * Round
 
@@ -43,38 +50,40 @@ data RiichiState = RiichiState
 data RiichiSecret = RiichiSecret
                  { _riichiWall :: [Tile]
                  , _riichiWanpai :: [Tile]
-                 , _riichiHands :: Map Player Hand
-                 , _riichiWaitShoutsFrom :: [Player]
+                 , _riichiHands :: Map Kaze Hand
+                 , _riichiWaitShoutsFrom :: [Kaze]
                  } deriving (Show, Read)
 
 data RiichiPublic = RiichiPublic
                  { _riichiDora :: [Tile]
                  , _riichiWallTilesLeft :: Int
-                 , _riichiRound :: Kazehai
-                 , _riichiDealer :: Player
-                 , _riichiTurn :: Player
-                 , _riichiPlayers :: RiichiPlayers Text
+                 , _riichiRound :: Kaze
+                 , _riichiTurn :: Kaze
+                 , _riichiOja :: Player
+                 , _riichiFirstOja :: Player
+                 , _riichiPlayers :: [(Kaze, Player, Points)]
                  , _riichiResults :: Maybe RoundResults
                  } deriving (Show, Read)
 
 -- | State of single player. Note that there is no RiichiSecret.
 data GamePlayer = GamePlayer
-                { _playerPlayer :: Player -- ^ Me
+                { _playerKaze :: Kaze
+                , _playerPlayer :: Player -- ^ Me
                 , _playerPublic :: RiichiPublic
-                , _playerPublicHands :: Map Player HandPublic
-                , _playerPlayers :: RiichiPlayers Text
+                , _playerPublicHands :: Map Kaze HandPublic
                 , _playerMyHand :: Hand
                 } deriving (Show, Read)
 
 -- * Actions and events
 
 data GameEvent = RoundPrivateStarts GamePlayer -- ^ Only at the start of a round
-               | RoundPrivateWaitForShout Int -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
+               | RoundPrivateWaitForShout Player Int -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
+               | RoundPrivateWaitForTurnAction Player Int
                | RoundPrivateChange Player Hand
-               | RoundTurnBegins Player
-               | RoundTurnAction Player TurnAction
-               | RoundTurnShouted Player Shout -- ^ Who, Shout
-               | RoundHandChanged Player HandPublic
+               | RoundTurnBegins Kaze
+               | RoundTurnAction Kaze TurnAction
+               | RoundTurnShouted Kaze Shout -- ^ Who, Shout
+               | RoundHandChanged Kaze HandPublic
                         -- TODO this is a bit too vague to be exactly
                         -- useful for clients.. perhaps could identify
                         -- between draws, kans, shouts.
@@ -103,18 +112,26 @@ makeLenses ''GamePlayer
 
 -- * Initialize state
 
-defaultPlayers :: [Player]
-defaultPlayers = [Player Ton .. Player Pei]
+-- | New state with first round ready to start. Convenient composite of
+-- newPublic, newSecret and setSecret.
+newRiichiState :: IO RiichiState
+newRiichiState = setSecret <$> newSecret <*> (newPublic fourPlayers . Player <$> randomRIO (0, 3))
+
+fourPlayers :: [Player]
+fourPlayers = Player <$> [0 .. 3]
 
 -- | Four-player riichi game
-newPublic :: RiichiPublic
-newPublic = RiichiPublic
+newPublic :: [Player] -- ^ Players
+          -> Player   -- ^ Oja
+          -> RiichiPublic
+newPublic players oja = RiichiPublic
     { _riichiDora          = []
     , _riichiWallTilesLeft = 0
     , _riichiRound         = Ton
-    , _riichiDealer        = Player Ton
-    , _riichiTurn          = Player Ton
-    , _riichiPlayers       = zip3 defaultPlayers (repeat "") (repeat 25000)
+    , _riichiTurn          = Ton
+    , _riichiOja           = oja
+    , _riichiFirstOja      = oja
+    , _riichiPlayers       = zip3 [Ton .. Pei] players (repeat 25000)
     , _riichiResults       = Nothing
     }
 
@@ -124,17 +141,12 @@ newSecret = liftM dealTiles $ shuffleM riichiTiles
         dealTiles tiles = RiichiSecret
             { _riichiWall           = wall
             , _riichiWanpai         = wanpai
-            , _riichiHands          = Map.fromList $ zip defaultPlayers (map initHand [h1, h2, h3, h4])
+            , _riichiHands          = Map.fromList $ zip [Ton .. Pei] (initHand <$> [h1, h2, h3, h4])
             , _riichiWaitShoutsFrom = []
             } where
                 (hands, xs)             = splitAt (13 * 4) tiles
                 ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
                 (wanpai, wall)          = splitAt 14 xs
-
--- | New state with first round ready to start. Convenient composite of
--- newPublic, newSecret and setSecret.
-newRiichiState :: IO RiichiState
-newRiichiState = liftM (`setSecret` newPublic) newSecret
 
 setSecret :: RiichiSecret -> RiichiPublic -> RiichiState
 setSecret secret public = RiichiState
@@ -144,22 +156,3 @@ setSecret secret public = RiichiState
     []
     where
         (dora : wanpai') = secret ^. riichiWanpai
-
--- | Advance the game to next round
-nextRound :: RiichiState -> IO RiichiState
-nextRound rs = do
-    secret <- newSecret
-
-    let newDealer = rs ^. riichiPublic.riichiDealer & nextPlayer
-        round     = rs ^. riichiPublic.riichiRound
-        newRound  = if newDealer == Player round
-                        then enumSuccWrap round
-                        else round
-
-    return
-        $ setSecret secret
-        $ riichiRound .~ newRound
-        $ riichiDealer .~ newDealer
-        $ riichiTurn .~ newDealer
-        $ riichiResults .~ Nothing
-        $ rs ^. riichiPublic

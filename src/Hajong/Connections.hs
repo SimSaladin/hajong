@@ -73,6 +73,11 @@ instance Eq Client where a == b = getNick a == getNick b
 instance Ord Client where a <= b = getNick a <= getNick b
 instance Show Client where show = unpack . getNick
 
+instance IsPlayer Client where
+    isBot = not . isReal
+    playerReady = isReady
+    playerNick = getNick
+
 dummyClient :: Nick -> Client
 dummyClient nick = Client nick False False (const (return ())) (error "called receive of dummy Client")
 
@@ -113,7 +118,6 @@ gamePlayerJSON x =
     [ "player"    .= _playerPlayer x
     , "hands"     .= map (toJSON *** toJSON) (M.toList $ _playerPublicHands x)
     , "myhand"    .= _playerMyHand x
-    , "players"   .= _playerPlayers x
     , "gamestate" .= _playerPublic x
     ]
 
@@ -143,14 +147,15 @@ instance ToJSON Event where
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
-        RoundPrivateStarts gameplayer   -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
-        RoundPrivateWaitForShout secs   -> atEvent "waiting"      ["time" .= secs]
-        RoundPrivateChange kaze hand    -> atEvent "my-hand"      ["player" .= kaze, "hand" .= hand]
-        RoundTurnBegins kaze            -> atEvent "turn-changed" ["player" .= kaze]
-        RoundTurnAction kaze turnaction -> atEvent "turn-action"  ["player" .= kaze, "action" .= turnaction]
-        RoundTurnShouted kaze shout     -> atEvent "shout"        ["player" .= kaze, "shout" .= shout]
-        RoundHandChanged kaze hand      -> atEvent "hand"         ["player" .= kaze, "hand" .= hand]
-        RoundEnded results              -> atEvent "end"          ["results" .= results]
+        RoundPrivateStarts gameplayer           -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
+        RoundPrivateWaitForShout kaze secs      -> atEvent "wait-shout"   ["player" .= kaze, "seconds" .= secs]
+        RoundPrivateWaitForTurnAction kaze secs -> atEvent "wait-turn"    ["player" .= kaze, "seconds" .= secs]
+        RoundPrivateChange kaze hand            -> atEvent "my-hand"      ["player" .= kaze, "hand" .= hand]
+        RoundTurnBegins kaze                    -> atEvent "turn-changed" ["player" .= kaze]
+        RoundTurnAction kaze turnaction         -> atEvent "turn-action"  ["player" .= kaze, "action" .= turnaction]
+        RoundTurnShouted kaze shout             -> atEvent "shout"        ["player" .= kaze, "shout" .= shout]
+        RoundHandChanged kaze hand              -> atEvent "hand"         ["player" .= kaze, "hand" .= hand]
+        RoundEnded results                      -> atEvent "end"          ["results" .= results]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard r t) = atType "discard" ["riichi" .= r, "tile" .= t]
@@ -160,7 +165,7 @@ instance ToJSON TurnAction where
 instance ToJSON Player where
     toJSON (Player k) = toJSON k
 
-instance ToJSON Kazehai  where
+instance ToJSON Kaze where
     toJSON = toJSON . tshow
 
 instance ToJSON Hand where
@@ -214,9 +219,11 @@ instance ToJSON RiichiPublic where
         [ "dora"       .= _riichiDora x
         , "tiles-left" .= _riichiWallTilesLeft x
         , "round"      .= _riichiRound x
-        , "oja"        .= _riichiDealer x
+        , "oja"        .= _riichiOja x
+        , "first-oja"  .= _riichiFirstOja x
         , "turn"       .= _riichiTurn x
-        , "players"    .= _riichiPlayers x
+        , "points"     .= ((\(a,_,c) -> (a,c)) <$> _riichiPlayers x)
+        , "players"    .= ((\(a,Player b,_) -> (a,b)) <$> _riichiPlayers x)
         , "results"    .= _riichiResults x
         ]
 
@@ -256,11 +263,7 @@ instance FromJSON Number where
     parseJSON = fmap (toEnum . (\x -> x - 1)) . parseJSON
 
 instance FromJSON Player where
-    parseJSON (String s) = pure $ case s of
-                               "Ton"  -> Player Ton
-                               "Nan"  -> Player Nan
-                               "Shaa" -> Player Shaa
-                               "Pei"  -> Player Pei
+    parseJSON = fmap Player . parseJSON
 
 instance FromJSON Tile where
     parseJSON (Object o) = do
@@ -280,3 +283,10 @@ instance FromJSON Honor where
                                "Nan"  -> Kazehai Nan
                                "Shaa" -> Kazehai Shaa
                                "Pei"  -> Kazehai Pei
+
+instance FromJSON Kaze where
+    parseJSON (String s) = pure $ case s of
+                               "Ton"  -> Ton
+                               "Nan"  -> Nan
+                               "Shaa" -> Shaa
+                               "Pei"  -> Pei

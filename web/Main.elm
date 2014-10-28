@@ -56,6 +56,8 @@ defaultGame = { status     = InLounge
               , roundState = Nothing
               , eventlog   = []
               , debuglog   = []
+              , waitTurnAction = Nothing
+              , waitShout = Nothing
               }
 
 -- logic ------------------------------------------------------

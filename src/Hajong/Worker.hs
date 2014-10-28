@@ -28,7 +28,6 @@ import           Control.Monad.Trans.Either
 import           Control.Monad.Logger
 import           Control.Concurrent.Async
 import           Data.Maybe (fromJust)
-import qualified Data.List as L
 import           System.Log.FastLogger
 
 --------------------------------------------------------------
@@ -113,6 +112,8 @@ sendGameEvents events = do
     multicast $ InGameEvents public
     where
         f gs e@(RoundPrivateChange p _) = sendPrivate gs p e
+        f gs e@(RoundPrivateWaitForShout p _) = sendPrivate gs p e
+        f gs e@(RoundPrivateWaitForTurnAction p _) = sendPrivate gs p e
         f gs e@(RoundPrivateStarts pg)  = sendPrivate gs (_playerPlayer pg) e
         f _ _                           = return True
 
@@ -157,7 +158,7 @@ runOtherAction wi = case wi of
         e_gs <- atomically $ runEitherT $ do
             gs  <- lift $ readTVar gsv
             gs' <- case clientToPlayer client gs of
-                Nothing -> addClient client (not . isReal) gs ? "Game is full"
+                Nothing -> addClient client gs ? "Game is full"
                 Just p  -> return $ setClient client p gs
             lift $ writeTVar gsv gs'
             return gs'
@@ -220,7 +221,7 @@ waitPlayersAndBegin :: WCont
 waitPlayersAndBegin = $logInfo "Waiting for players" >> go
     where
         go = rview gameVar >>= maybe (takeInput >>= runOtherAction >> go)
-                                     (liftIO >=> beginRound) . maybeNextRound isReady
+                                     (liftIO >=> beginRound) . maybeNextRound
 
 beginRound :: GameState Client -> WCont
 beginRound gs = do
@@ -235,24 +236,25 @@ beginRound gs = do
 -- automatically end the turn with a default action.
 turnActionOrTimeout :: WCont
 turnActionOrTimeout = do
-    -- TODO notify of the timeout to client too
     -- TODO configurable secs
-    $logDebug "Waiting for turn action"
+
+    unsafeRoundM_ (turnWaiting 30)
+
     join $ workerRace 30 takeInputTurnAction
-        ($logDebug "Time-out, auto-discarding" >> unsafeRoundM_ autoDiscard >> waitForShouts)
+        ($logDebug "Time-out, auto-discarding"
+            >> unsafeRoundM_ autoDiscard >> waitForShouts)
 
 -- | Advance turn to the next player. After a discard by previous player.
 afterDiscard :: WCont
 afterDiscard = do
-    $logDebug "Advancing turn after a discard"
     (r, ma) <- unsafeRoundM advanceAfterDiscard
     ma
     maybe ($logDebug "New turn begins" >> unsafeRoundM_ autoDraw >> turnActionOrTimeout) endRound r
 
 advanceWithShout :: Player -> Shout -> WCont
-advanceWithShout p sh = do
+advanceWithShout pp sh = do
     $logDebug "Advancing with a shout"
-    roundM (runShout sh p) >>= either $logError (go . snd)
+    roundM (runShout sh pp) >>= either $logError (go . snd)
     where
         go ma = ma >> turnActionOrTimeout
 
@@ -267,11 +269,11 @@ advanceWithShout p sh = do
 waitForShouts :: WCont
 waitForShouts = do
 
-    $logDebug "Waiting for shouts after the discard"
     gs           <- rview gameVar
     winningShout <- liftIO newEmptyTMVarIO
+    (players, _) <- unsafeRoundM getWaitingForShouts -- TODO should include *and* be ordered by shout
 
-    let players = gs^?!gameRound._Just^.riichiSecret.riichiWaitShoutsFrom
+    $logDebug ("Waiting for shouts (" <> tshow players <> ") after the discard")
 
     -- Important invariant of waitAll's first argument:
     --  Shout priorities must be in /decreasing/ order. (This whole thing
@@ -280,23 +282,17 @@ waitForShouts = do
     let waitAll [] = return afterDiscard
         waitAll xs = workerAction' (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
 
-        passOn xs c = waitAll $ maybe id L.delete (clientToPlayer c gs) xs
+        passOn xs c = waitAll $ maybe id (\p -> filter (^._2.to (== p))) (c `clientToPlayer` gs) xs
 
-        shoutHandler [] _ _ = error "shoutHandler: empty list (this is a bug)"
-        shoutHandler xs@(x:_) c sh
-            | shoutedFrom sh == x = return $ case clientToPlayer c gs of
-                      Just p  -> advanceWithShout p sh -- Highest priority
-                      Nothing -> error "WTF? an afk player just shouted?"
-
-            | otherwise =
-                -- save the currently most winning shout. This is wrong too
-                -- as it doesn't check priorities in possibly existing
-                -- value - TODO
-                case clientToPlayer c gs of
-                    Just p -> do
-                        atomically (putTMVar winningShout (advanceWithShout p sh))
+        shoutHandler                [] _     _ = error "shoutHandler: empty list (this is a bug)"
+        shoutHandler xs@((_, pp) : _ ) c shout = case c `clientToPlayer` gs of
+              Just p
+                | p == pp   -> return $ p `advanceWithShout` shout -- Highest priority
+                | otherwise -> 
+                        -- atomically $ putTMVar winningShout $ return $ p `advanceWithShout` shout
+                        error "This thing is broken TODO"
                         passOn xs c
-                    Nothing -> error "WTF? an afk player just shouted?"
+              Nothing -> error "Client not found"
 
     join $ workerRace 20 -- TODO Configurable
         (waitAll players)
@@ -306,7 +302,7 @@ waitForShouts = do
 endRound :: RoundResults -> WCont
 endRound results = do
     $logInfo $ "Round ended (" ++ tshow results ++ ")"
-    maybe endGame (liftIO >=> beginRound) . maybeNextRound isReady =<< rview gameVar
+    maybe endGame (liftIO >=> beginRound) . maybeNextRound =<< rview gameVar
 
 endGame :: WCont
 endGame = $logInfo "Game ended, stopping worker."

@@ -148,14 +148,15 @@ parseGame o = { ident   = parseInt    <| "ident" .: o
 -- ** GameEvents ------------------------------------------------
 parseGameEvent : Value -> GameEvent
 parseGameEvent (Object o) = case "event" .: o |> parseString of
-    "round-begin"  -> RoundPrivateStarts       <| parseRoundState o
-    "waiting"      -> RoundPrivateWaitForShout                { seconds = "seconds" .: o |> parseInt }
-    "my-hand"      -> RoundPrivateChange       <| hasPlayer o { hand    = "hand"    .: o |> parseHand }
-    "turn-changed" -> RoundTurnBegins          <| hasPlayer o { }
-    "turn-action"  -> RoundTurnAction          <| hasPlayer o { action  = "action"  .: o |> parseTurnAction }
-    "shout"        -> RoundTurnShouted         <| hasPlayer o { shout   = "shout"   .: o |> parseShout }
-    "hand"         -> RoundHandChanged         <| hasPlayer o { hand    = "hand" .: o |> parsePublicHand }
-    "end"          -> RoundEnded               <| fromJust <| parseResults <| "results" .: o
+    "round-begin"  -> RoundPrivateStarts            <| parseRoundState o
+    "wait-shout"   -> RoundPrivateWaitForShout      <| hasPlayer o { seconds = "seconds" .: o |> parseInt }
+    "wait-turn"    -> RoundPrivateWaitForTurnAction <| hasPlayer o { seconds = "seconds" .: o |> parseInt }
+    "my-hand"      -> RoundPrivateChange            <| hasPlayer o { hand    = "hand"    .: o |> parseHand }
+    "turn-changed" -> RoundTurnBegins               <| hasPlayer o { }
+    "turn-action"  -> RoundTurnAction               <| hasPlayer o { action  = "action"  .: o |> parseTurnAction }
+    "shout"        -> RoundTurnShouted              <| hasPlayer o { shout   = "shout"   .: o |> parseShout }
+    "hand"         -> RoundHandChanged              <| hasPlayer o { hand    = "hand" .: o |> parsePublicHand }
+    "end"          -> RoundEnded                    <| fromJust <| parseResults <| "results" .: o
 
 -- * Hand -------------------------------------------------------
 parseHand : Value -> Hand
@@ -224,20 +225,22 @@ parseRoundState : Dict.Dict String Value -> RoundState
 parseRoundState o = case "gamestate" .: o of
     Object game -> 
         { mypos     = "player"     .: o    |> parseKaze
-        , hands     = "hands"      .: o    |> withArray parsePlayerHand
         , myhand    = "myhand"     .: o    |> parseHand
-        , players   = "players"    .: o    |> withArray parsePlayer
         , round     = "round"      .: game |> parseKaze
-        , dealer    = "oja"        .: game |> parseKaze
+        , oja       = "oja"        .: game |> parseInt
+        , firstoja  = "first-oja"  .: game |> parseInt
         , turn      = "turn"       .: game |> parseKaze
         , dora      = "dora"       .: game |> withArray parseTile
         , tilesleft = "tiles-left" .: game |> parseInt
+        , hands     = "hands"      .: o    |> withArray parsePlayerHand
+        , points    = "points"     .: game |> withArray parsePoints
+        , players   = "players"    .: game |> withArray parsePoints -- TODO names instead
         , results   = "results"    .: game |> parseResults
         , actions   = [] -- TODO receive actions?
         }
 
-parsePlayer : Value -> (Kaze, String, Int)
-parsePlayer (Array [a, b, c]) = (readKaze <| parseString a, parseString b, parseInt c)
+parsePoints : Value -> (Kaze, Int)
+parsePoints (Array [a, b]) = (readKaze <| parseString a, parseInt b)
 
 -- * RoundResult -------------------------------------------------------
 parseResults : Value -> Maybe RoundResult

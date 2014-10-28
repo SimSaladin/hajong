@@ -22,7 +22,7 @@ import Mahjong.Tiles
 
 data HandPublic = HandPublic
                 { _handOpen :: [Mentsu]
-                , _handDiscards :: [(Tile, Maybe Player)]
+                , _handDiscards :: [(Tile, Maybe Kaze)]
                 , _handRiichi :: Bool
                 , _handTurnDiscard :: Maybe (Tile, UTCTime)
                 } deriving (Show, Read, Eq)
@@ -125,7 +125,7 @@ shoutFromHand shout hand
     | otherwise = throwError "The hand has no discard to take."
 
 -- | Modify the last discard in the discard pile to indicate a shout.
-shoutLastDiscard :: Shout -> [(Tile, Maybe Player)] -> [(Tile, Maybe Player)]
+shoutLastDiscard :: Shout -> [(Tile, Maybe Kaze)] -> [(Tile, Maybe Kaze)]
 shoutLastDiscard     _     [] = error "shoutLastDiscard: empty list"
 shoutLastDiscard shout (x:xs) = go x xs
     where go (tile, _) [] = [(tile, Just $ shoutedFrom shout)]

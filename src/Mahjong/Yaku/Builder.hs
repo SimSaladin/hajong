@@ -14,7 +14,7 @@ import Control.Monad.Free
 import Control.Monad.State
 
 import Mahjong.Hand.Mentsu
-import Mahjong.Tiles (Kazehai(..), Tile(..), Number(..))
+import Mahjong.Tiles (Kaze(..), Tile(..), Number(..))
 import qualified Mahjong.Tiles as T
 
 runChecker :: YakuInfo -> [Mentsu] -> Yaku Int -> Maybe Int
@@ -50,11 +50,11 @@ matchProp tt mentsu
         -- XXX: this is incomplete (shuntsu + terminals etc.)
         TileTerminal        -> T.terminal firstTile
         TileSameAs tile     -> firstTile == tile
-        TileSuited          -> T.suited firstTile
+        TileSuited          -> T.isSuited firstTile
         TileSameSuit tile   -> T.suitedSame tile firstTile
         TileSameNumber tile -> T.tileNumber tile      == T.tileNumber firstTile
         TileNumber n        -> T.tileNumber firstTile == Just n
-        TileHonor           -> not $ T.suited firstTile
+        TileHonor           -> not $ T.isSuited firstTile
         TileSangenpai       -> T.sangenpai firstTile
         TileAnd x y         -> matchProp x mentsu && matchProp y mentsu
         TileOr x y          -> matchProp x mentsu || matchProp y mentsu
@@ -86,8 +86,8 @@ data YakuChecker next = YakuMentsu MentsuProp next
                       deriving (Functor)
 
 data YakuInfo = YakuInfo
-              { yakuRoundKaze :: Kazehai
-              , yakuPlayerKaze :: Kazehai
+              { yakuRoundKaze :: Kaze
+              , yakuPlayerKaze :: Kaze
               , yakuIsConcealed :: Bool
               }
 

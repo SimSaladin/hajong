@@ -245,7 +245,7 @@ groupingShanten n tgs = case foldl' (\i -> (i -) . tgval) n tgs of
         notPairable                       _ = False
 
 kokushiShanten :: Grouping -> Shanten
-kokushiShanten = Just . (13 -) . length . nub . filter ((||) <$> not . suited <*> isTerminal) . concatMap tileGroupTiles
+kokushiShanten = Just . (13 -) . length . nub . filter ((||) <$> not . isSuited <*> isTerminal) . concatMap tileGroupTiles
 
 isTerminal :: Tile -> Bool
 isTerminal t = Just minBound == tileNumber t || tileNumber t == Just maxBound

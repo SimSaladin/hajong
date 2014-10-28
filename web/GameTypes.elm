@@ -4,6 +4,8 @@ import Dict
 import Set (Set)
 import Set
 
+type Player = Int
+
 -- GameState -----------------------------------------------------------------
 type GameState = { status     : Status
                  , mynick     : String
@@ -12,6 +14,8 @@ type GameState = { status     : Status
                  , roundState : Maybe RoundState
                  , eventlog   : [Event]
                  , debuglog   : [String]
+                 , waitTurnAction : Maybe Int
+                 , waitShout : Maybe Int
                  }
 data Status = InLounge | InGame
 
@@ -35,7 +39,8 @@ data Event = JoinServer  { nick : String } -- ^ Nick
            | Noop -- TODO work around elm WS lib signal limitations
 
 data GameEvent = RoundPrivateStarts RoundState
-               | RoundPrivateWaitForShout { seconds : Int }
+               | RoundPrivateWaitForShout { player : Kaze, seconds : Int }
+               | RoundPrivateWaitForTurnAction { player : Kaze, seconds : Int }
                | RoundPrivateChange { player : Kaze, hand : Hand }
                | RoundTurnBegins    { player : Kaze }
                | RoundTurnAction    { player : Kaze, action : TurnAction }
@@ -133,18 +138,20 @@ type RoundState =
         { mypos     : Kaze
         , myhand    : Hand
         , round     : Kaze
-        , dealer    : Kaze
+        , oja       : Player
+        , firstoja  : Player
         , turn      : Kaze
         , dora      : [Tile]
         , tilesleft : Int
         , hands     : [(Kaze, HandPublic)]
-        , players   : [(Kaze, String, Int)]
+        , points    : [(Kaze, Int)]
+        , players   : [(Kaze, Int)]
         , results   : Maybe RoundResult
         , actions   : [(Kaze, TurnAction)]
         }
 
 type RoundResult = { endKind : EndKind, winners : [Kaze], payers : [Kaze] }
-data EndKind = Tsumo | ByRon | Draw
+data EndKind     = Tsumo | ByRon | Draw
 
 -- Actions -------------------------------------------------------------------
 data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?

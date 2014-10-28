@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Mahjong.Tiles
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
@@ -14,18 +14,6 @@ module Mahjong.Tiles where
 
 import Prelude hiding ((<>))
 import Text.PrettyPrint.ANSI.Leijen (Pretty(..), string, (<>))
-
--- XXX this could be in a more appropriate place
-newtype Player = Player Kazehai
-                 deriving (Show, Read, Eq, Ord)
-deriving instance Enum Player
-deriving instance Bounded Player
-
-nextPlayer :: Player -> Player
-nextPlayer = enumSuccWrap
-
-enumSuccWrap :: Enum a => a -> a
-enumSuccWrap = toEnum . (`mod` 4) . (+ 1) . fromEnum
 
 -- * Types
 
@@ -44,15 +32,15 @@ type Aka = Bool
 data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
             deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
-data Honor = Sangenpai Sangenpai
-           | Kazehai Kazehai
+data Honor = Sangenpai Sangen
+           | Kazehai Kaze
            deriving (Show, Read, Eq, Ord)
 
-data Sangenpai = Haku | Hatsu | Chun
-               deriving (Show, Read, Eq, Ord, Enum, Bounded)
+data Sangen = Haku | Hatsu | Chun
+            deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
-data Kazehai = Ton | Nan | Shaa | Pei
-             deriving (Show, Read, Eq, Ord, Enum, Bounded)
+data Kaze = Ton | Nan | Shaa | Pei
+          deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 -- Instances
 
@@ -78,11 +66,11 @@ instance Pretty Tile where
         Suited PinTile n aka -> (if aka then "p" else "P") <> pretty n
         Suited SouTile n aka -> (if aka then "s" else "S") <> pretty n
         Suited{} -> error "No such tile"
-        Honor (Sangenpai sangen) -> case sangen of
+        Honor (Sangenpai sang) -> case sang of
                          Haku    -> "W!"
                          Hatsu   -> "G!"
                          Chun    -> "R!"
-        Honor (Kazehai kaze) -> case kaze of
+        Honor (Kazehai kaz) -> case kaz of
                          Ton     -> "E "
                          Nan     -> "S "
                          Shaa    -> "W "
@@ -97,17 +85,17 @@ instance Pretty Number where
 
 -- * Build
 
-toSuited :: Number -> TileKind -> Tile
-toSuited n tk = Suited tk n False
+suited :: Number -> TileKind -> Tile
+suited n tk = Suited tk n False
 
-toKazehai :: Kazehai -> Tile
-toKazehai = Honor . Kazehai
+kaze :: Kaze -> Tile
+kaze = Honor . Kazehai
 
-toSangenpai :: Sangenpai -> Tile
-toSangenpai = Honor . Sangenpai
+sangen :: Sangen -> Tile
+sangen = Honor . Sangenpai
 
 riichiTiles :: [Tile]
-riichiTiles = join . replicate 4 $ 
+riichiTiles = join . replicate 4 $
     [ Suited k n False | n <- [Ii .. Chuu], k <- [ManTile, PinTile, SouTile] ]
     ++ map (Honor . Sangenpai) [Haku .. Chun]
     ++ map (Honor . Kazehai)   [Ton .. Pei]
@@ -130,8 +118,8 @@ tileNumber (Suited _ n _) = Just n
 tileNumber (Honor _)      = Nothing
 
 -- | True for Man, Pin and Sou tiles; false for honors.
-suited :: Tile -> Bool
-suited = (/= HonorTile) . tileKind
+isSuited :: Tile -> Bool
+isSuited = (/= HonorTile) . tileKind
 
 suitedSame :: Tile -> Tile -> Bool
 suitedSame (Suited tk _ _) (Suited tk' _ _) = tk == tk'

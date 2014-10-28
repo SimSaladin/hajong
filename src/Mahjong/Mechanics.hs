@@ -13,8 +13,8 @@
 module Mahjong.Mechanics where
 
 ------------------------------------------------------------------------------
+import           Mahjong.Round
 import           Mahjong.State
-import           Mahjong.Tiles
 
 ------------------------------------------------------------------------------
 import           Control.Monad.RWS
@@ -32,13 +32,16 @@ makeLenses ''GameState
 
 type RoundM' = RWST RiichiPublic [GameEvent] RiichiSecret (Either Text)
 
+class Eq playerID => IsPlayer playerID where
+    isBot        :: playerID -> Bool
+    playerReady  :: playerID -> Bool
+    playerNick   :: playerID -> Text
+
 -- * GameState
 
 -- | Create a new GameState with the given label.
-newEmptyGS :: playerID -> Text -> GameState playerID
-newEmptyGS defaultPlayer name = GameState players name Nothing
-    where
-        players = Map.fromList $ zip [minBound .. maxBound] (repeat defaultPlayer)
+newEmptyGS :: p -> Text -> GameState p
+newEmptyGS defPlayer name = GameState (Map.fromList $ zip fourPlayers $ repeat defPlayer) name Nothing
 
 -- | Execute a round action in the "GameState".
 --
@@ -56,9 +59,9 @@ runRoundM m = maybe (Left "No active round!") run . _gameRound
 -- | Return an IO action to create the next round if
 --      - it would be first round and all player seats are occupied, or
 --      - the previous round has ended. (TODO!)
-maybeNextRound :: (a -> Bool) -> GameState a -> Maybe (IO (GameState a))
-maybeNextRound ready gs = msum
-    [ maybeBeginGame ready gs
+maybeNextRound :: IsPlayer p => GameState p -> Maybe (IO (GameState p))
+maybeNextRound gs = msum
+    [ maybeBeginGame gs
     , beginNextRound gs
     ]
 
@@ -69,34 +72,38 @@ beginNextRound gs = do
     return $ (\x -> gs & gameRound ?~ x) <$> nextRound rs
 
 -- | If appropriate, begin the game
-maybeBeginGame :: (p -> Bool) -> GameState p -> Maybe (IO (GameState p))
-maybeBeginGame ready gs = do
-    guard        $ gs ^. gameRound.to isNothing
-    guard . null $ gs^.gamePlayers^..each.filtered (not . ready)
-    return $ (\rs -> gs & gameRound .~ Just rs) <$> newRiichiState
+maybeBeginGame :: IsPlayer p => GameState p -> Maybe (IO (GameState p))
+maybeBeginGame gs = do
+    guard . isNothing       $ gs^.gameRound
+    guard . (== 4) . length $ gs^.gamePlayers
+    guard . null            $ gs^.gamePlayers^..each.filtered (not . playerReady)
+
+    return $ do
+        rs <- newRiichiState
+        return $ gameRound .~ Just rs $ gs
 
 -- ** Modify
 
 -- | Try putting the given client to an empty player seat. Returns Nothing
 -- if the game is already full.
-addClient :: Eq playerID => playerID -> (playerID -> Bool) -> GameState playerID -> Maybe (GameState playerID)
-addClient client f = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) go Nothing
+addClient :: IsPlayer p => p -> GameState p -> Maybe (GameState p)
+addClient client = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) go Nothing
     where
-        go s c | isNothing s && f c = (Just (), client)
-               | otherwise          = (s, c)
+        go s c | isNothing s && isBot c = (Just (), client)
+               | otherwise              = (s, c)
 
-setClient :: Eq playerID => playerID -> Player -> GameState playerID -> GameState playerID
-setClient client player = gamePlayers.at player .~ Just client
+setClient :: IsPlayer p => p -> Player -> GameState p -> GameState p
+setClient client p = gamePlayers.at p .~ Just client
 
-removeClient :: Eq playerID => playerID -> GameState playerID -> Maybe (GameState playerID)
+removeClient :: IsPlayer p => p -> GameState p -> Maybe (GameState p)
 removeClient client gs = do
     p <- clientToPlayer client gs
     return $ (gamePlayers.at p .~ Nothing) gs
 
 -- ** Read
 
-playerToClient :: GameState playerID -> Player -> Maybe playerID
+playerToClient :: GameState p -> Player -> Maybe p
 playerToClient gs p = gs^.gamePlayers.at p
 
-clientToPlayer :: Eq playerID => playerID -> GameState playerID -> Maybe Player
+clientToPlayer :: Eq p => p -> GameState p -> Maybe Player
 clientToPlayer c gs = gs^.gamePlayers & ifind (\_ x -> x == c) <&> view _1

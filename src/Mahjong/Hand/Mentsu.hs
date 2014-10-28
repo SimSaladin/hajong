@@ -45,10 +45,10 @@ data MentsuKind = Shuntsu -- ^ 3 Tile straight
 
 -- | A mentsu can result from a shout; and a shout always produces
 -- a mentsu.
-data Shout = Pon { shoutedFrom :: Player, shoutedTile :: Tile }
-           | Kan { shoutedFrom :: Player, shoutedTile :: Tile }
-           | Chi { shoutedFrom :: Player, shoutedTile :: Tile, shoutedTo :: [Tile] }
-           | Ron { shoutedFrom :: Player, shoutedTile :: Tile, shoutedTo :: [Tile] }
+data Shout = Pon { shoutedFrom :: Kaze, shoutedTile :: Tile }
+           | Kan { shoutedFrom :: Kaze, shoutedTile :: Tile }
+           | Chi { shoutedFrom :: Kaze, shoutedTile :: Tile, shoutedTo :: [Tile] }
+           | Ron { shoutedFrom :: Kaze, shoutedTile :: Tile, shoutedTo :: [Tile] }
            deriving (Show, Read, Eq, Ord)
 
 -- | Get the mentsu kind
