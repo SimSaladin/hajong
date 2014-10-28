@@ -58,7 +58,9 @@ gameInput = merge
 
 port upstream : Signal String
 port upstream = (toJSON_Event >> Json.toString "") <~ merges
-    [ Lounge.events ]
+    [ Lounge.events
+    , Game.events
+    ]
 
 -- start state ------------------------------------------------
 defaultGame : GameState

@@ -1,9 +1,21 @@
 [ ] (web) in-game actions
+   [x] discard
+   [ ] shout
+   [ ] ankan
 [ ] (web) in-game view
-[ ] (web) retain nick on refresh
-[ ] (web) re-enter game on refresh
-[ ] (server) worker logging
+   [ ] mentsu
+   [ ] player in turn -indicator
+   [ ] real tiles
+   [ ] chat/dialog
+[x] (web) retain nick on refresh
+[ ] (web) allow nick..
+   [ ] set
+   [ ] change in-game
+[x] (web) re-enter game on refresh
+
+[x] (server) worker logging
 [ ] (server) games/worker status query
+   * website?
 [ ] (connections) revisit json instances - possibly derive?
+
 [ ] (docs) write json channel spec
-[ ] (web) nick set/change dialog

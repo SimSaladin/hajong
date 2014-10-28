@@ -21,13 +21,44 @@ toJSON_Event : Event -> Value
 toJSON_Event ev = case ev of
     JoinServer {nick}     -> atType "join" [("nick", String nick)]
     PartServer {nick}     -> atType "part" [("nick", String nick)]
+    Identity   {nick}     -> atType "identity" [("nick", String nick)]
     Message{from,content} -> atType "msg" [("from", String from), ("content", String content)]
-    CreateGame g          -> atType "game-create" [("topic", String g)]
     JoinGame {ident,nick} -> atType "game-join" [("nick", String nick), ("ident", Number <| toFloat ident)]
+
+    CreateGame g          -> atType "game-create" [("topic", String g)]
     ForceStart {ident}    -> atType "game-fstart" [("ident", Number <| toFloat ident)]
+    InGameAction action   -> atType "game-action" <| toJSON_GameAction action
+
+toJSON_GameAction : GameAction -> [(String, Value)]
+toJSON_GameAction a = case a of
+   GameTurn (TurnTileDiscard riichi tile) -> atAction "discard" [("tile", toJSON_Tile tile), ("riichi", Boolean riichi)]
+   GameTurn (TurnTileDraw dead _)         -> atAction "draw" [("dead", Boolean dead)]
+   GameTurn (TurnAnkan tile)              -> atAction "ankan" [("tile", toJSON_Tile tile)]
+   GameShout s                            -> atAction "shout"
+               [ ("shout", toJSON_ShoutKind s.shoutKind)
+               , ("from", String <| show s.shoutFrom)
+               , ("tile", toJSON_Tile s.shoutTile)
+               , ("into", Array <| map toJSON_Tile s.shoutTo) ]
+   GameDontCare -> atAction "pass" []
+
+toJSON_ShoutKind sk = String <| case sk of
+   Pon -> "pon"
+   Kan -> "kan"
+   Chi -> "chi"
+   Ron -> "ron"
+
+toJSON_Tile : Tile -> Value
+toJSON_Tile tile = case tile of
+   Suited suit num aka -> atType (show suit) [("number", Number <| toFloat num), ("aka", Boolean aka)]
+   Honor honor -> case honor of
+      Kazehai kaze -> atType (show kaze) []
+      Sangenpai sangen -> atType (show sangen) []
 
 atType : String -> [(String, Value)] -> Value
 atType t xs = Object (Dict.fromList <| ("type", String t) :: xs)
+
+atAction : String -> [(String, Value)] -> [(String, Value)]
+atAction t xs = ("action", String t) :: xs
 
 -- Parsers ---------------------------------------------------------------------
 
@@ -61,9 +92,9 @@ parseEvent (Object o) = case "type" .: o |> parseString of
 -- ** Tiles -----------------------------------------------------
 parseTile : Value -> Tile
 parseTile (Object o) = case "type" .: o |> parseString of
-    "ManTile"   -> Suited Man ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
-    "SouTile"   -> Suited Sou ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
-    "PinTile"   -> Suited Pin ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
+    "ManTile"   -> Suited ManTile ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
+    "SouTile"   -> Suited SouTile ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
+    "PinTile"   -> Suited PinTile ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
     "HonorTile" -> Honor <| hasHonor o
 
 parseTileMaybe : Value -> Maybe Tile

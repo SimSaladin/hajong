@@ -220,7 +220,6 @@ instance ToJSON RiichiPublic where
         , "results"    .= _riichiResults x
         ]
 
--- TODO This is used by CLI?
 instance FromJSON Event where
     parseJSON (Object o) = do
         t <- o .: "type"
@@ -232,10 +231,52 @@ instance FromJSON Event where
             "game-join"    -> JoinGame           <$> o .: "ident" <*> o .: "nick"
             "game-secret"  -> InGamePrivateEvent <$> undefined
             "game-public"  -> InGameEvents       <$> undefined
-            "game-action"  -> InGameAction       <$> undefined
+            "game-action"  -> InGameAction       <$> gameActionFromJSON o
             "game-create"  -> CreateGame         <$> o .: "topic"
             "game-fstart"  -> ForceStart         <$> o .: "ident"
             _              -> pure (Invalid ("Unknown or unsupported type: " <> t))
     parseJSON _ = pure (Invalid "Top-level object expected")
 
 
+gameActionFromJSON o = do
+    t <- o .: "action"
+    case t :: Text of
+        "discard" -> (\x y -> GameTurn $ TurnTileDiscard x y) <$> o .: "riichi" <*> o .: "tile"
+        "draw"    -> (\x y -> GameTurn $ TurnTileDraw x y) <$> o .: "dead" <*> pure Nothing
+        "ankan"   -> GameTurn . TurnAnkan <$> o .: "tile"
+        "pass"    -> pure GameDontCare
+        "shout"   -> do s <- o .: "shout"
+                        GameShout <$> case s :: Text of
+                            "pon" -> Pon <$> o .: "from" <*> o .: "tile"
+                            "kan" -> Kan <$> o .: "from" <*> o .: "tile"
+                            "chi" -> Chi <$> o .: "from" <*> o .: "tile" <*> o .: "into"
+                            "ron" -> Ron <$> o .: "from" <*> o .: "tile" <*> o .: "into"
+
+instance FromJSON Number where
+    parseJSON = fmap toEnum . parseJSON
+
+instance FromJSON Player where
+    parseJSON (String s) = pure $ case s of
+                               "Ton"  -> Player Ton
+                               "Nan"  -> Player Nan
+                               "Shaa" -> Player Shaa
+                               "Pei"  -> Player Pei
+
+instance FromJSON Tile where
+    parseJSON (Object o) = do
+        t <- o .: "type"
+        case t :: Text of
+            "ManTile"   -> Suited ManTile <$> o .: "number" <*> o .: "aka"
+            "PinTile"   -> Suited PinTile <$> o .: "number" <*> o .: "aka"
+            "SouTile"   -> Suited SouTile <$> o .: "number" <*> o .: "aka"
+            "HonorTile" -> Honor <$> o .: "ident"
+
+instance FromJSON Honor where
+    parseJSON (String s) = pure $ case s of
+                               "Haku"  -> Sangenpai Haku
+                               "Hatsu" -> Sangenpai Hatsu
+                               "Chun"  -> Sangenpai Chun
+                               "Ton"  -> Kazehai Ton
+                               "Nan"  -> Kazehai Nan
+                               "Shaa" -> Kazehai Shaa
+                               "Pei"  -> Kazehai Pei

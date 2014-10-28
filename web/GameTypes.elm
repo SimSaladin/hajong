@@ -21,11 +21,13 @@ data Event = JoinServer  { nick : String } -- ^ Nick
            | PartServer  { nick : String }
            | Identity    { nick : String }
            | Message     { from : String, content : String } -- ^ from, content
-           | Invalid     { content : String }
-           | LoungeInfo  { lounge : LoungeData }
-           | GameCreated { game : GameInfo }
            | JoinGame    { ident : Int, nick : String }
+
+           -- FROM server only
+           | Invalid     { content : String }
+           | GameCreated { game : GameInfo }
            | InGameEvents [GameEvent]
+           | LoungeInfo  { lounge : LoungeData }
 
             -- To server only
            | CreateGame String
@@ -52,7 +54,7 @@ defaultLounge = { idle = Set.empty, games = [] }
 
 -- Tiles ---------------------------------------------------------------------
 data Tile   = Suited Suit Int Bool | Honor Honor
-data Suit   = Man | Pin | Sou
+data Suit   = ManTile | PinTile | SouTile
 data Honor  = Kazehai Kaze | Sangenpai Sangen
 data Kaze   = Ton | Nan | Shaa | Pei
 data Sangen = Haku | Hatsu | Chun

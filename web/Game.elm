@@ -3,10 +3,21 @@ module Game where
 import Util
 import GameTypes (..)
 
+import Graphics.Input (..)
+import Maybe (maybe)
 import Array
 
+-- the game = { display = display, events = events }
+
+-- Controls ----------------------------------------------------------
+
+-- TODO: ???
 type Controls = {}
 
+view : Signal Controls
+view = constant {}
+
+-- View --------------------------------------------------------------
 t_w = 40
 t_h = 60
 
@@ -45,11 +56,24 @@ dispInfoBlock rs = color gray <| size (6*(t_w+4)+2) (6*(t_w+4)+2) <| flow down
 
 dispLog = flow up << map asText
 
-dispMyHand hand = dispTiles hand.concealed `beside` spacer 10 10 `beside` dispPick hand.pick
+-- Upstream ---------------------------------------------------------------
 
-dispPick mt = case mt of
-   Just t  -> dispTile t |> color lightGreen
-   Nothing -> empty
+events : Signal Event
+events = merges
+   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
+   ]
+
+-- My Hand ----------------------------------------------------------------
+
+-- Maybe a tile to discard from my hand
+discard : Input (Maybe Tile)
+discard = input Nothing
+
+dispMyHand hand = flow right
+   [ flow right <| map dispTileClickable hand.concealed
+   , spacer 10 10
+   , maybe empty (dispTileClickable >> color lightGreen) hand.pick
+   ]
 
 dispHand (k, h) =
    container (6*(t_w+4)+2) (3*(t_h+4)) topLeft
@@ -58,6 +82,7 @@ dispHand (k, h) =
    <| groupInto 6
    <| map (dispTile << fst) h.discards
 
+-- Others' hands -----------------------------------------------------------
 data Dir = Up | Down | Left | Right
    
 rotatedTo dir frm = case dir of
@@ -72,6 +97,10 @@ dispWanpai = .dora >> dispTiles
 
 dispTiles = flow right << map dispTile
 
+dispTileClickable : Tile -> Element
+dispTileClickable tile = dispTile tile |> clickable discard.handle (Just tile)
+
+-- Tile Element
 dispTile tile = container (t_w + 4) (t_h + 4) middle
    <| color lightBlue
    <| size t_w t_h
@@ -80,7 +109,7 @@ dispTile tile = container (t_w + 4) (t_h + 4) middle
          Honor (Kazehai honor) -> asText honor
          Honor (Sangenpai honor) -> asText honor
 
--- Misc
+-- Misc -------------------------------------------------------------------------
 
 kazeNth k = case k of
    Ton  -> 1
@@ -91,11 +120,6 @@ kazeNth k = case k of
 groupInto n xs = case xs of
    [] -> []
    _  -> take n xs :: groupInto n (drop n xs)
-
--- Controls
-
-view : Signal Controls
-view = constant {}
 
 -- State
 

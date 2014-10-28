@@ -13,7 +13,6 @@
 module Mahjong.Mechanics where
 
 ------------------------------------------------------------------------------
-import           Mahjong.Round
 import           Mahjong.State
 import           Mahjong.Tiles
 
@@ -58,14 +57,21 @@ runRoundM m = maybe (Left "No active round!") run . _gameRound
 --      - it would be first round and all player seats are occupied, or
 --      - the previous round has ended. (TODO!)
 maybeNextRound :: (a -> Bool) -> GameState a -> Maybe (IO (GameState a))
-maybeNextRound ready gs =
-    case _gameRound gs of
-        Nothing -> maybeBeginGame ready gs
-        Just _  -> Nothing -- return $ (\rs -> gs & gameRound .~ Just rs) <$> newRiichiState
+maybeNextRound ready gs = msum
+    [ maybeBeginGame ready gs
+    , beginNextRound gs
+    ]
+
+beginNextRound :: GameState p -> Maybe (IO (GameState p))
+beginNextRound gs = do
+    rs   <- gs ^. gameRound
+    _res <- rs ^. riichiPublic.riichiResults -- TODO save the previous result to GameState?
+    return $ (\x -> gs & gameRound ?~ x) <$> nextRound rs
 
 -- | If appropriate, begin the game
 maybeBeginGame :: (p -> Bool) -> GameState p -> Maybe (IO (GameState p))
 maybeBeginGame ready gs = do
+    guard        $ gs ^. gameRound.to isNothing
     guard . null $ gs^.gamePlayers^..each.filtered (not . ready)
     return $ (\rs -> gs & gameRound .~ Just rs) <$> newRiichiState
 
