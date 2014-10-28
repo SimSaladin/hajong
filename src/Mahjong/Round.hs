@@ -172,9 +172,6 @@ publishTurnAction player ra = tellEvent $ case ra of
 
 -- * Functions
 
-nextPlayer :: Player -> Player
-nextPlayer = toEnum . (`mod` 4) . (+ 1) . fromEnum
-
 handOf :: Player -> Lens RiichiSecret RiichiSecret (Maybe Hand) (Maybe Hand)
 handOf player = riichiHands.at player
 

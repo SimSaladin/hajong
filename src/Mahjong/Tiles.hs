@@ -21,6 +21,12 @@ newtype Player = Player Kazehai
 deriving instance Enum Player
 deriving instance Bounded Player
 
+nextPlayer :: Player -> Player
+nextPlayer = enumSuccWrap
+
+enumSuccWrap :: Enum a => a -> a
+enumSuccWrap = toEnum . (`mod` 4) . (+ 1) . fromEnum
+
 -- * Types
 
 -- | A (japanese) mahjong tile.

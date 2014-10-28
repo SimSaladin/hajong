@@ -195,7 +195,7 @@ instance ToJSON Tile where
     toJSON (Suited tk n a) = object [ "type" .= tk, "number" .= n, "aka" .= a ]
     toJSON (Honor h) = object [ "type" .= HonorTile, "ident" .= h]
 
-instance ToJSON Number where toJSON = toJSON . fromEnum
+instance ToJSON Number where toJSON = toJSON . (1 +) . fromEnum
 instance ToJSON TileKind where toJSON = toJSON . tshow
 
 instance ToJSON Honor where
@@ -253,7 +253,7 @@ gameActionFromJSON o = do
                             "ron" -> Ron <$> o .: "from" <*> o .: "tile" <*> o .: "into"
 
 instance FromJSON Number where
-    parseJSON = fmap toEnum . parseJSON
+    parseJSON = fmap (toEnum . (\x -> x - 1)) . parseJSON
 
 instance FromJSON Player where
     parseJSON (String s) = pure $ case s of

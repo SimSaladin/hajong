@@ -12,14 +12,21 @@ import Array
 -- Controls ----------------------------------------------------------
 
 -- TODO: ???
-type Controls = {}
+type Controls = { hoveredTile : Maybe Tile }
+
+-- Maybe a tile to discard from my hand
+discard : Input (Maybe Tile)
+discard = input Nothing
+
+discardHover : Input (Maybe Tile)
+discardHover = input Nothing
 
 view : Signal Controls
-view = constant {}
+view = Controls <~ dropRepeats discardHover.signal
 
 -- View --------------------------------------------------------------
-t_w = 40
-t_h = 60
+t_w = 62
+t_h = 82
 
 display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
@@ -28,30 +35,34 @@ display co gs = case gs.roundState of
           offset     = kazeNth (rs.mypos) - 1
           playerAt n = Array.getOrFail (n + offset % 4)
       in flow down
-         [ collage 650 650
-            [ toForm <| dispInfoBlock rs
-            , dispDiscards playerAt hands
-            ]
-         , dispWanpai rs
-         , dispMyHand rs.myhand
-         ] `beside` dispLog rs.actions
+           [ container 1000 650 midTop <| collage 650 650
+               [ dispInfoBlock rs
+               , move (70, 70) <| scale 0.6 <| toForm <| dispWanpai co rs
+               , scale 0.7 <| dispDiscards co playerAt hands
+               ]
+           , container 1000 100 midTop <| dispMyHand co rs.myhand
+           ] `beside` dispLog rs.actions
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
 
-dispDiscards playerAt hands = group
-   [ moveY (-235) <|                         toForm <| dispHand <| playerAt 0 hands
-   , moveX 235    <| rotate (degrees 90)  <| toForm <| dispHand <| playerAt 1 hands
-   , moveY 235    <| rotate (degrees 180) <| toForm <| dispHand <| playerAt 2 hands
-   , moveX (-235) <| rotate (degrees 270) <| toForm <| dispHand <| playerAt 3 hands
+dispDiscards co playerAt hands = group
+   [ moveY (-330) <|                         toForm <| dispHand co <| playerAt 0 hands
+   , moveX 330    <| rotate (degrees 90)  <| toForm <| dispHand co <| playerAt 1 hands
+   , moveY 330    <| rotate (degrees 180) <| toForm <| dispHand co <| playerAt 2 hands
+   , moveX (-330) <| rotate (degrees 270) <| toForm <| dispHand co <| playerAt 3 hands
    ]
 
-dispInfoBlock rs = color gray <| size (6*(t_w+4)+2) (6*(t_w+4)+2) <| flow down
-   [ plainText "Turn of " `beside` dispKaze rs.turn
-   , plainText "I am " `beside` dispKaze rs.mypos
-   , plainText "Round is " `beside` dispKaze rs.round
-   , plainText "dealer is " `beside` dispKaze rs.dealer
-   , plainText "tiles left: " `beside` asText rs.tilesleft
-   , plainText "players: " `beside` (flow down <| map asText rs.players)
-   ]
+dispInfoBlock rs =
+   toForm
+   <| color black <| container 204 204 middle
+   <| color white <| size 200 200
+   <| flow down
+      [ plainText "Turn of " `beside` dispKaze rs.turn
+      , plainText "I am " `beside` dispKaze rs.mypos
+      , plainText "Round is " `beside` dispKaze rs.round
+      , plainText "dealer is " `beside` dispKaze rs.dealer
+      , plainText "tiles left: " `beside` asText rs.tilesleft
+      , plainText "players: " `beside` (flow down <| map asText rs.players)
+      ]
    -- , asText <| "Results: " ++ show rs.results
 
 dispLog = flow up << map asText
@@ -65,57 +76,54 @@ events = merges
 
 -- My Hand ----------------------------------------------------------------
 
--- Maybe a tile to discard from my hand
-discard : Input (Maybe Tile)
-discard = input Nothing
-
-dispMyHand hand = flow right
-   [ flow right <| map dispTileClickable hand.concealed
+dispMyHand co hand = flow right
+   [ flow right <| map (dispTileClickable co) <| sortTiles hand.concealed
    , spacer 10 10
-   , maybe empty (dispTileClickable >> color lightGreen) hand.pick
+   , maybe empty (dispTileClickable co >> color lightGreen) hand.pick
    ]
 
-dispHand (k, h) =
+dispHand co (k, h) =
    container (6*(t_w+4)+2) (3*(t_h+4)) topLeft
    <| flow down
    <| map (flow right)
    <| groupInto 6
-   <| map (dispTile << fst) h.discards
+   <| map (dispTile co << fst) h.discards
 
 -- Others' hands -----------------------------------------------------------
 data Dir = Up | Down | Left | Right
    
 rotatedTo dir frm = case dir of
    Up    -> color lightOrange <| collage (6*(t_w+4)+2) (3*(t_h+2)) [rotate (degrees 180) frm]
-   Down  -> color lightRed <| collage (6*(t_w+4)+2) (3*(t_h+4)) [frm]
-   Left  -> color lightGreen <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 270) frm]
-   Right -> color blue <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 90) frm]
+   Down  -> color lightRed    <| collage (6*(t_w+4)+2) (3*(t_h+4)) [frm]
+   Left  -> color lightGreen  <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 270) frm]
+   Right -> color blue        <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 90) frm]
+
+-- Tiles -----------------------------------------------------------------------
+dispTile co tile = container (t_w + 4) (t_h + 4) middle
+   <| hoverable discardHover.handle (\h -> if h then Just tile else Nothing)
+   <| color (if co.hoveredTile == Just tile then blue else lightBlue)
+   <| size t_w t_h
+   <| tileImage tile
 
 dispKaze kaze = asText kaze
 
-dispWanpai = .dora >> dispTiles
+dispWanpai co = .dora >> map (dispTile co) >> flow right
 
-dispTiles = flow right << map dispTile
+dispTileClickable : Controls -> Tile -> Element
+dispTileClickable co tile = dispTile co tile |> clickable discard.handle (Just tile)
 
-dispTileClickable : Tile -> Element
-dispTileClickable tile = dispTile tile |> clickable discard.handle (Just tile)
+tileImage tile =
+   let (row, col) = case tile of
+               Suited ManTile n _  -> (125 + (n - 1) * 97, 47)
+               Suited PinTile n _  -> (125 + (n - 1) * 97, 142)
+               Suited SouTile n _  -> (125 + (n - 1) * 97, 237)
+               Honor (Kazehai k)   -> (222 + (kazeNth k - 1) * 97, 356)
+               Honor (Sangenpai s) -> (707 + (sangenNth s - 1) * 97, 356)
+   in
+      croppedImage (row, col) 62 82 "Mahjong-tiles.jpg"
 
--- Tile Element
-dispTile tile = container (t_w + 4) (t_h + 4) middle
-   <| color lightBlue
-   <| size t_w t_h
-   <| case tile of
-         Suited suit n aka -> flow down [asText suit, asText n]
-         Honor (Kazehai honor) -> asText honor
-         Honor (Sangenpai honor) -> asText honor
 
 -- Misc -------------------------------------------------------------------------
-
-kazeNth k = case k of
-   Ton  -> 1
-   Nan  -> 2
-   Shaa -> 3
-   Pei  -> 4
 
 groupInto n xs = case xs of
    [] -> []
@@ -126,20 +134,18 @@ groupInto n xs = case xs of
 processInGameEvent : GameEvent -> GameState -> GameState
 processInGameEvent event gs = case event of
    RoundPrivateStarts rs ->
-     if gs.status == InGame
-        then Util.log gs "ERROR: InGame and new round!" -- TODO
-        else { gs | status <- InGame
-                  , gameWait <- Nothing
-                  , roundState <- Just rs }
+        { gs | status <- InGame
+             , gameWait <- Nothing
+             , roundState <- Just rs }
 
    RoundPrivateWaitForShout {seconds} ->
       Util.log gs ("Waiting for shouts... " ++ show seconds)
- 
+
    RoundPrivateChange {hand} -> setMyHand hand gs
- 
+
    RoundTurnBegins {player} ->
       Util.log gs ("Turn of " ++ show player) |> setTurnPlayer player
- 
+
    RoundTurnAction {player, action} ->
       addTurnAction player action gs
          |> processTurnAction player action
@@ -192,9 +198,6 @@ atPlayer : Kaze -> (a -> a) -> [(Kaze, a)] -> [(Kaze, a)]
 atPlayer k f ((k', h) :: xs) = if k == k' then (k', f h) :: xs
                                           else (k', h)   :: atPlayer k f xs
 
--- addDiscard : (H -> H
 addDiscard disc h = { h | discards <- h.discards ++ [disc] }
-
 setRiichi riichi h = { h | riichi <- riichi }
-
 updateHand player hand = atPlayer player (\_ -> hand)

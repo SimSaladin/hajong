@@ -14,16 +14,6 @@ import Text
 import Json
 import Graphics.Input.Field as Field
 
-data GameInput = InputDelta { userInput : UserInput }
-               | InputEvent Event
-
-type UserInput = { mousePos   : (Int,Int)
-                 , loungeView : Lounge.View
-                 }
-
-userInput : Signal UserInput
-userInput = UserInput <~ Mouse.position ~ Lounge.view
-
 -- {{{ Log view ---------------------------------------------------
 logView : GameState -> Element
 logView game =
@@ -43,24 +33,19 @@ eventView ev = case ev of
     _                      -> show ev |> toText |> Text.color orange
 -- }}}
 
--- view: lounge -----------------------------------------------
-
--- main input -------------------------------------------------
-
+-- {{{ Server IO ----------------------------------------------
 port downstream : Signal String
 
-gameInput : Signal GameInput
-gameInput = merge
-    (InputEvent << fromJSON_Event <~ downstream)
-    ((\x -> InputDelta { userInput = x }) <~ userInput)
+eventInput : Signal Event
+eventInput = fromJSON_Event <~ downstream
 
--- upstream signal --------------------------------------------
-
+-- upstream signal
 port upstream : Signal String
 port upstream = (toJSON_Event >> Json.toString "") <~ merges
     [ Lounge.events
     , Game.events
     ]
+-- }}}
 
 -- start state ------------------------------------------------
 defaultGame : GameState
@@ -69,19 +54,17 @@ defaultGame = { status     = InLounge
               , lounge     = defaultLounge
               , gameWait   = Nothing
               , roundState = Nothing
-              , mousepos   = (0,0)
               , eventlog   = []
               , debuglog   = []
               }
 
 -- logic ------------------------------------------------------
 gameState : Signal GameState
-gameState = foldp stepGame defaultGame gameInput
+gameState = foldp stepGame defaultGame eventInput
 
-stepGame : GameInput -> GameState -> GameState
-stepGame gameInput gs = case gameInput of
-    InputDelta {userInput} -> { gs | mousepos <- userInput.mousePos }
-    InputEvent event       -> stepEvent event { gs | eventlog <- event :: gs.eventlog }
+stepGame : Event -> GameState -> GameState
+stepGame event gs =
+   stepEvent event <| { gs | eventlog <- event :: gs.eventlog }
 
 stepEvent : Event -> GameState -> GameState
 stepEvent event gameState = case event of
@@ -116,7 +99,7 @@ deleteNick n l =
 -- main display -----------------------------------------------
 
 display : GameState -> Element -> Element
-display game view = flow down
+display game view = flow right
    [ view
    , logView game
    ]

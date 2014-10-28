@@ -12,6 +12,7 @@
    [ ] set
    [ ] change in-game
 [x] (web) re-enter game on refresh
+[ ] (web) BUG game ended and back in lobby -> cannot join games
 
 [x] (server) worker logging
 [ ] (server) games/worker status query

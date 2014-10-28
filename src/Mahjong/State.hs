@@ -139,7 +139,8 @@ newRiichiState = liftM (`setSecret` newPublic) newSecret
 setSecret :: RiichiSecret -> RiichiPublic -> RiichiState
 setSecret secret public = RiichiState
     (secret & set riichiWanpai wanpai')
-    (public & set riichiDora [dora] & set riichiWallTilesLeft (secret ^. riichiWall.to length))
+    (public & set riichiDora [dora]
+            & set riichiWallTilesLeft (secret ^. riichiWall.to length))
     []
     where
         (dora : wanpai') = secret ^. riichiWanpai
@@ -148,4 +149,17 @@ setSecret secret public = RiichiState
 nextRound :: RiichiState -> IO RiichiState
 nextRound rs = do
     secret <- newSecret
-    return $ setSecret secret $ (rs ^. riichiPublic) & set riichiTurn (rs ^. riichiPublic.riichiDealer)
+
+    let newDealer = rs ^. riichiPublic.riichiDealer & nextPlayer
+        round     = rs ^. riichiPublic.riichiRound
+        newRound  = if newDealer == Player round
+                        then enumSuccWrap round
+                        else round
+
+    return
+        $ setSecret secret
+        $ riichiRound .~ newRound
+        $ riichiDealer .~ newDealer
+        $ riichiTurn .~ newDealer
+        $ riichiResults .~ Nothing
+        $ rs ^. riichiPublic

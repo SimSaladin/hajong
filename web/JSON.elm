@@ -50,9 +50,9 @@ toJSON_ShoutKind sk = String <| case sk of
 toJSON_Tile : Tile -> Value
 toJSON_Tile tile = case tile of
    Suited suit num aka -> atType (show suit) [("number", Number <| toFloat num), ("aka", Boolean aka)]
-   Honor honor -> case honor of
-      Kazehai kaze -> atType (show kaze) []
-      Sangenpai sangen -> atType (show sangen) []
+   Honor honor -> atType "HonorTile" <| case honor of
+      Kazehai kaze -> [("ident", String <| show kaze)]
+      Sangenpai sangen -> [("ident", String <| show sangen)]
 
 atType : String -> [(String, Value)] -> Value
 atType t xs = Object (Dict.fromList <| ("type", String t) :: xs)

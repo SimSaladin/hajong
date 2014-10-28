@@ -10,7 +10,6 @@ type GameState = { status     : Status
                  , lounge     : LoungeData
                  , gameWait   : Maybe Int
                  , roundState : Maybe RoundState
-                 , mousepos   : (Int, Int)
                  , eventlog   : [Event]
                  , debuglog   : [String]
                  }
@@ -64,6 +63,40 @@ readKaze x = case x of
     "Nan"  -> Nan
     "Shaa" -> Shaa
     "Pei"  -> Pei
+
+tileOrder : Tile -> Tile -> Order
+tileOrder a b = case (a, b) of
+   (Suited _ _ _, Honor _) -> LT
+   (Honor _, Suited _ _ _) -> GT
+   (Suited s n _, Suited t m _) -> case suitOrder s t of
+      EQ -> compare n m
+      x  -> x
+   (Honor (Kazehai _), Honor (Sangenpai _))   -> LT
+   (Honor (Sangenpai _), Honor (Kazehai _))   -> GT
+   (Honor (Kazehai k), Honor (Kazehai l))     -> kazeOrder k l
+   (Honor (Sangenpai s), Honor (Sangenpai t)) -> sangenOrder s t
+
+kazeOrder a b = compare (kazeNth a) (kazeNth b)
+sangenOrder a b = compare (sangenNth a) (sangenNth b)
+suitOrder a b = compare (suitNth a) (suitNth b)
+
+suitNth s = case s of
+   ManTile -> 1
+   PinTile -> 2
+   SouTile -> 3
+
+kazeNth k = case k of
+   Ton  -> 1
+   Nan  -> 2
+   Shaa -> 3
+   Pei  -> 4
+
+sangenNth k = case k of
+   Haku  -> 1
+   Hatsu -> 2
+   Chun  -> 3
+
+sortTiles = sortWith tileOrder
 
 -- Hands ---------------------------------------------------------------------
 type Hand = HandPublic' { concealed : [Tile]
