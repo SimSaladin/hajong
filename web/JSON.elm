@@ -6,6 +6,7 @@ import Dict
 import Set
 import Maybe (maybe)
 import Json (Value(..), toString, fromString)
+import Debug
 
 -- FromJSON --------------------------------------------------------------------
 
@@ -65,9 +66,17 @@ atAction t xs = ("action", String t) :: xs
 -- ** Helpers ----------------------------------------------------
 n .: o = Dict.getOrFail n o
 
-parseString (String s)  = s
-parseInt    (Number n)  = floor n
-parseBool   (Boolean b) = b
+parseString x = case x of
+   String s -> s
+   _        -> Debug.crash <| "JSON.parseString: not a string: " ++ show x
+
+parseInt x = case x of
+   Number n -> floor n
+   _        -> Debug.crash <| "JSON.parseInt: not int: " ++ show x
+
+parseBool x = case x of
+   Boolean b -> b
+   _         -> Debug.crash <| "JSON.parseBool: not bool: " ++ show x
 
 parseBoolMaybe x = case x of
    Boolean b -> Just b
@@ -109,6 +118,7 @@ parseDiscardTile (Array [a, b]) =
          String s -> readKaze s |> Just
       in (parseTile a, player)
 
+parseKaze : Value -> Kaze
 parseKaze = readKaze << parseString
 
 hasHonor o = case "ident" .: o |> parseString of
@@ -121,12 +131,13 @@ hasHonor o = case "ident" .: o |> parseString of
     "Chun"  -> Sangenpai Chun
 
 -- ** General fields ------------------------------------------
-hasNick o s    = { s | nick    = "nick"    .: o |> parseString }
-hasFrom o s    = { s | from    = "from"    .: o |> parseString }
-hasContent o s = { s | content = "content" .: o |> parseString }
-hasPlayer o s  = { s | player  = "player"  .: o |> parseKaze }
-hasLounge o s  = { s | lounge  = parseLoungeData o }
-hasGame o s    = { s | game    = parseGame o }
+hasNick o s        = { s | nick    = "nick"        .: o |> parseString }
+hasFrom o s        = { s | from    = "from"        .: o |> parseString }
+hasContent o s     = { s | content = "content"     .: o |> parseString }
+hasPlayer o s      = { s | player  = "player"      .: o |> parseInt }
+hasPlayerKaze o s  = { s | player_kaze  = "player-kaze" .: o |> parseKaze }
+hasLounge o s      = { s | lounge  = parseLoungeData o }
+hasGame o s        = { s | game    = parseGame o }
 
 -- ** Lounge --------------------------------------------------
 parseLoungeData o =
@@ -142,7 +153,7 @@ parseGameInfos = withArray (\(Object o) -> parseGame o)
 
 parseGame o = { ident   = parseInt    <| "ident" .: o
               , topic   = parseString <| "topic" .: o
-              , players = parseNicks <| "players" .: o
+              , players = parseNicks  <| "players" .: o
               }
 
 -- ** GameEvents ------------------------------------------------
@@ -152,10 +163,10 @@ parseGameEvent (Object o) = case "event" .: o |> parseString of
     "wait-shout"   -> RoundPrivateWaitForShout      <| hasPlayer o { seconds = "seconds" .: o |> parseInt }
     "wait-turn"    -> RoundPrivateWaitForTurnAction <| hasPlayer o { seconds = "seconds" .: o |> parseInt }
     "my-hand"      -> RoundPrivateChange            <| hasPlayer o { hand    = "hand"    .: o |> parseHand }
-    "turn-changed" -> RoundTurnBegins               <| hasPlayer o { }
-    "turn-action"  -> RoundTurnAction               <| hasPlayer o { action  = "action"  .: o |> parseTurnAction }
-    "shout"        -> RoundTurnShouted              <| hasPlayer o { shout   = "shout"   .: o |> parseShout }
-    "hand"         -> RoundHandChanged              <| hasPlayer o { hand    = "hand" .: o |> parsePublicHand }
+    "turn-changed" -> RoundTurnBegins               <| hasPlayerKaze o { }
+    "turn-action"  -> RoundTurnAction               <| hasPlayerKaze o { action  = "action"  .: o |> parseTurnAction }
+    "shout"        -> RoundTurnShouted              <| hasPlayerKaze o { shout   = "shout"   .: o |> parseShout }
+    "hand"         -> RoundHandChanged              <| hasPlayerKaze o { hand    = "hand" .: o |> parsePublicHand }
     "end"          -> RoundEnded                    <| fromJust <| parseResults <| "results" .: o
 
 -- * Hand -------------------------------------------------------
@@ -224,23 +235,24 @@ parseShoutKind (String s) = case s of
 parseRoundState : Dict.Dict String Value -> RoundState
 parseRoundState o = case "gamestate" .: o of
     Object game -> 
-        { mypos     = "player"     .: o    |> parseKaze
-        , myhand    = "myhand"     .: o    |> parseHand
+        { mypos     = "kaze"       .: o    |> parseKaze
         , round     = "round"      .: game |> parseKaze
+        , turn      = "turn"       .: game |> parseKaze
+        , player    = "player"     .: o    |> parseInt
         , oja       = "oja"        .: game |> parseInt
         , firstoja  = "first-oja"  .: game |> parseInt
-        , turn      = "turn"       .: game |> parseKaze
-        , dora      = "dora"       .: game |> withArray parseTile
         , tilesleft = "tiles-left" .: game |> parseInt
+        , dora      = "dora"       .: game |> withArray parseTile
         , hands     = "hands"      .: o    |> withArray parsePlayerHand
         , points    = "points"     .: game |> withArray parsePoints
         , players   = "players"    .: game |> withArray parsePoints -- TODO names instead
+        , myhand    = "myhand"     .: o    |> parseHand
         , results   = "results"    .: game |> parseResults
         , actions   = [] -- TODO receive actions?
         }
 
 parsePoints : Value -> (Kaze, Int)
-parsePoints (Array [a, b]) = (readKaze <| parseString a, parseInt b)
+parsePoints (Array [a, b]) = (parseKaze a, parseInt b)
 
 -- * RoundResult -------------------------------------------------------
 parseResults : Value -> Maybe RoundResult

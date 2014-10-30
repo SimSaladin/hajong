@@ -115,7 +115,8 @@ atEvent t xs = object ("event" .= t : xs)
 
 gamePlayerJSON :: GamePlayer -> [Pair]
 gamePlayerJSON x =
-    [ "player"    .= _playerPlayer x
+    [ "kaze"      .= _playerKaze x
+    , "player"    .= _playerPlayer x
     , "hands"     .= map (toJSON *** toJSON) (M.toList $ _playerPublicHands x)
     , "myhand"    .= _playerMyHand x
     , "gamestate" .= _playerPublic x
@@ -148,13 +149,13 @@ instance ToJSON Event where
 instance ToJSON GameEvent where
     toJSON ge = case ge of
         RoundPrivateStarts gameplayer           -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
-        RoundPrivateWaitForShout kaze secs      -> atEvent "wait-shout"   ["player" .= kaze, "seconds" .= secs]
-        RoundPrivateWaitForTurnAction kaze secs -> atEvent "wait-turn"    ["player" .= kaze, "seconds" .= secs]
-        RoundPrivateChange kaze hand            -> atEvent "my-hand"      ["player" .= kaze, "hand" .= hand]
-        RoundTurnBegins kaze                    -> atEvent "turn-changed" ["player" .= kaze]
-        RoundTurnAction kaze turnaction         -> atEvent "turn-action"  ["player" .= kaze, "action" .= turnaction]
-        RoundTurnShouted kaze shout             -> atEvent "shout"        ["player" .= kaze, "shout" .= shout]
-        RoundHandChanged kaze hand              -> atEvent "hand"         ["player" .= kaze, "hand" .= hand]
+        RoundPrivateWaitForShout player secs      -> atEvent "wait-shout"   ["player" .= player, "seconds" .= secs]
+        RoundPrivateWaitForTurnAction player secs -> atEvent "wait-turn"    ["player" .= player, "seconds" .= secs]
+        RoundPrivateChange player hand            -> atEvent "my-hand"      ["player" .= player, "hand" .= hand]
+        RoundTurnBegins pk                    -> atEvent "turn-changed" ["player-kaze" .= pk]
+        RoundTurnAction pk turnaction         -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
+        RoundTurnShouted pk shout             -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
+        RoundHandChanged pk hand              -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
         RoundEnded results                      -> atEvent "end"          ["results" .= results]
 
 instance ToJSON TurnAction where

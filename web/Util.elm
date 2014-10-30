@@ -11,5 +11,5 @@ inGame = (\s -> s.status == InGame)
 lookupGameInfo : GameState -> Int -> GameInfo
 lookupGameInfo game ident = head <| filter (\g -> g.ident == ident) game.lounge.games
 
-log : GameState -> String -> GameState
-log gs str = { gs | debuglog <- str :: gs.debuglog }
+log : String -> GameState -> GameState
+log str gs = { gs | debuglog <- str :: gs.debuglog }

@@ -4,7 +4,6 @@ import Lounge
 import Game
 import Events
 import Util
--- import Connection
 import GameTypes (..)
 import JSON (fromJSON_Event, toJSON_Event)
 
@@ -39,7 +38,7 @@ port downstream : Signal String
 eventInput : Signal Event
 eventInput = fromJSON_Event <~ downstream
 
--- upstream signal
+-- upstream signal (further handled from JS)
 port upstream : Signal String
 port upstream = (toJSON_Event >> Json.toString "") <~ merges
     [ Lounge.events
@@ -47,26 +46,39 @@ port upstream = (toJSON_Event >> Json.toString "") <~ merges
     ]
 -- }}}
 
--- start state ------------------------------------------------
-defaultGame : GameState
-defaultGame = { status     = InLounge
-              , mynick     = ""
-              , lounge     = defaultLounge
-              , gameWait   = Nothing
-              , roundState = Nothing
-              , eventlog   = []
-              , debuglog   = []
-              , waitTurnAction = Nothing
-              , waitShout = Nothing
-              }
+-- {{{ Default state ------------------------------------------
+newState : GameState
+newState = { status     = InLounge
+           , mynick     = ""
+           , lounge     = defaultLounge
+           , gameWait   = Nothing
+           , roundState = Nothing
+           , eventlog   = []
+           , debuglog   = []
+           , waitTurnAction = Nothing
+           , waitShout = Nothing
+           }
+-- }}}
 
--- logic ------------------------------------------------------
+-- {{{ Input --------------------------------------------------
+data Input = AnEvent Event
+           | GameInput Game.Controls
+           | LoungeInput Lounge.Controls
+
+input = merges [ AnEvent <~ eventInput
+               , GameInput <~ Game.controls
+               , LoungeInput <~ Lounge.controls
+               ]
+-- }}}
+
+-- {{{ State --------------------------------------------------
 gameState : Signal GameState
-gameState = foldp stepGame defaultGame eventInput
+gameState = foldp stepGame newState input
 
-stepGame : Event -> GameState -> GameState
-stepGame event gs =
-   stepEvent event <| { gs | eventlog <- event :: gs.eventlog }
+stepGame : Input -> GameState -> GameState
+stepGame x gs = case x of
+   AnEvent event -> stepEvent event <| { gs | eventlog <- event :: gs.eventlog }
+   _             -> gs
 
 stepEvent : Event -> GameState -> GameState
 stepEvent event gameState = case event of
@@ -86,7 +98,9 @@ stepEvent event gameState = case event of
        }
    InGameEvents events -> foldl Game.processInGameEvent gameState events
    _ -> gameState
+-- }}}
 
+-- {{{ Nick and game fiddling ---------------------------------
 addGame g l = { l | games <- l.games ++ [g] }
 addIdle n l = { l | idle  <- Set.insert n l.idle }
 
@@ -97,20 +111,22 @@ addJoinedGame i n l =
 deleteNick n l =
    { l | idle  <- Set.remove n l.idle
        , games <- map (\g -> { g | players <- Set.remove n g.players }) l.games }
+-- }}}
 
--- main display -----------------------------------------------
-
+-- {{{ Display ------------------------------------------------
 display : GameState -> Element -> Element
 display game view = flow right
    [ view
    , logView game
    ]
 
--- main -------------------------------------------------------
-
-main = lift2 display gameState <| merges
-   [ sampleOn (keepIf Util.atLounge defaultGame gameState)
-      (Lounge.display <~ Lounge.view ~ gameState)
-   , sampleOn (keepIf Util.inGame defaultGame gameState)
-      (Game.display <~ Game.view ~ gameState)
+mainView = merges
+   [ sampleOn (keepIf Util.atLounge newState gameState)
+      (lift2 Lounge.display Lounge.controls gameState)
+   , sampleOn (keepIf Util.inGame newState gameState)
+      (lift2 Game.display Game.controls gameState)
    ]
+-- }}}
+
+-- main -------------------------------------------------------
+main = lift2 display gameState mainView

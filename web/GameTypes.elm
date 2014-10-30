@@ -38,15 +38,15 @@ data Event = JoinServer  { nick : String } -- ^ Nick
            | InGameAction GameAction
            | Noop -- TODO work around elm WS lib signal limitations
 
-data GameEvent = RoundPrivateStarts RoundState
-               | RoundPrivateWaitForShout { player : Kaze, seconds : Int }
-               | RoundPrivateWaitForTurnAction { player : Kaze, seconds : Int }
-               | RoundPrivateChange { player : Kaze, hand : Hand }
-               | RoundTurnBegins    { player : Kaze }
-               | RoundTurnAction    { player : Kaze, action : TurnAction }
-               | RoundTurnShouted   { player : Kaze, shout : Shout }
-               | RoundHandChanged   { player : Kaze, hand : HandPublic }
-               | RoundEnded         RoundResult
+data GameEvent = RoundPrivateStarts            RoundState
+               | RoundPrivateWaitForShout      { player : Player, seconds : Int }
+               | RoundPrivateWaitForTurnAction { player : Player, seconds : Int }
+               | RoundPrivateChange            { player : Player, hand : Hand }
+               | RoundTurnBegins               { player_kaze : Kaze }
+               | RoundTurnAction               { player_kaze : Kaze, action : TurnAction }
+               | RoundTurnShouted              { player_kaze : Kaze, shout : Shout }
+               | RoundHandChanged              { player_kaze : Kaze, hand : HandPublic }
+               | RoundEnded                    RoundResult
 
 -- Lounge --------------------------------------------------------------------
 type LoungeData = { idle : Set String
@@ -136,16 +136,17 @@ type Shout = { shoutKind : ShoutKind
 -- This duplicates Hajong.Game.Round.GamePlayer
 type RoundState = 
         { mypos     : Kaze
-        , myhand    : Hand
         , round     : Kaze
+        , turn      : Kaze
+        , player    : Player
         , oja       : Player
         , firstoja  : Player
-        , turn      : Kaze
-        , dora      : [Tile]
         , tilesleft : Int
+        , dora      : [Tile]
         , hands     : [(Kaze, HandPublic)]
         , points    : [(Kaze, Int)]
-        , players   : [(Kaze, Int)]
+        , players   : [(Kaze, Player)]
+        , myhand    : Hand
         , results   : Maybe RoundResult
         , actions   : [(Kaze, TurnAction)]
         }

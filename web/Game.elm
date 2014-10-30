@@ -6,13 +6,16 @@ import GameTypes (..)
 import Graphics.Input (..)
 import Maybe (maybe)
 import Array
+import Debug
 
--- the game = { display = display, events = events }
+t_w = 62
+t_h = 82
 
--- Controls ----------------------------------------------------------
-
--- TODO: ???
+-- {{{ Controls ------------------------------------------------------
 type Controls = { hoveredTile : Maybe Tile }
+
+controls : Signal Controls
+controls = Controls <~ dropRepeats discardHover.signal
 
 -- Maybe a tile to discard from my hand
 discard : Input (Maybe Tile)
@@ -20,14 +23,16 @@ discard = input Nothing
 
 discardHover : Input (Maybe Tile)
 discardHover = input Nothing
+-- }}}
 
-view : Signal Controls
-view = Controls <~ dropRepeats discardHover.signal
+-- {{{ Upstream events ----------------------------------------------------
+events : Signal Event
+events = merges
+   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
+   ]
+-- }}}
 
--- View --------------------------------------------------------------
-t_w = 62
-t_h = 82
-
+-- {{{ Display -------------------------------------------------------
 display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
    Just rs ->
@@ -36,14 +41,14 @@ display co gs = case gs.roundState of
           playerAt n = Array.getOrFail (n + offset % 4)
       in flow down
            [ container 1000 650 midTop <| collage 650 650
-               [ dispInfoBlock playerAt rs
-               , move (70, 70) <| scale 0.6 <| toForm <| dispWanpai co rs
+               [ dispInfoBlock playerAt co rs
                , scale 0.7 <| dispDiscards co playerAt hands
                ]
            , container 1000 100 midTop <| dispMyHand co rs.myhand
            , asText (gs.waitTurnAction, gs.waitShout)
            ] `beside` dispLog rs.actions
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
+-- }}}
 
 dispDiscards co playerAt hands = group
    [ moveY (-330) <|                         toForm <| dispHand co <| playerAt 0 hands
@@ -53,13 +58,14 @@ dispDiscards co playerAt hands = group
    ]
 
 -- dispInfoBlock : (Int -> Array.Array Int -> Int) -> RoundState -> Form
-dispInfoBlock playerAt rs =
+dispInfoBlock playerAt co rs =
    toForm
-   <| color black <| container 204 204 middle
-   <| color white <| size 200 200
-   <| collage 200 200
+   <| color black <| container 234 234 middle
+   <| color white <| size 230 230
+   <| collage 230 230
       [ toForm <| centered <| bold <| toText <| show rs.round
-      , toForm <| centered <|         toText <| show rs.tilesleft
+      , move (-50, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
+      , moveY (-30)  <| toForm <| centered <|         toText <| show rs.tilesleft
       , moveY (-100) <|                         toForm <| asText <| playerAt 0 <| Array.fromList rs.players
       , moveX 100    <| rotate (degrees 90)  <| toForm <| asText <| playerAt 1 <| Array.fromList rs.players
       , moveY 100    <| rotate (degrees 180) <| toForm <| asText <| playerAt 2 <| Array.fromList rs.players
@@ -69,14 +75,8 @@ dispInfoBlock playerAt rs =
 
 dispLog = flow up << map asText
 
--- Upstream ---------------------------------------------------------------
-
-events : Signal Event
-events = merges
-   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
-   ]
-
--- My Hand ----------------------------------------------------------------
+-- {{{ Hands --------------------------------------------------------------
+data Dir = Up | Down | Left | Right
 
 dispMyHand co hand = flow right
    [ flow right <| map (dispTileClickable co) <| sortTiles hand.concealed
@@ -90,15 +90,15 @@ dispHand co (k, h) =
    <| map (flow right)
    <| groupInto 6
    <| map (dispTile co << fst) h.discards
-
--- Others' hands -----------------------------------------------------------
-data Dir = Up | Down | Left | Right
+-- }}}
    
+-- {{{ Utility
 rotatedTo dir frm = case dir of
    Up    -> color lightOrange <| collage (6*(t_w+4)+2) (3*(t_h+2)) [rotate (degrees 180) frm]
    Down  -> color lightRed    <| collage (6*(t_w+4)+2) (3*(t_h+4)) [frm]
    Left  -> color lightGreen  <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 270) frm]
    Right -> color blue        <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 90) frm]
+-- }}}
 
 -- {{{ Tiles -----------------------------------------------------------------------
 dispTile : Controls -> Tile -> Element
@@ -145,20 +145,20 @@ processInGameEvent event gs = case event of
 
    RoundPrivateChange {hand} -> setMyHand hand gs
 
---   RoundTurnBegins {player} ->
---      Util.log gs ("Turn of " ++ show player) |> setTurnPlayer player
+   RoundTurnBegins {player_kaze} ->
+      Util.log ("Turn of " ++ show player_kaze) gs |> setTurnPlayer player_kaze
 
-   RoundTurnAction {player, action} ->
-      addTurnAction player action gs
-         |> processTurnAction player action
+   RoundTurnAction {player_kaze, action} ->
+      addTurnAction player_kaze action gs
+         |> processTurnAction player_kaze action
 
---   RoundTurnShouted {player, shout} ->
---      Util.log gs <| show player ++ " shouted: " ++ show shout -- TODO prettify
---
-   RoundHandChanged {player, hand} -> setPlayerHand player hand gs
+   RoundTurnShouted {player_kaze, shout} ->
+      Util.log (show player_kaze ++ " shouted: " ++ show shout) gs
 
---   RoundEnded res ->
---      Util.log gs (show res) -- TODO implement results logic
+   RoundHandChanged {player_kaze, hand} -> setPlayerHand player_kaze hand gs
+
+   RoundEnded res ->
+      Util.log (show res) gs -- TODO implement results logic
 
 -- Field modify boilerplate --------------------------------------------------
 setMyHand hand gs = case gs.roundState of
@@ -196,8 +196,10 @@ kantsu : Tile -> Mentsu
 kantsu t = Mentsu Kantsu t Nothing
 
 atPlayer : Kaze -> (a -> a) -> [(Kaze, a)] -> [(Kaze, a)]
-atPlayer k f ((k', h) :: xs) = if k == k' then (k', f h) :: xs
-                                          else (k', h)   :: atPlayer k f xs
+atPlayer k f xs = case xs of
+   ((k', h) :: xs) -> if k == k' then (k', f h) :: xs
+                                 else (k', h)   :: atPlayer k f xs
+   [] -> Debug.crash <| "Player "++ show k ++ " not found in " ++ show xs
 
 addDiscard disc h = { h | discards <- h.discards ++ [disc] }
 setRiichi riichi h = { h | riichi <- riichi }
