@@ -7,17 +7,16 @@ import Graphics.Input (..)
 import Maybe (maybe)
 import Array
 
+-- TODO: hard-coded tile widths; some other measures are also hard-coded
 t_w = 62
 t_h = 82
 
 -- {{{ Controls ------------------------------------------------------
-type Controls = { hoveredTile   : Maybe Tile
-                , decreaseWaits : Time
+type Controls = { hoveredTile : Maybe Tile
                 }
 
 controls : Signal Controls
 controls = Controls <~ dropRepeats discardHover.signal
-                     ~ every second
 
 -- Maybe a tile to discard from my hand
 discard : Input (Maybe Tile)
@@ -25,6 +24,12 @@ discard = input Nothing
 
 discardHover : Input (Maybe Tile)
 discardHover = input Nothing
+
+shout : Input (Maybe ShoutKind)
+shout = input Nothing
+
+shoutChooseTile : Input (Maybe Tile)
+shoutChooseTile = input Nothing
 -- }}}
 
 -- {{{ Upstream events ----------------------------------------------------
@@ -37,35 +42,44 @@ events = merges
 -- {{{ Display -------------------------------------------------------
 display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
-   Just rs ->
-      let hands      = Array.fromList <| sortBy (\(k,_) -> kazeNth k) rs.hands
-          offset     = kazeNth rs.mypos - 1
-          playerAt n = Array.getOrFail (n + offset % 4)
-      in flow down
-           [ container 1000 650 midTop <| collage 650 650
-               [ dispInfoBlock playerAt co gs rs
-               , scale 0.7 <| dispDiscards co playerAt hands
-               ]
-           , container 1000 100 midTop <| dispMyHand co rs.myhand
-           , asText gs.waitShout
-           ] `beside` dispLog rs.actions
+   Just rs -> flow down
+        [ container 1000 650 midTop <| collage 650 650
+            [ dispInfoBlock co gs rs
+            , dispDiscards co gs rs |> scale 0.7
+            ]
+        , container 1000 100 midTop <| dispHand co rs.myhand
+        , asText gs.waitShout
+        ] `beside` dispLog rs.actions
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
+
+dispLog = flow up << map asText
 -- }}}
 
-dispDiscards co playerAt hands = group
-   [ moveY (-330) <|                         toForm <| dispHand co <| playerAt 0 hands
-   , moveX 330    <| rotate (degrees 90)  <| toForm <| dispHand co <| playerAt 1 hands
-   , moveY 330    <| rotate (degrees 180) <| toForm <| dispHand co <| playerAt 2 hands
-   , moveX (-330) <| rotate (degrees 270) <| toForm <| dispHand co <| playerAt 3 hands
-   ]
+-- {{{ Per-player ---------------------------------------------------
+dispDiscards : Controls -> GameState -> RoundState -> Form
+dispDiscards co gs rs = group <| map
+   (\k -> Util.listFind k rs.hands
+       |> dispPublicHand co
+       |> toForm
+       |> moveRotateKaze 330 rs.mypos k)
+   [Ton, Nan, Shaa, Pei]
 
--- dispInfoBlock : (Int -> Array.Array Int -> Int) -> RoundState -> Form
-dispInfoBlock playerAt co gs rs =
+moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
+moveRotateKaze off mypos pos =
+   case (kazeNth pos + kazeNth mypos - 2) % 4 of
+      0 -> moveY (-off)
+      1 -> moveX off    << rotate (degrees 90) 
+      2 -> moveY off    << rotate (degrees 180)
+      3 -> moveX (-off) << rotate (degrees 270)
+-- }}}
+
+-- {{{ Info block ----------------------------------------------------
+dispInfoBlock co gs rs =
    toForm
    <| color black <| container 234 234 middle
    <| color white <| size 230 230
    <| collage 230 230 (
-      [ moveRotateKaze 90 rs.mypos rs.turn <| turnIndicator gs
+      [ turnIndicator gs |> moveRotateKaze 90 rs.mypos rs.turn
       , toForm <| centered <| bold <| toText <| show rs.round
       , move (-60, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
       , moveY (-30) <| toForm <| centered <| toText <| show rs.tilesleft
@@ -91,40 +105,21 @@ dispPlayerInfo rs k = flow right
    , spacer 5 5
    , asText (Util.listFind k rs.points)
    ] |> toForm
-
-moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
-moveRotateKaze off mypos pos =
-   case (kazeNth pos + kazeNth mypos - 2) % 4 of
-      0 -> moveY (-off)
-      1 -> moveX off    << rotate (degrees 90) 
-      2 -> moveY off    << rotate (degrees 180)
-      3 -> moveX (-off) << rotate (degrees 270)
-
-dispLog = flow up << map asText
+-- }}}
 
 -- {{{ Hands --------------------------------------------------------------
-data Dir = Up | Down | Left | Right
-
-dispMyHand co hand = flow right
+dispHand co hand = flow right
    [ flow right <| map (dispTileClickable co) <| sortTiles hand.concealed
    , spacer 10 10
    , maybe empty (dispTileClickable co >> color lightGreen) hand.pick
    ]
 
-dispHand co (k, h) =
+dispPublicHand co h =
    container (6*(t_w+4)+2) (3*(t_h+4)) topLeft
    <| flow down
    <| map (flow right)
    <| Util.groupInto 6
    <| map (dispTile co << fst) h.discards
--- }}}
-   
--- {{{ Utility
-rotatedTo dir frm = case dir of
-   Up    -> color lightOrange <| collage (6*(t_w+4)+2) (3*(t_h+2)) [rotate (degrees 180) frm]
-   Down  -> color lightRed    <| collage (6*(t_w+4)+2) (3*(t_h+4)) [frm]
-   Left  -> color lightGreen  <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 270) frm]
-   Right -> color blue        <| collage (3*(t_h+4)) (6*(t_w+4)+2) [rotate (degrees 90) frm]
 -- }}}
 
 -- {{{ Tiles -----------------------------------------------------------------------
