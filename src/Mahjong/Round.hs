@@ -214,8 +214,10 @@ nextKaze :: Kaze -> Kaze
 nextKaze = toEnum . (`mod` 4) . (+ 1) . fromEnum
 
 playersNextRound :: [(Kaze, Player, a)] -> [(Kaze, Player, a)]
-playersNextRound xs = let (ks, p:ps, a:as) = unzip3 xs
-                          in zip3 ks (ps ++ [p]) (as ++ [a])
+playersNextRound xs = let (ks, ps', as') = unzip3 xs
+                          Just (ps, p) = unsnoc ps'
+                          Just (as, a) = unsnoc as'
+                          in zip3 ks (p : ps) (a : as)
 
 -- | Advance the game to next round
 --
