@@ -36,7 +36,13 @@ shoutChooseTile = input Nothing
 events : Signal Event
 events = merges
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
+   --, maybe Noop (InGameAction << GameTurn << GameShout) <~ shoutEvent
    ]
+
+-- TODO: implement me
+-- shoutEvent : Signal (Maybe Shout)
+-- shoutEvent = Shout <~ shout.signal ~ gameState
+
 -- }}}
 
 -- {{{ Display -------------------------------------------------------
@@ -47,6 +53,12 @@ display co gs = case gs.roundState of
             [ dispInfoBlock co gs rs
             , dispDiscards co gs rs |> scale 0.7
             ]
+        , container 1000 40 midTop <| flow right
+           [ shoutButton Kan "Kan"
+           , shoutButton Pon "Pon"
+           , shoutButton Chi "Chi"
+           , shoutButton Ron "Ron"
+           ]
         , container 1000 100 midTop <| dispHand co rs.myhand
         , asText gs.waitShout
         ] `beside` dispLog rs.actions
@@ -147,6 +159,10 @@ tileImage tile =
       croppedImage (row, col) 62 82 "Mahjong-tiles.jpg"
 -- }}}
 
+-- {{{ Buttons 'n stuff --------------------------------------------------------
+shoutButton s = button shout.handle (Just s)
+-- }}}
+
 -- {{{ Process GameEvents
 processInGameEvent : GameEvent -> GameState -> GameState
 processInGameEvent event gs = case event of
@@ -181,8 +197,9 @@ processInGameEvent event gs = case event of
 
    RoundEnded res ->
       Util.log (show res) gs -- TODO implement results logic
+-- }}}
 
--- Field modify boilerplate --------------------------------------------------
+-- {{{ Field modify boilerplate ----------------------------------------------
 setMyHand hand gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | myhand <- hand } }
 
@@ -195,8 +212,9 @@ addTurnAction player action gs = case gs.roundState of
 
 setPlayerHand player hand gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | hands <- updateHand player hand rs.hands } }
+-- }}}
 
--- Turn logic -----------------------------------------------------------------
+-- {{{ Turns ------------------------------------------------------------------
 processTurnAction : Kaze -> TurnAction -> GameState -> GameState
 processTurnAction player action gs =
    case gs.roundState of
