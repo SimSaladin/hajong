@@ -6,7 +6,6 @@ import GameTypes (..)
 import Graphics.Input (..)
 import Maybe (maybe)
 import Array
-import Debug
 
 t_w = 62
 t_h = 82
@@ -62,16 +61,36 @@ dispInfoBlock playerAt co rs =
    toForm
    <| color black <| container 234 234 middle
    <| color white <| size 230 230
-   <| collage 230 230
-      [ toForm <| centered <| bold <| toText <| show rs.round
-      , move (-50, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
-      , moveY (-30)  <| toForm <| centered <|         toText <| show rs.tilesleft
-      , moveY (-100) <|                         toForm <| asText <| playerAt 0 <| Array.fromList rs.players
-      , moveX 100    <| rotate (degrees 90)  <| toForm <| asText <| playerAt 1 <| Array.fromList rs.players
-      , moveY 100    <| rotate (degrees 180) <| toForm <| asText <| playerAt 2 <| Array.fromList rs.players
-      , moveX (-100) <| rotate (degrees 270) <| toForm <| asText <| playerAt 3 <| Array.fromList rs.players
+   <| collage 230 230 (
+      [ moveRotateKaze 90 rs.mypos rs.turn turnIndicator
+      , toForm <| centered <| bold <| toText <| show rs.round
+      , move (-60, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
+      , moveY (-30) <| toForm <| centered <| toText <| show rs.tilesleft
       ]
+      ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 100 rs.mypos k)
+             [Ton, Nan, Shaa, Pei]
+      )
+
+turnIndicator = rotate (degrees 90) <| filled lightGreen <| ngon 3 80 -- (rect 150 3)
+
+dispPlayerInfo rs k = flow right
+   [ asText (Util.listFind k rs.players)
+   , spacer 5 5
+   , asText k
+   , spacer 5 5
+   , asText (Util.listFind k rs.points)
+   ] |> toForm
+
    -- , asText <| "Results: " ++ show rs.results
+
+moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
+moveRotateKaze off mypos pos =
+   case (kazeNth pos + kazeNth mypos - 2) % 4 of
+      0 -> moveY (-off)
+      1 -> moveX off    << rotate (degrees 90) 
+      2 -> moveY off    << rotate (degrees 180)
+      3 -> moveX (-off) << rotate (degrees 270)
+
 
 dispLog = flow up << map asText
 
@@ -88,7 +107,7 @@ dispHand co (k, h) =
    container (6*(t_w+4)+2) (3*(t_h+4)) topLeft
    <| flow down
    <| map (flow right)
-   <| groupInto 6
+   <| Util.groupInto 6
    <| map (dispTile co << fst) h.discards
 -- }}}
    
@@ -123,12 +142,6 @@ tileImage tile =
                Honor (Sangenpai s) -> (707 + (sangenNth s - 1) * 97, 356)
    in
       croppedImage (row, col) 62 82 "Mahjong-tiles.jpg"
--- }}}
-
--- {{{ Misc -------------------------------------------------------------------------
-groupInto n xs = case xs of
-   [] -> []
-   _  -> take n xs :: groupInto n (drop n xs)
 -- }}}
 
 -- {{{ Process GameEvents
@@ -180,7 +193,7 @@ processTurnAction player action gs =
    case gs.roundState of
       Just rs -> case action of
          TurnTileDiscard riichi tile ->
-            { gs | roundState <- Just { rs | hands <- atPlayer player
+            { gs | roundState <- Just { rs | hands <- Util.listModify player
                   (\h -> { h | discards <- h.discards ++ [(tile, Nothing)]
                              , riichi   <- riichi }) rs.hands
             }}
@@ -188,20 +201,14 @@ processTurnAction player action gs =
             { gs | roundState <- Just { rs | tilesleft <- rs.tilesleft - 1 }
             }
          TurnAnkan tile  ->
-            { gs | roundState <- Just { rs | hands <- atPlayer player
+            { gs | roundState <- Just { rs | hands <- Util.listModify player
                (\h -> { h | called <- h.called ++ [ kantsu tile ] }) rs.hands }
             }
 
 kantsu : Tile -> Mentsu
 kantsu t = Mentsu Kantsu t Nothing
 
-atPlayer : Kaze -> (a -> a) -> [(Kaze, a)] -> [(Kaze, a)]
-atPlayer k f xs = case xs of
-   ((k', h) :: xs) -> if k == k' then (k', f h) :: xs
-                                 else (k', h)   :: atPlayer k f xs
-   [] -> Debug.crash <| "Player "++ show k ++ " not found in " ++ show xs
-
 addDiscard disc h = { h | discards <- h.discards ++ [disc] }
 setRiichi riichi h = { h | riichi <- riichi }
-updateHand player hand = atPlayer player (\_ -> hand)
+updateHand player hand = Util.listModify player (\_ -> hand)
 -- }}}

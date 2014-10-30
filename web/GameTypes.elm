@@ -90,6 +90,7 @@ suitNth s = case s of
    PinTile -> 2
    SouTile -> 3
 
+kazeNth : Kaze -> Int
 kazeNth k = case k of
    Ton  -> 1
    Nan  -> 2
