@@ -51,8 +51,10 @@ newState : GameState
 newState = { status     = InLounge
            , mynick     = ""
            , lounge     = defaultLounge
+           , updated    = 0
            , gameWait   = Nothing
            , roundState = Nothing
+           , turnBegan  = 0
            , eventlog   = []
            , debuglog   = []
            , waitTurnAction = Nothing
@@ -64,10 +66,12 @@ newState = { status     = InLounge
 data Input = AnEvent Event
            | GameInput Game.Controls
            | LoungeInput Lounge.Controls
+           | TimeDelta Time
 
 input = merges [ AnEvent <~ eventInput
                , GameInput <~ Game.controls
                , LoungeInput <~ Lounge.controls
+               , TimeDelta <~ every second
                ]
 -- }}}
 
@@ -78,6 +82,9 @@ gameState = foldp stepGame newState input
 stepGame : Input -> GameState -> GameState
 stepGame x gs = case x of
    AnEvent event -> stepEvent event <| { gs | eventlog <- event :: gs.eventlog }
+   TimeDelta time -> { gs | updated <- time
+                     , turnBegan <- if gs.turnBegan == 0 then time else gs.turnBegan
+                     }
    _             -> gs
 
 stepEvent : Event -> GameState -> GameState

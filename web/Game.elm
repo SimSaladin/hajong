@@ -11,10 +11,13 @@ t_w = 62
 t_h = 82
 
 -- {{{ Controls ------------------------------------------------------
-type Controls = { hoveredTile : Maybe Tile }
+type Controls = { hoveredTile   : Maybe Tile
+                , decreaseWaits : Time
+                }
 
 controls : Signal Controls
 controls = Controls <~ dropRepeats discardHover.signal
+                     ~ every second
 
 -- Maybe a tile to discard from my hand
 discard : Input (Maybe Tile)
@@ -40,11 +43,11 @@ display co gs = case gs.roundState of
           playerAt n = Array.getOrFail (n + offset % 4)
       in flow down
            [ container 1000 650 midTop <| collage 650 650
-               [ dispInfoBlock playerAt co rs
+               [ dispInfoBlock playerAt co gs rs
                , scale 0.7 <| dispDiscards co playerAt hands
                ]
            , container 1000 100 midTop <| dispMyHand co rs.myhand
-           , asText (gs.waitTurnAction, gs.waitShout)
+           , asText gs.waitShout
            ] `beside` dispLog rs.actions
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
 -- }}}
@@ -57,12 +60,12 @@ dispDiscards co playerAt hands = group
    ]
 
 -- dispInfoBlock : (Int -> Array.Array Int -> Int) -> RoundState -> Form
-dispInfoBlock playerAt co rs =
+dispInfoBlock playerAt co gs rs =
    toForm
    <| color black <| container 234 234 middle
    <| color white <| size 230 230
    <| collage 230 230 (
-      [ moveRotateKaze 90 rs.mypos rs.turn turnIndicator
+      [ moveRotateKaze 90 rs.mypos rs.turn <| turnIndicator gs
       , toForm <| centered <| bold <| toText <| show rs.round
       , move (-60, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
       , moveY (-30) <| toForm <| centered <| toText <| show rs.tilesleft
@@ -71,7 +74,15 @@ dispInfoBlock playerAt co rs =
              [Ton, Nan, Shaa, Pei]
       )
 
-turnIndicator = rotate (degrees 90) <| filled lightGreen <| ngon 3 80 -- (rect 150 3)
+turnIndicator : GameState -> Form
+turnIndicator gs = group
+   [ rotate (degrees 90) <| filled lightGreen <| ngon 3 80
+   , moveY 30
+         <| toForm <| asText <| floor
+         <| case gs.waitTurnAction of
+               Nothing -> inSeconds <| gs.updated - gs.turnBegan
+               Just wr -> toFloat wr.seconds - (inSeconds (gs.updated - wr.added))
+   ]
 
 dispPlayerInfo rs k = flow right
    [ asText (Util.listFind k rs.players)
@@ -81,8 +92,6 @@ dispPlayerInfo rs k = flow right
    , asText (Util.listFind k rs.points)
    ] |> toForm
 
-   -- , asText <| "Results: " ++ show rs.results
-
 moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
 moveRotateKaze off mypos pos =
    case (kazeNth pos + kazeNth mypos - 2) % 4 of
@@ -90,7 +99,6 @@ moveRotateKaze off mypos pos =
       1 -> moveX off    << rotate (degrees 90) 
       2 -> moveY off    << rotate (degrees 180)
       3 -> moveX (-off) << rotate (degrees 270)
-
 
 dispLog = flow up << map asText
 
@@ -152,14 +160,20 @@ processInGameEvent event gs = case event of
              , gameWait <- Nothing
              , roundState <- Just rs }
 
-   RoundPrivateWaitForTurnAction {seconds} -> { gs | waitTurnAction <- Just seconds }
-
-   RoundPrivateWaitForShout {seconds} -> { gs | waitShout <- Just seconds }
+   RoundPrivateWaitForTurnAction {seconds} ->
+      { gs | waitTurnAction <- Just <| WaitRecord seconds gs.updated }
+   RoundPrivateWaitForShout {seconds} ->
+      { gs | waitShout      <- Just <| WaitRecord seconds gs.updated }
 
    RoundPrivateChange {hand} -> setMyHand hand gs
 
    RoundTurnBegins {player_kaze} ->
-      Util.log ("Turn of " ++ show player_kaze) gs |> setTurnPlayer player_kaze
+      Util.log ("Turn of " ++ show player_kaze) gs
+      |> setTurnPlayer player_kaze
+      |> \gs -> { gs | turnBegan <- gs.updated
+                     , waitTurnAction <- Nothing
+                     , waitShout <- Nothing
+                }
 
    RoundTurnAction {player_kaze, action} ->
       addTurnAction player_kaze action gs

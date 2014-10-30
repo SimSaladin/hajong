@@ -6,20 +6,53 @@ import Set
 
 type Player = Int
 
--- GameState -----------------------------------------------------------------
+-- {{{ GameState -------------------------------------------------------------
 type GameState = { status     : Status
                  , mynick     : String
                  , lounge     : LoungeData
                  , gameWait   : Maybe Int
-                 , roundState : Maybe RoundState
+                 , updated    : Time
+
+                  -- In-Game
+                 , roundState     : Maybe RoundState
+                 , waitTurnAction : Maybe WaitRecord
+                 , waitShout      : Maybe WaitRecord
+                 , turnBegan      : Time
+
+                 -- Debug
                  , eventlog   : [Event]
                  , debuglog   : [String]
-                 , waitTurnAction : Maybe Int
-                 , waitShout : Maybe Int
                  }
 data Status = InLounge | InGame
 
--- Event ---------------------------------------------------------------------
+type WaitRecord = { seconds : Int, added : Time }
+
+-- }}}
+
+-- {{{ RoundState ------------------------------------------------------------
+-- This duplicates Hajong.Game.Round.GamePlayer
+type RoundState = 
+        { mypos     : Kaze
+        , round     : Kaze
+        , turn      : Kaze
+        , player    : Player
+        , oja       : Player
+        , firstoja  : Player
+        , tilesleft : Int
+        , dora      : [Tile]
+        , hands     : [(Kaze, HandPublic)]
+        , points    : [(Kaze, Int)]
+        , players   : [(Kaze, Player)]
+        , myhand    : Hand
+        , results   : Maybe RoundResult
+        , actions   : [(Kaze, TurnAction)]
+        }
+
+type RoundResult = { endKind : EndKind, winners : [Kaze], payers : [Kaze] }
+data EndKind     = Tsumo | ByRon | Draw
+-- }}}
+
+-- {{{ Event -----------------------------------------------------------------
 data Event = JoinServer  { nick : String } -- ^ Nick
            | PartServer  { nick : String }
            | Identity    { nick : String }
@@ -47,16 +80,28 @@ data GameEvent = RoundPrivateStarts            RoundState
                | RoundTurnShouted              { player_kaze : Kaze, shout : Shout }
                | RoundHandChanged              { player_kaze : Kaze, hand : HandPublic }
                | RoundEnded                    RoundResult
+-- }}}
 
--- Lounge --------------------------------------------------------------------
+-- {{{ Actions ---------------------------------------------------------------
+data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
+                | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
+                | TurnAnkan Tile
+
+data GameAction = GameTurn TurnAction
+                | GameShout Shout
+                | GameDontCare -- ^ About shouting last discarded tile
+-- }}}
+
+-- {{{ Lounge ----------------------------------------------------------------
 type LoungeData = { idle : Set String
                   , games : [GameInfo]
                   }
 type GameInfo = { ident : Int, topic : String, players : Set String}
 
 defaultLounge = { idle = Set.empty, games = [] }
+-- }}}
 
--- Tiles ---------------------------------------------------------------------
+-- {{{ Tiles -----------------------------------------------------------------
 data Tile   = Suited Suit Int Bool | Honor Honor
 data Suit   = ManTile | PinTile | SouTile
 data Honor  = Kazehai Kaze | Sangenpai Sangen
@@ -103,8 +148,9 @@ sangenNth k = case k of
    Chun  -> 3
 
 sortTiles = sortWith tileOrder
+-- }}}
 
--- Hands ---------------------------------------------------------------------
+-- {{{ Hands -----------------------------------------------------------------
 type Hand = HandPublic' { concealed : [Tile]
                         , pick      : Maybe Tile
                         , furiten   : Maybe Bool
@@ -119,47 +165,21 @@ type HandPublic' a =
    , riichi      : Bool
    , turnDiscard : Maybe Tile
    }
+-- }}}
 
+-- {{{ Mentsu ----------------------------------------------------------------
 data MentsuKind = Shuntsu | Koutsu | Kantsu | Jantou
 type Mentsu = { mentsuKind : MentsuKind
               , tile       : Tile
               , from       : Maybe Shout
               }
+-- }}}
 
+-- {{{ Shouts ----------------------------------------------------------------
 data ShoutKind  = Pon | Kan | Chi | Ron
 type Shout = { shoutKind : ShoutKind
              , shoutFrom : Kaze
              , shoutTile : Tile
              , shoutTo   : [Tile]
              }
-
--- Round ---------------------------------------------------------------------
--- This duplicates Hajong.Game.Round.GamePlayer
-type RoundState = 
-        { mypos     : Kaze
-        , round     : Kaze
-        , turn      : Kaze
-        , player    : Player
-        , oja       : Player
-        , firstoja  : Player
-        , tilesleft : Int
-        , dora      : [Tile]
-        , hands     : [(Kaze, HandPublic)]
-        , points    : [(Kaze, Int)]
-        , players   : [(Kaze, Player)]
-        , myhand    : Hand
-        , results   : Maybe RoundResult
-        , actions   : [(Kaze, TurnAction)]
-        }
-
-type RoundResult = { endKind : EndKind, winners : [Kaze], payers : [Kaze] }
-data EndKind     = Tsumo | ByRon | Draw
-
--- Actions -------------------------------------------------------------------
-data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
-                | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
-                | TurnAnkan Tile
-
-data GameAction = GameTurn TurnAction
-                | GameShout Shout
-                | GameDontCare -- ^ About shouting last discarded tile
+-- }}}
