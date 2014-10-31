@@ -30,6 +30,7 @@ module Mahjong.Hand.Mentsu
     ) where
 
 import Mahjong.Tiles
+import Text.PrettyPrint.ANSI.Leijen (Pretty(..))
 
 -- Types
 
@@ -43,6 +44,12 @@ data MentsuKind = Shuntsu -- ^ 3 Tile straight
                 | Jantou -- ^ Pair
                 deriving (Show, Read, Eq, Ord, Bounded, Enum)
 
+instance Pretty Mentsu where
+    pretty = intercalate "-" . map pretty . mentsuTiles
+
+instance Pretty [Mentsu] where
+    pretty = intercalate "\n" . map pretty
+
 -- | A mentsu can result from a shout; and a shout always produces
 -- a mentsu.
 data Shout = Pon { shoutedFrom :: Kaze, shoutedTile :: Tile }
@@ -50,6 +57,12 @@ data Shout = Pon { shoutedFrom :: Kaze, shoutedTile :: Tile }
            | Chi { shoutedFrom :: Kaze, shoutedTile :: Tile, shoutedTo :: [Tile] }
            | Ron { shoutedFrom :: Kaze, shoutedTile :: Tile, shoutedTo :: [Tile] }
            deriving (Show, Read, Eq, Ord)
+
+instance Pretty Shout where
+    pretty Pon{} = "Pon!"
+    pretty Ron{} = "Ron!"
+    pretty Kan{} = "Kan!"
+    pretty Chi{} = "Chi!"
 
 -- | Get the mentsu kind
 mentsuKind :: Mentsu -> MentsuKind

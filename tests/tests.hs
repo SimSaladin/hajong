@@ -7,28 +7,28 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Main where
+module Main (main, tests) where
 
 import System.Posix
 import qualified Test.QuickCheck.Property as Q
 import qualified Data.List as L
 
-import Hajong.Game
+import Mahjong
 import Hajong.Server
 
-import GameMentsu
-import GameMechanics
-import CLIPrettyPrint
-import Server
-import CLIClient
-import Worker
+import qualified MahjongTest.Mentsu          as Mentsu
+import qualified MahjongTest.Mechanics       as Mechanics
+
+-- import qualified HajongTest.CLI.PrettyPrint  as PrettyPrint
+-- import qualified HajongTest.CLI.Client       as Client
+import qualified HajongTest.Server.Server    as Server
+import qualified HajongTest.Server.Worker    as Worker
 
 main :: IO ()
 main = do
-
     -- The server process used by the client tests
     putStrLn "Starting server process :9160..."
-    pid <- serverTestProcess
+    pid <- Server.setupProcess
 
     defaultMain tests `finally` do
         putStrLn "Killed server process."
@@ -36,9 +36,9 @@ main = do
 
 tests :: TestTree
 tests = testGroup "Hajong tests"
-    [ mentsuTests
-    , mechanicsTests
-    , cliPrettyPrintTests
-    , clientTests
-    , workerTests
+    [ Mentsu.tests
+    , Mechanics.tests
+    --, PrettyPrint.tests
+    --, Client.tests
+    , Worker.tests
     ]

@@ -40,7 +40,7 @@ breakGamePlayer pstate = zipWith
 -- | "pushToPlace src (y, x) dest" puts src start at row y and column x in
 -- dest character matrix. dest is possibly grown in both directions in
 -- order to fit src to it.
-pushToPlace :: Text -> (Int, Int)-> [Text] -> [Text]
+pushToPlace :: Text -> (Int, Int) -> [Text] -> [Text]
 pushToPlace text (y, x) = goy y
     where
         goy 0 texts         = zipWith gox (srcs ++ repeat "") (texts ++ replicate (length srcs - length texts) "")
@@ -95,14 +95,6 @@ newtype PosRight a = PosRight { posRight :: a } deriving (Show, Read)
 ----------------------------------------------------------
 
 -- Instances
-
--- Shouts
-
-instance Pretty Shout where
-    pretty Pon{} = "Pon!"
-    pretty Ron{} = "Ron!"
-    pretty Kan{} = "Kan!"
-    pretty Chi{} = "Chi!"
 
 -- Player Info
 
@@ -160,23 +152,6 @@ instance Pretty (PosMine  OtherConceal) where pretty (PosMine (OtherConceal _)) 
 instance Pretty (PosRight OtherConceal) where pretty (PosRight (OtherConceal n)) = intersperse '\n' $ replicate n '|'
 instance Pretty (PosLeft  OtherConceal) where pretty (PosLeft (OtherConceal n))  = intersperse '\n' $ replicate n '|'
 instance Pretty (PosFront OtherConceal) where pretty (PosFront (OtherConceal n)) = mconcat (replicate n "_ " :: [Text])
-
--- Hand
-
--- | Own hand
-instance Pretty Hand where
-    pretty = do
-        concealed   <- view handConcealed
-        mpick       <- view handPick
-        return $ pretty concealed <> maybe "" (\p -> " | " <> pretty p) mpick
-
--- | Public hand
-instance Pretty HandPublic where
-    pretty = do
-        -- FIXME 
-        tilenum <- view (handOpen.to length) <&> (13 -) . (*3)
-        return $ unwords $ replicate tilenum "_"
-
 -- Discards
 
 instance Pretty (PosMine  Discards) where pretty (PosMine  tiles) = discardHelper (justifyLeft (6*3-1)   ' ') $ discardSplit tiles
@@ -185,20 +160,3 @@ instance Pretty (PosRight Discards) where pretty (PosRight tiles) = discardHelpe
 instance Pretty (PosFront Discards) where pretty (PosFront tiles) = discardHelper (justifyRight (6*3-1) ' ') $ reverse $ reverse <$> discardSplit tiles
 --        $ filter (isn't _Nothing . view _2) -- plant this to indicate
 --        shouts
-
--- Tile
-
-instance Pretty (Tile, Maybe Player) where
-    pretty (tile, Nothing) = pretty tile
-    pretty (tile, Just _)  = pretty tile
-
--- Mentsu
-
-instance Pretty Mentsu where
-    pretty (Kantsu tiles _)  = intercalate "-" $ map pretty tiles
-    pretty (Koutsu tiles _)  = intercalate "-" $ map pretty tiles
-    pretty (Shuntsu tiles _) = intercalate "-" $ map pretty tiles
-    pretty (Jantou tiles _)  = intercalate "-" $ map pretty tiles
-
-instance Pretty [Mentsu] where
-    pretty = intercalate "\n" . map pretty

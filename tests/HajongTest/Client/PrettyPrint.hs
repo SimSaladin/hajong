@@ -1,19 +1,19 @@
 ------------------------------------------------------------------------------
 -- | 
--- Module         : CLIPrettyPrint
+-- Module         : HajongTest.Client.PrettyPrint
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module CLIPrettyPrint (cliPrettyPrintTests) where
+module HajongTest.Client.PrettyPrint (tests) where
 
 import Hajong.Game
 import Hajong.Client.PrettyPrint
 
-cliPrettyPrintTests :: TestTree
-cliPrettyPrintTests = testGroup "CLI PrettyPrint"
+tests :: TestTree
+tests = testGroup "CLI PrettyPrint"
     [ testCase "Show and read Hand" $
         "S1 S2 S3 S4 S5 S6 S7 S8 S9 M1 M2 M3 G! G!" `preadAssert`
         ( map (flip Sou False) [Ii .. Chuu]

@@ -13,6 +13,8 @@
 module Mahjong.Hand where
 
 import qualified Data.List as L
+import Text.PrettyPrint.ANSI.Leijen (Pretty(..), string)
+import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Algo
@@ -39,6 +41,18 @@ makeLenses ''Hand
 
 instance HasGroupings Hand where
     getGroupings h = getGroupings $ (,) <$> _handOpen . _handPublic <*> _handConcealed $ h
+
+instance Pretty Hand where
+    pretty = do
+        concealed <- view handConcealed
+        mpick     <- view handPick
+        return $ pretty concealed P.<> maybe "" (\p -> " | " P.<> pretty p) mpick
+
+instance Pretty HandPublic where
+    pretty = do
+        -- FIXME 
+        tilenum <- view (handOpen.to length) <&> (13 -) . (*3)
+        return $ string $ unwords $ replicate tilenum "_"
 
 -- * Create
 

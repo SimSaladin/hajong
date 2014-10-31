@@ -26,7 +26,6 @@ type GameState = { status     : Status
 data Status = InLounge | InGame
 
 type WaitRecord = { seconds : Int, added : Time }
-
 -- }}}
 
 -- {{{ RoundState ------------------------------------------------------------

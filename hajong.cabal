@@ -17,6 +17,14 @@ cabal-version:       >=1.10
 
 -- data-files: web/Game.hs
 
+flag cli
+  description:         Build the CLI client
+  default:             False
+
+flag web
+  description:         Build the Web (elm) client
+  default:             False
+
 library
   hs-source-dirs:      src
   exposed-modules:     Hajong.Server
@@ -29,7 +37,9 @@ library
                      , Mahjong.Mechanics
                      , Mahjong.Hand
                      , Mahjong.Hand.Mentsu
+                     , Mahjong.Hand.Value
                      , Mahjong.Hand.Algo
+                     , Mahjong.Hand.Algo.WaitTree
                      , Mahjong.Yaku.Builder
                      , Mahjong.Yaku.Standard
                      -- , Hajong.Client.CLI
@@ -63,35 +73,12 @@ library
                      , OverloadedStrings
                      , ConstraintKinds
                      , FlexibleContexts
+                     , FlexibleInstances
                      , GeneralizedNewtypeDeriving
                      , StandaloneDeriving
                      , Rank2Types
   default-language:    Haskell2010
   ghc-options:         -threaded
-
-executable hajong-server
-  main-is:             server.hs
-  default-language:    Haskell2010
-  hs-source-dirs:      app
-
-  build-depends:       hajong
-                     , base
-                     , classy-prelude
-                     , text
-
--- executable hajong-cli
---   main-is:             cli.hs
---   default-language:    Haskell2010
---   hs-source-dirs:      app
---   build-depends:       hajong, base
-
--- executable hajong-web
---   main-is:             main.hs
---   default-language:    Haskell2010
---   exposed-modules:     Game
---   hs-source-dirs:      web
---   build-depends:       fay-base
---                      , hajong
 
 test-suite test
   type:                exitcode-stdio-1.0
@@ -101,6 +88,7 @@ test-suite test
 
   build-depends:       hajong
                      , base
+                     , containers
                      , classy-prelude
                      , mtl
                      , lens
@@ -112,7 +100,36 @@ test-suite test
                      , QuickCheck
                      , unix
                      , temporary
+                     , fast-logger
+                     , ansi-wl-pprint
 
   default-extensions:  OverloadedStrings
+  ghc-options:         -Wall -rtsopts
 
-  ghc-options:       -rtsopts
+executable hajong-server
+  main-is:             server.hs
+  default-language:    Haskell2010
+  hs-source-dirs:      app
+
+  build-depends:       hajong
+                     , base
+                     , classy-prelude
+                     , text
+
+executable hajong-cli
+  main-is:             cli.hs
+  build-depends:       hajong, base
+
+  if !flag(cli)
+    buildable:         False
+  default-language:    Haskell2010
+  hs-source-dirs:      app
+
+executable hajong-web
+  main-is:             main.hs
+  build-depends:       hajong
+  if !flag(web)
+    buildable:         False
+
+  default-language:    Haskell2010
+  hs-source-dirs:      web

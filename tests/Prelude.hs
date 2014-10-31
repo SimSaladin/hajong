@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
 ------------------------------------------------------------------------------
 -- | 
@@ -13,17 +14,18 @@
 module Prelude ( module Prelude, module X ) where
 
 import ClassyPrelude as X hiding (assert, Index, uncons, unsnoc)
-import Data.Maybe as X
-import Control.Applicative as X
-import Control.Lens as X hiding (elements, snoc, cons, (<.>))
-
-import Test.Tasty as X
-import Test.Tasty.HUnit as X
-import Test.Tasty.QuickCheck as X
+import Data.Maybe                         as X (fromJust)
+import           Control.Lens             as X hiding (elements, snoc, cons, (<.>))
+import           Test.Tasty               as X
+import           Test.Tasty.HUnit         as X
+import           Test.Tasty.QuickCheck    as X
+import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 import qualified Test.QuickCheck.Property as Q
+import qualified Data.Set                 as Set
+import qualified Data.Map                 as Map
 
-import Hajong.Game
+import Mahjong
 import Hajong.Connections
 
 -- | "action =~ expected" => expected `isInfixOf` (result of action)
@@ -31,14 +33,23 @@ import Hajong.Connections
 f =~ t = f >>= \res -> isInfixOf t res @? unpack (unlines ["== Got ==", res, "\n== Expected ==", t])
 
 hunitAllInfixOf :: Text -> [Text] -> [TestTree]
-hunitAllInfixOf res exp =
-   flip map exp $ \x -> testCase ("Contains " <> unpack x) $ assertBool (unpack x <> " was not found") $ x `isInfixOf` res
+hunitAllInfixOf res here =
+   flip map here $ \x -> testCase ("Contains " <> unpack x) $ assertBool (unpack x <> " was not found") $ x `isInfixOf` res
 
 propAllInfixOf :: Text -> [Text] -> Property
 propAllInfixOf result xs = conjoin $ flip map xs $
     \x -> if x `isInfixOf` result
               then Q.succeeded
               else Q.failed { Q.reason = unpack $ x <> " not found in result" }
+
+-- | xs .<-- ys succeeds when ys is contained within xs.
+(.<--) :: (P.Pretty [a], Ord a) => [[a]] -> [[a]] -> Property
+xs .<-- ys = conjoin $ isElem <$> ys
+  where
+      isElem y = counterexample
+        (show $ P.pretty (sort y) P.<$$> " `notElem` " P.<$$> P.pretty xs')
+        (sort y `elem` xs')
+      xs'      = sort (map sort xs)
 
 -- * Arbitrary instancees
 
@@ -48,63 +59,101 @@ instance Arbitrary Hand where
 instance Arbitrary Tile where
     arbitrary = elements riichiTiles
 
+instance Arbitrary Kaze where arbitrary = arbitraryBoundedEnum
+
+instance Arbitrary Number where arbitrary = arbitraryBoundedEnum
+
 instance Arbitrary Mentsu where
     arbitrary = oneof
-        [ arbitrary >>= \tile -> return (Kantsu (replicate 4 tile) Nothing)
-        , arbitrary >>= \tile -> return (Koutsu (replicate 3 tile) Nothing)
-        , arbitrary >>= \tile -> return (Jantou (replicate 2 tile) Nothing)
-        , do
-             tile <- arbitrary `suchThat` (\tile -> tileSuited tile && tileNumber tile <= Chii)
-             let n = tileNumber tile
-             return $ Shuntsu (tile : map (setTileNumber tile) [succ n, succ (succ n)]) Nothing
+        [ Mentsu Kantsu <$> arbitrary <*> arbitrary
+        , Mentsu Koutsu <$> arbitrary <*> arbitrary
+        , Mentsu Jantou <$> arbitrary <*> arbitrary
+        , arbitraryShuntsu
         ]
 
+instance Arbitrary TileKind where
+    arbitrary = elements [ManTile, PinTile, SouTile]
+
 instance Arbitrary Player where
-    arbitrary = elements defaultPlayers
+    arbitrary = Player <$> (arbitrary `suchThat` (>= 0))
 
 instance Arbitrary Text where
     arbitrary = pack <$> arbitrary
 
+instance Arbitrary GameAction where
+    arbitrary = oneof
+        [ GameTurn <$> arbitrary
+        , GameShout <$> arbitrary
+        , pure GameDontCare
+        ]
+
 instance Arbitrary TurnAction where
     arbitrary = oneof
         [ TurnTileDiscard <$> arbitrary <*> arbitrary
-        , TurnTileDraw <$> arbitrary <*> arbitrary
-        , TurnAnkan <$> arbitrary
-        , TurnShouted <$> arbitrary <*> arbitrary
-        , pure TurnAuto
+        , TurnTileDraw    <$> arbitrary <*> arbitrary
+        , TurnAnkan       <$> arbitrary
         ]
 
 instance Arbitrary Shout where
     arbitrary = oneof
-        [ pure Pon
-        , pure Kan
-        , pure Ron
-        , Chi <$> ((,) <$> arbitrary <*> arbitrary)
+        [ Pon <$> arbitrary <*> arbitrary
+        , Kan <$> arbitrary <*> arbitrary
+        , Chi <$> arbitrary <*> arbitrary <*> arbitrary
+        , Ron <$> arbitrary <*> arbitrary <*> arbitrary
         ]
 
-instance Arbitrary RoundEvent where
+instance Arbitrary GameEvent where
     arbitrary = oneof
         [ RoundTurnBegins <$> arbitrary
         , RoundTurnAction <$> arbitrary <*> arbitrary
-        -- , RoundPublicHand <$> arbitrary <*> arbitrary
-        , RoundTsumo <$> arbitrary
-        , RoundRon <$> arbitrary <*> arbitrary
-        , RoundDraw <$> arbitrary 
+        , RoundTurnShouted <$> arbitrary <*> arbitrary
+        , RoundHandChanged <$> arbitrary <*> arbitrary
+        , RoundEnded <$> arbitrary
         ]
 
 instance Arbitrary Event where
     arbitrary = oneof
         [ JoinServer <$> arbitrary
         , PartServer <$> arbitrary
-        -- , LoungeInfo 
+        , ClientIdentity <$> arbitrary
         , Message <$> arbitrary <*> arbitrary
         , Invalid <$> arbitrary
+
+        , LoungeInfo <$> arbitrary
+        , (\a b -> GameCreated (a,b,mempty)) <$> arbitrary <*> arbitrary
         , CreateGame <$> arbitrary
-        , (\a b -> NewGame (a,b,mempty)) <$> arbitrary <*> arbitrary
         , JoinGame <$> arbitrary <*> arbitrary
-        , GameAction <$> arbitrary
-        , pure GameDontCare
-        , GameEvents <$> arbitrary
-        -- , GameHandChanged <$> arbitrary
-        --, GameShout <$> arbitrary
+        , ForceStart <$> arbitrary
+
+        , InGamePrivateEvent <$> arbitrary
+        , InGameEvents <$> arbitrary
+        , InGameAction <$> arbitrary
         ]
+
+instance Arbitrary HandPublic where
+    arbitrary = HandPublic <$> arbitrary <*> arbitrary <*> arbitrary <*> pure Nothing
+
+instance Arbitrary RoundResults where
+    arbitrary = elements [RoundTsumo, RoundRon, RoundDraw] <*> arbitrary <*> arbitrary
+
+instance Arbitrary Lounge where
+    arbitrary = Lounge <$> fmap Set.fromList arbitrary <*> fmap (fmap (second Set.fromList) . Map.fromList) arbitrary
+
+instance Arbitrary TileGroup where
+    arbitrary = oneof
+        [ (\t -> GroupWait Koutsu [t,t] [t]) <$> arbitrary
+        , breakShuntsu =<< arbitraryShuntsu
+        , GroupComplete <$> arbitrary
+        , GroupLeftover <$> arbitrary
+        ] where
+            breakShuntsu ms =
+                let [t,t',t''] = mentsuTiles ms
+                    in elements
+                        [ GroupWait Shuntsu [t , t' ] (catMaybes [predMay t, Just t''])
+                        , GroupWait Shuntsu [t', t''] (t : catMaybes [succMay t''])
+                        , GroupWait Shuntsu [t , t''] [t']
+                        ]
+
+arbitraryShuntsu = do
+     tile <- arbitrary `suchThat` (\tile -> isSuited tile && fromJust (tileNumber tile) <= Chii)
+     return $ Mentsu Shuntsu tile Nothing

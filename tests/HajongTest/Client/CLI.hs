@@ -1,14 +1,14 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
 ------------------------------------------------------------------------------
 -- | 
--- Module         : CLIClient
+-- Module         : HajongTest.Client.CLI
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module CLIClient (clientTests) where
+module HajongTest.Client.CLI (tests) where
 
 import Control.Concurrent (threadDelay, forkIO)
 import Control.Monad.State  (StateT(..), evalStateT)
@@ -18,8 +18,8 @@ import Hajong.Game
 import Hajong.Client.CLI
 
 -- | Tests for client side
-clientTests :: TestTree
-clientTests = testGroup "Client tests"
+tests :: TestTree
+tests = testGroup "Client tests"
     [ clientCLILoungeTests
     , clientCLIGameTests
     ]

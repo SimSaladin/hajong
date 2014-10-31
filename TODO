@@ -1,11 +1,11 @@
 [ ] (web) in-game actions
    [x] discard
-   [ ] shout
+   [/] shout
    [ ] ankan
 [ ] (web) in-game view
    [ ] mentsu
-   [ ] player in turn -indicator
-   [ ] real tiles
+   [x] player in turn -indicator
+   [/] real tiles
    [ ] chat/dialog
 [x] (web) retain nick on refresh
 [ ] (web) allow nick..

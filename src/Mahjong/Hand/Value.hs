@@ -32,7 +32,7 @@ mentsuValue (Mentsu mk t ms) = product [gokind mk, gotile, goshout ms]
         gokind _      = 0
 
         gotile
-            | not (suited t) ||
+            | not (isSuited t) ||
               isNothing (succMay t) || isNothing (predMay t)
                         = 2
             | otherwise = 1
