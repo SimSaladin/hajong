@@ -20,12 +20,12 @@ import Mahjong.Hand.Mentsu
 import Mahjong.Tiles
 
 getValue :: ValueInfo -> Value
-getValue = Value <$> getYaku <*> getFu
+getValue = Value <$> getYaku <*> (*10) . fst . (`divMod` 10) . getFu
 
 getYaku :: ValueInfo -> [Yaku]
 getYaku = undefined
 
--- | Calculate fu points for the mentsu.
+-- | Calculate fu points. Not rounded.
 getFu :: ValueInfo -> Fu
 getFu = (+) <$> sum . map mentsuValue . vMentsu
             <*> waitValue
