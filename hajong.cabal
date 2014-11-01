@@ -40,6 +40,7 @@ library
                      , Mahjong.Hand.Value
                      , Mahjong.Hand.Algo
                      , Mahjong.Hand.Algo.WaitTree
+                     , Mahjong.Yaku
                      , Mahjong.Yaku.Builder
                      , Mahjong.Yaku.Standard
                      -- , Hajong.Client.CLI

@@ -14,11 +14,10 @@
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Value where
 
+import Mahjong.Yaku
+import Mahjong.Hand
 import Mahjong.Hand.Mentsu
 import Mahjong.Tiles
-
-type Value = Int
-type Fu = Int
 
 -- | Calculate fu points for the mentsu.
 getFu :: [Mentsu] -> Fu

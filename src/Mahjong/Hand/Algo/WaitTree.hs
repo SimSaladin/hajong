@@ -51,7 +51,7 @@ data DevOp = DevOp { opDiscard  :: Tile
 type DevOp' = Either Tile (Tile, Tile, [Tile], [Wait])
 
 -- | Getting the tile results in a win.
-data TenpaiOp = TenpaiOp Tile Value
+data TenpaiOp = TenpaiOp Tile Int -- TODO last filed should be Value
               deriving (Eq, Ord, Show)
 
 -- | In a greedy wait tree every @DevOp@ brings the hand closer to

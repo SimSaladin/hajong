@@ -14,7 +14,7 @@
 module Hajong.Connections where
 
 ------------------------------------------------------------------------------
-import           Mahjong
+import           Mahjong hiding (Value)
 
 ------------------------------------------------------------------------------
 import           Prelude hiding ((.=))

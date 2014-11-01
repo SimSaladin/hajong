@@ -11,12 +11,9 @@ module Main (main, tests) where
 
 import System.Posix
 import qualified Test.QuickCheck.Property as Q
-import qualified Data.List as L
-
-import Mahjong
-import Hajong.Server
 
 import qualified MahjongTest.Mentsu          as Mentsu
+import qualified MahjongTest.HandValue       as HandValue
 import qualified MahjongTest.Mechanics       as Mechanics
 
 -- import qualified HajongTest.CLI.PrettyPrint  as PrettyPrint
@@ -38,6 +35,7 @@ tests :: TestTree
 tests = testGroup "Hajong tests"
     [ Mentsu.tests
     , Mechanics.tests
+    , HandValue.tests
     --, PrettyPrint.tests
     --, Client.tests
     , Worker.tests

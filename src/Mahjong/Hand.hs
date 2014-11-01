@@ -20,7 +20,7 @@ import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Algo
 import Mahjong.Tiles
 
--- * Types
+-- * Hand
 
 data HandPublic = HandPublic
                 { _handOpen :: [Mentsu]
@@ -53,6 +53,29 @@ instance Pretty HandPublic where
         -- FIXME 
         tilenum <- view (handOpen.to length) <&> (13 -) . (*3)
         return $ string $ unwords $ replicate tilenum "_"
+
+-- * Hand value
+
+-- | Required info to calculate the value from a hand.
+data ValueInfo = ValueInfo
+              { vRound :: Kaze
+              , vPlayer :: Kaze
+              , vRiichi :: Bool
+              , vConcealed :: Bool
+              , vDiscarded :: [Tile] -- ^ To check furiten
+              , vMentsu :: [Mentsu]
+              , vWinWith :: Tile
+              } deriving (Show)
+
+data Value = Value [Yaku] Fu
+type Fu    = Int
+
+-- ** Yaku Information
+
+data Yaku = Yaku
+          { yaku :: Int
+          , yakuName :: Text
+          }
 
 -- * Create
 

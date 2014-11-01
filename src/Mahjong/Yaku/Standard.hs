@@ -9,6 +9,7 @@
 ------------------------------------------------------------------------------
 module Mahjong.Yaku.Standard where
 
+import Mahjong.Hand (Yaku(..), ValueInfo(..))
 import Mahjong.Yaku.Builder
 import Mahjong.Tiles (Number(..), kaze)
 
@@ -16,160 +17,161 @@ import Mahjong.Tiles (Number(..), kaze)
 
 -- ** Shuntsu based
 
-yakuPinfu :: Yaku Int
-yakuPinfu = do
+pinfu :: YakuCheck Yaku
+pinfu = do
     concealedHand
     replicateM_ 4 (anyShuntsu suited)
     anyJantou suited
-    return 1
+    return (Yaku 1 "Pinfu")
 
-yakuIipeikou :: Yaku Int
-yakuIipeikou = do
+iipeikou :: YakuCheck Yaku
+iipeikou = do
     concealedHand
     tile <- anyShuntsu' anyTile
     anyShuntsu (sameTile tile)
-    return 1
+    return (Yaku 1 "Iipeikou")
 
-yakuRyanpeikou :: Yaku Int
-yakuRyanpeikou = concealedHand >> yakuIipeikou >> yakuIipeikou >> return 3
+ryanpeikou :: YakuCheck Yaku
+ryanpeikou = concealedHand >> iipeikou >> iipeikou >> return (Yaku 3 "Ryanpeikou")
 
-yakuSanshokuDoujin :: Yaku Int
-yakuSanshokuDoujin = do
+sanshokuDoujin :: YakuCheck Yaku
+sanshokuDoujin = do
     concealedHandDegrade
     tile  <- anyShuntsu' anyTile
     tile' <- anyShuntsu' (f tile)
     anyShuntsu (f tile' &. f tile)
-    return 2
+    return (Yaku 2 "Sanshoku Doujin")
     where
         f tile = sameNumber tile &. propNot (sameSuit tile)
 
-yakuIttsuu :: Yaku Int
-yakuIttsuu = do
+ittsuu :: YakuCheck Yaku
+ittsuu = do
     concealedHandDegrade
     tile <- anyShuntsu' (ofNumber Ii)
     anyShuntsu (sameSuit tile &. ofNumber Suu)
     anyShuntsu (sameSuit tile &. ofNumber Chii)
-    return 2
+    return (Yaku 2 "Ittsuu")
 
 -- ** Koutsu/kantsu based
 
--- NOTE this does not combine with chanta
-yakuHonroutou :: Yaku Int
-yakuHonroutou = do
+-- NOTE this does/should not combine with chanta
+honroutou :: YakuCheck Yaku
+honroutou = do
     replicateM_ 4 $ anyKoutsuKantsu (terminal |. honor) 
     anyJantou (terminal |. honor)
-    return 2
+    return (Yaku 2 "Honroutou")
 
-yakuToitoi :: Yaku Int
-yakuToitoi = do
+toitoi :: YakuCheck Yaku
+toitoi = do
     replicateM_ 4 $ anyKoutsuKantsu anyTile
-    return 2
+    return (Yaku 2 "Toitoi")
 
-yakuSanankou :: Yaku Int
-yakuSanankou = do
+sanAnkou :: YakuCheck Yaku
+sanAnkou = do
     replicateM_ 3 $ anyKoutsuKantsu concealed
-    return 2
+    return (Yaku 2 "San ankou")
 
-yakuSanKantsu :: Yaku Int
-yakuSanKantsu = do
+sanKantsu :: YakuCheck Yaku
+sanKantsu = do
     replicateM_ 3 $ anyKantsu anyTile
-    return 2
+    return (Yaku 2 "San kantsu")
 
-yakuSanshokuDoukou :: Yaku Int
-yakuSanshokuDoukou = do
+sanshokuDoukou :: YakuCheck Yaku
+sanshokuDoukou = do
     tile <- anyKoutsuKantsu' anyTile
     replicateM_ 2 $ anyKoutsuKantsu (sameNumber tile)
-    return 2
+    return (Yaku 2 "San Shoku Doukou")
 
-yakuShouSangen :: Yaku Int
-yakuShouSangen = do
+shouSangen :: YakuCheck Yaku
+shouSangen = do
     anyKoutsuKantsu sangenpai
     anyKoutsuKantsu sangenpai
     anyJantou sangenpai
     anyMentsu (propNot sangenpai)
-    return 2
+    return (Yaku 2 "Shou Sangen")
 
 -- ** Tile kind based
 
-yakuFanpai :: Yaku Int
-yakuFanpai = do
+fanpai :: YakuCheck Yaku
+fanpai = do
     info <- yakuState
-    let roundTile = kaze $ yakuRoundKaze info
-        playerKaze = kaze $ yakuPlayerKaze info
+    let roundTile = kaze $ vRound info
+        playerKaze = kaze $ vPlayer info
     tile <- anyMentsu' (sangenpai |. sameTile roundTile |. sameTile playerKaze)
-    return $ if roundTile == playerKaze && roundTile == tile
-        then 2
-        else 1
+    return (Yaku
+        (if roundTile == playerKaze && roundTile == tile then 2 else 1)
+                                                         "Fanpai")
 
-yakuTanyao :: Yaku Int
-yakuTanyao = do
+tanyao :: YakuCheck Yaku
+tanyao = do
     concealedHand
     allMentsuOfKind suited
-    return 1
+    return (Yaku 1 "Tanyao")
 
-yakuKuitan :: Yaku Int
-yakuKuitan = do
+kuitan :: YakuCheck Yaku
+kuitan = do
     openHand
     allMentsuOfKind suited
-    return 1
+    return (Yaku 1 "Kuitan")
 
-yakuChanta :: Yaku Int
-yakuChanta = do -- TODO this does not notice 7-8-9 Shuntsu!
+chanta :: YakuCheck Yaku
+chanta = do -- TODO this does not notice 7-8-9 Shuntsu!
+            -- FIXME this looks very bonken indeed
     anyShuntsu terminal
     replicateM_ 4 $ anyMentsuJantou (terminal |. honor)
-    return 2
+    return (Yaku 2 "Chanta")
 
-yakuHonitsu :: Yaku Int
-yakuHonitsu = do
+honitsu :: YakuCheck Yaku
+honitsu = do
     concealedHandDegrade
     anyMentsuJantou honor
     tile <- anyMentsuJantou' suited
     replicateM_ 3 $ anyMentsuJantou (honor |. sameSuit tile)
-    return 3
+    return (Yaku 3 "Honitsu")
 
-yakuJunchan :: Yaku Int
-yakuJunchan = do
+junchan :: YakuCheck Yaku
+junchan = do
     concealedHandDegrade
     allMentsuOfKind terminal -- TODO this does not notice 7-8-9 shuntsu
-    return 3
+    return (Yaku 3 "Junchan")
 
-yakuChinitsu :: Yaku Int
-yakuChinitsu = do
+chinitsu :: YakuCheck Yaku
+chinitsu = do
     concealedHandDegrade
     tile <- anyMentsu' suited
     replicateM_ 3 (anyMentsu $ sameSuit tile)
     anyJantou (sameSuit tile)
-    return 6
+    return (Yaku 6 "Chinitsu")
 
 -- * Special
 
-yakuChiitoitsu :: Yaku Int
-yakuChiitoitsu =
+chiitoitsu :: YakuCheck Yaku
+chiitoitsu =
     undefined -- TODO how does this implement?
 
 -- * Unrelated to mentsu
 
-yakuMenzenTsumo :: Yaku ()
-yakuMenzenTsumo = undefined
+menzenTsumo :: YakuCheck Yaku
+menzenTsumo = undefined
 
-yakuRiichi :: Yaku ()
-yakuRiichi = undefined
+riichi :: YakuCheck Yaku
+riichi = undefined
 
-yakuIppatsu :: Yaku ()
-yakuIppatsu = undefined
+ippatsu :: YakuCheck Yaku
+ippatsu = undefined
 
-yakuDoubleRiichi :: Yaku ()
-yakuDoubleRiichi = undefined
+doubleRiichi :: YakuCheck Yaku
+doubleRiichi = undefined
 
-yakuHouteiRaoyui :: Yaku ()
-yakuHouteiRaoyui = undefined
+houteiRaoyui :: YakuCheck Yaku
+houteiRaoyui = undefined
 
-yakuRinshanKaihou :: Yaku ()
-yakuRinshanKaihou = undefined
+rinshanKaihou :: YakuCheck Yaku
+rinshanKaihou = undefined
 
-yakuChankan :: Yaku ()
-yakuChankan = undefined
+chankan :: YakuCheck Yaku
+chankan = undefined
 
-yakuNagashiMangan :: Yaku ()
-yakuNagashiMangan = undefined
+nagashiMangan :: YakuCheck Yaku
+nagashiMangan = undefined
 

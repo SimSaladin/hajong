@@ -18,11 +18,6 @@ import Mahjong.Hand.Algo.WaitTree
 
 tests :: TestTree
 tests = testGroup "mentsu, groupings etc."
-    [ algoTests
-    ]
-
-algoTests :: TestTree
-algoTests = testGroup "Algorithm tests"
     [ tgSplitTests "tilesGroupL" tilesGroupL
     , tgSplitTests "tilesSplitGroupL" tilesSplitGroupL
     , shantenTests

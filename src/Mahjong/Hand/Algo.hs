@@ -17,9 +17,6 @@ module Mahjong.Hand.Algo
     HasGroupings(..),
     shanten, tenpai, complete,
 
-    {- buildGWTs, buildGWTs', buildGWT, -}
-    {- minDepth, levels, -}
-
     -- * Tile grouping
     tilesGroupL, tilesSplitGroupL,
     leftovers, waits, tileGroupTiles,
@@ -30,13 +27,11 @@ module Mahjong.Hand.Algo
 
 import           Data.Maybe (fromJust)
 import           Data.Either (isLeft)
--- import           Data.Bifunctor
 import           Data.List (delete, nub)
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 
--- import Mahjong.Hand.Algo.WaitTree as Mahjong.Hand.Algo
 import Mahjong.Hand.Mentsu
 import Mahjong.Tiles
 
