@@ -224,7 +224,7 @@ playersNextRound xs = let (ks, ps', as') = unzip3 xs
 
 -- | Advance the game to next round
 nextRound :: RiichiState -> IO RiichiState
-nextRound rs = over riichiPublic r . flip setSecret rs <$> newSecret
+nextRound rs = over riichiPublic r . logRound . flip setSecret rs <$> newSecret
   where
     r = do np <- view $ riichiPlayers.to playersNextRound
            let no = headEx np ^. _2
@@ -234,7 +234,12 @@ nextRound rs = over riichiPublic r . flip setSecret rs <$> newSecret
                . (riichiOja .~ no)
                . (riichiTurn .~ Ton)
                . (riichiResults .~ Nothing)
-
+    logRound = do
+        k <- view $ riichiPublic.riichiRound
+        riichiRounds %~ (\case
+                        [] -> [(k, 0)]
+                        xs@((k',n):_) | k == k'   -> (k, n + 1) : xs
+                                      | otherwise -> (k, n) : xs )
 
 -- ** Applying GameEvents
 

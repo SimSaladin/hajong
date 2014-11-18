@@ -78,6 +78,7 @@ library
                      , GeneralizedNewtypeDeriving
                      , StandaloneDeriving
                      , Rank2Types
+                     , LambdaCase
   default-language:    Haskell2010
   ghc-options:         -threaded
 
