@@ -23,7 +23,7 @@ getValue :: ValueInfo -> Value
 getValue = Value <$> getYaku <*> (*10) . fst . (`divMod` 10) . getFu
 
 getYaku :: ValueInfo -> [Yaku]
-getYaku = undefined
+getYaku vi = mapMaybe (runYakuCheck vi) allStandard
 
 -- | Calculate fu points. Not rounded.
 getFu :: ValueInfo -> Fu

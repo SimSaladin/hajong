@@ -26,10 +26,8 @@ module Mahjong.Hand.Algo
     ) where
 
 import           Data.Maybe (fromJust)
-import           Data.Either (isLeft)
 import           Data.List (delete, nub)
 import qualified Data.List as L
-import qualified Data.List.NonEmpty as NE
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 import Mahjong.Hand.Mentsu

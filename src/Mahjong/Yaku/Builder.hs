@@ -15,7 +15,7 @@ import Control.Monad.State
 
 import Mahjong.Hand
 import Mahjong.Hand.Mentsu
-import Mahjong.Tiles (Kaze(..), Tile(..), Number(..))
+import Mahjong.Tiles (Tile(..), Number(..))
 import qualified Mahjong.Tiles as T
 
 -- * YakuCheck
