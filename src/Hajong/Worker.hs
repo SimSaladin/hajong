@@ -211,7 +211,7 @@ workerRace :: Int -> Worker a -> a -> Worker a
 workerRace secs ma b = do
     s   <- view id
     res <- liftIO $ runWCont s ma `race` threadDelay (secs * 1000000)
-    either (\a -> $logDebug "Proceed before time out" >> return a)
+    either (\a -> {- $logDebug "Proceed before time out" >> -} return a)
            (\_ -> return b) res
 
 -- * Game flow continuations
@@ -249,7 +249,7 @@ afterDiscard :: WCont
 afterDiscard = do
     (r, ma) <- unsafeRoundM advanceAfterDiscard
     ma
-    maybe ($logDebug "New turn begins" >> unsafeRoundM_ autoDraw >> turnActionOrTimeout) endRound r
+    maybe ({- $logDebug "New turn begins" >> -} unsafeRoundM_ autoDraw >> turnActionOrTimeout) endRound r
 
 advanceWithShout :: Player -> Shout -> WCont
 advanceWithShout pp sh = do
@@ -273,7 +273,7 @@ waitForShouts = do
     winningShout <- liftIO newEmptyTMVarIO
     (players, _) <- unsafeRoundM getWaitingForShouts -- TODO should include *and* be ordered by shout
 
-    $logDebug ("Waiting for shouts (" <> tshow players <> ") after the discard")
+    $logDebug ("Waiting for shouts " <> tshow players <> " after the discard")
 
     -- Important invariant of waitAll's first argument:
     --  Shout priorities must be in /decreasing/ order. (This whole thing

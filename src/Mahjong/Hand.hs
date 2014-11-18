@@ -121,9 +121,10 @@ handAutoDiscard hand
 -- | All mentsu that could be melded with hand given some tile.
 shoutsOn :: Bool -- ^ Can shout to a shuntsu (from prev player)
          -> Tile -- ^ TIle to shout
-         -> [Tile] -- ^ Tiles in the hand of shouter - assumed to be in order
+         -> [Tile] -- ^ Tiles in the hand of shouter
          -> [[Tile]] -- ^ List of possible shout to combinations
-shoutsOn withShuntsu x xs = filter (`isInfixOf` xs) $ possibleShouts withShuntsu x
+shoutsOn withShuntsu x xs = filter (`isInfixOf` sort xs) $ possibleShouts withShuntsu x
+    -- NOTE: sort
 
 -- * Melding
 
