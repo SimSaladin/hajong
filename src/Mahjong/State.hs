@@ -118,11 +118,11 @@ makeLenses ''GamePlayer
 -- | New state with first round ready to start. Convenient composite of
 -- newPublic, newSecret and setSecret.
 newRiichiState :: IO RiichiState
-newRiichiState = RiichiState
-    <$> pure [(Ton, 0)]
-    <*> newSecret
-    <*> (newPublic fourPlayers . Player <$> randomRIO (0, 3))
-    <*> pure []
+newRiichiState = do
+    p <- newPublic fourPlayers . Player <$> randomRIO (0, 3)
+    s <- newSecret
+    let rs = RiichiState [(Ton, 0)] (error "newRiichiState: not used") p []
+    return $ setSecret s rs
 
 fourPlayers :: [Player]
 fourPlayers = Player <$> [0 .. 3]
