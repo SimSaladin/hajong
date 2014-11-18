@@ -31,7 +31,17 @@ getFu = (+) <$> sum . map mentsuValue . vMentsu
             <*> waitValue
 
 waitValue :: ValueInfo -> Fu
-waitValue = undefined
+waitValue = go <$> vWinWith <*> map mentsuTiles . filter (not . mentsuShouted) . vMentsu
+    where
+        go t = fromMaybe 0 . maximumMay . map (waitFu t)
+
+waitFu :: Tile -> [Tile] -> Fu
+waitFu t xs = case xs of
+    [a, _]    | a == t -> 2
+    [a, b, c] | t == b -> 2
+              | tileNumber a == Just Ii   && t == c -> 2
+              | tileNumber c == Just Chuu && t == a -> 2
+    _ -> 0
 
 mentsuValue :: Mentsu -> Fu
 mentsuValue (Mentsu mk t ms) = product [gokind mk, gotile, goshout ms]

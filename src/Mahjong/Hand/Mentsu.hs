@@ -23,6 +23,7 @@ module Mahjong.Hand.Mentsu
     , mentsuKind
     , mentsuTiles
     , mentsuShout
+    , mentsuShouted
     , isJantou, isShuntsu, isKoutsu, isKantsu
 
     -- * Types
@@ -77,6 +78,9 @@ mentsuTiles (Mentsu mk t _) = case mk of
 
 mentsuShout :: Mentsu -> Maybe Shout
 mentsuShout (Mentsu _ _ x) = x
+
+mentsuShouted :: Mentsu -> Bool
+mentsuShouted = isJust . mentsuShout
 
 -- * Construct
 
