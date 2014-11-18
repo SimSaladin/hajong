@@ -91,9 +91,9 @@ discard :: CanError m => Tile -> Hand -> m Hand
 discard tile hand
     | hand ^. handPick == Just tile = return $ hand & set handPick Nothing . setDiscard
     | hand ^. handPublic.handRiichi = throwError "Cannot change wait in riichi"
-    | [] <- ys                       = throwError "Tile not in hand"
+    | [] <- ys                      = throwError "Tile not in hand"
     | Just pick <- hand^.handPick
-    , (_:ys')   <- ys                = return
+    , (_:ys')   <- ys               = return
         . set handPick Nothing
         . set handConcealed (pick : xs ++ ys')
         $ setDiscard hand
@@ -111,19 +111,19 @@ discardRiichi tile hand
 
 -- | Automatically execute a discard necessary to advance the game (in case
 -- of inactive players).
-handAutoDiscard :: Hand -> Tile
+handAutoDiscard :: CanError m => Hand -> m Tile
 handAutoDiscard hand
-    | Just tile <- _handPick hand = tile
-    | otherwise                   = error "handAutoDiscard: nothing to do"
-        -- TODO what if he just ankan with the discard?
-        -- .. wait, that should bring automatically a new pick to his hand
-        -- from wanpai.
+    | Just tile <- _handPick hand = return tile
+    | otherwise                   = throwError "handAutoDiscard: no hand pick"
 
 -- * Properties
 
 -- | All mentsu that could be melded with hand given some tile.
-shoutsOn :: Tile -> Hand -> [Shout]
-shoutsOn tile hand = [] -- TODO
+shoutsOn :: Bool -- ^ Can shout to a shuntsu (from prev player)
+         -> Tile -- ^ TIle to shout
+         -> [Tile] -- ^ Tiles in the hand of shouter - assumed to be in order
+         -> [[Tile]] -- ^ List of possible shout to combinations
+shoutsOn withShuntsu x xs = filter (`isInfixOf` xs) $ possibleShouts withShuntsu x
 
 -- * Melding
 

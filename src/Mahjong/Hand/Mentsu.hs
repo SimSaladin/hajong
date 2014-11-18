@@ -26,6 +26,9 @@ module Mahjong.Hand.Mentsu
     , mentsuShouted
     , isJantou, isShuntsu, isKoutsu, isKantsu
 
+    -- * On shouts
+    , possibleShouts
+
     -- * Types
     , Mentsu(..), MentsuKind(..), Shout(..)
     ) where
@@ -44,6 +47,8 @@ data MentsuKind = Shuntsu -- ^ 3 Tile straight
                 | Kantsu -- ^ Quadret
                 | Jantou -- ^ Pair
                 deriving (Show, Read, Eq, Ord, Bounded, Enum)
+
+-- Instances
 
 instance Pretty Mentsu where
     pretty = intercalate "-" . map pretty . mentsuTiles
@@ -65,6 +70,8 @@ instance Pretty Shout where
     pretty Kan{} = "Kan!"
     pretty Chi{} = "Chi!"
 
+-- Helpers
+
 -- | Get the mentsu kind
 mentsuKind :: Mentsu -> MentsuKind
 mentsuKind (Mentsu k _ _) = k
@@ -82,7 +89,7 @@ mentsuShout (Mentsu _ _ x) = x
 mentsuShouted :: Mentsu -> Bool
 mentsuShouted = isJust . mentsuShout
 
--- * Construct
+-- Construct
 
 shuntsu, koutsu, kantsu, jantou :: Tile -> Mentsu
 shuntsu = Mentsu Shuntsu `flip` Nothing
@@ -105,15 +112,26 @@ fromShout shout = setShout $ case shout of
 -- | @shuntsuWith tiles@ attempts to build a shuntsu from `tiles`. Note
 -- that `tiles` __must be in order of succession__.
 shuntsuWith :: [Tile] -> Maybe Mentsu
-shuntsuWith (x:y:z:[]) = shuntsu x <$ do
+shuntsuWith [x, y, z] = shuntsu x <$ do
     succMay x >>= guard . (== y)
     succMay y >>= guard . (== z)
-shuntsuWith          _ = Nothing
+shuntsuWith _ = Nothing
 
--- * Check
+-- Check
 
 isJantou, isShuntsu, isKoutsu, isKantsu :: Mentsu -> Bool
 isJantou  = (== Jantou)  . mentsuKind
 isShuntsu = (== Shuntsu) . mentsuKind
 isKoutsu  = (== Koutsu)  . mentsuKind
 isKantsu  = (== Kantsu)  . mentsuKind
+
+-- On shouts
+
+possibleShouts :: Bool -> Tile -> [[Tile]]
+possibleShouts withShuntsu x = [x, x] : [x, x, x] : (if withShuntsu then shuntsus else [])
+  where
+    shuntsus = catMaybes
+        [ succMay x >>= \y -> succMay y >>= \z -> return [y, z] --  x . .
+        , predMay x >>= \y -> succMay x >>= \z -> return [y, z] --  . x .
+        , predMay x >>= \y -> predMay y >>= \z -> return [y, z] --  . . x
+        ]

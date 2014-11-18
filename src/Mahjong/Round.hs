@@ -70,7 +70,8 @@ autoDiscard :: RoundM m => m ()
 autoDiscard = do
     tp <- view riichiTurn
     hand <- handOf' tp
-    runTurn' tp (TurnTileDiscard False (handAutoDiscard hand))
+    dt <- handAutoDiscard hand
+    runTurn' tp (TurnTileDiscard False dt)
 
 autoDraw :: RoundM m => m ()
 autoDraw = flip runTurn' (TurnTileDraw False Nothing) =<< view riichiTurn
@@ -189,7 +190,9 @@ drawDeadWall hand = preuse (riichiWall._Snoc)
 -- | Set riichiWaitShoutsFrom to players who could shout the discard.
 endTurn :: RoundM m => Tile -> m ()
 endTurn dt = do
-    hands <- Map.filter (not . null . shoutsOn dt) <$> use riichiHands
+    np <- nextKaze <$> view riichiTurn
+    let pred p = not . null . shoutsOn (p == np) dt . _handConcealed
+    hands <- Map.filterWithKey pred <$> use riichiHands
     riichiWaitShoutsFrom .= Map.keys hands
 
 -- ** Helpers
@@ -220,24 +223,18 @@ playersNextRound xs = let (ks, ps', as') = unzip3 xs
                           in zip3 ks (p : ps) (a : as)
 
 -- | Advance the game to next round
---
--- TODO: we do not count han-chans
 nextRound :: RiichiState -> IO RiichiState
-nextRound rs = do
-    secret <- newSecret
-    let newPlayers = rs^.riichiPublic.riichiPlayers & playersNextRound
-        newOja     = headEx newPlayers ^. _2
-        newRound   = if newOja == rs^.riichiPublic.riichiFirstOja
-                         then nextKaze
-                         else id
-    return
-        $ setSecret secret
-        $ riichiPlayers .~ newPlayers
-        $ riichiRound %~ newRound
-        $ riichiOja .~ newOja
-        $ riichiTurn .~ Ton
-        $ riichiResults .~ Nothing
-        $ rs ^. riichiPublic
+nextRound rs = over riichiPublic r . flip setSecret rs <$> newSecret
+  where
+    r = do np <- view $ riichiPlayers.to playersNextRound
+           let no = headEx np ^. _2
+           ar <- view $ riichiFirstOja.to (== no)
+           (riichiPlayers .~ np)
+               . (riichiRound %~ if' ar nextKaze id)
+               . (riichiOja .~ no)
+               . (riichiTurn .~ Ton)
+               . (riichiResults .~ Nothing)
+
 
 -- ** Applying GameEvents
 

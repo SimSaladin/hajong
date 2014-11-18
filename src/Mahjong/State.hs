@@ -40,13 +40,15 @@ type RiichiPlayers player = Map Kaze (Player, player, Points)
 
 -- * Round
 
--- | This would be better renamed as RoundState, as that's what it really is.
+-- | Game state, including current round state.
 data RiichiState = RiichiState
-                 { _riichiSecret :: RiichiSecret
+                 { _riichiRounds :: [(Kaze, Int)] -- ^ Decreasing in play order, current first
+                 , _riichiSecret :: RiichiSecret
                  , _riichiPublic :: RiichiPublic
                  , _riichiEvents :: [GameEvent]
                  } deriving (Show, Read)
 
+-- | Round state, secret half.
 data RiichiSecret = RiichiSecret
                  { _riichiWall :: [Tile]
                  , _riichiWanpai :: [Tile]
@@ -54,6 +56,7 @@ data RiichiSecret = RiichiSecret
                  , _riichiWaitShoutsFrom :: [Kaze]
                  } deriving (Show, Read)
 
+-- | Round state, public half.
 data RiichiPublic = RiichiPublic
                  { _riichiDora :: [Tile]
                  , _riichiWallTilesLeft :: Int
@@ -115,7 +118,11 @@ makeLenses ''GamePlayer
 -- | New state with first round ready to start. Convenient composite of
 -- newPublic, newSecret and setSecret.
 newRiichiState :: IO RiichiState
-newRiichiState = setSecret <$> newSecret <*> (newPublic fourPlayers . Player <$> randomRIO (0, 3))
+newRiichiState = RiichiState
+    <$> pure [(Ton, 0)]
+    <*> newSecret
+    <*> (newPublic fourPlayers . Player <$> randomRIO (0, 3))
+    <*> pure []
 
 fourPlayers :: [Player]
 fourPlayers = Player <$> [0 .. 3]
@@ -148,11 +155,13 @@ newSecret = liftM dealTiles $ shuffleM riichiTiles
                 ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
                 (wanpai, wall)          = splitAt 14 xs
 
-setSecret :: RiichiSecret -> RiichiPublic -> RiichiState
-setSecret secret public = RiichiState
-    (secret & set riichiWanpai wanpai')
-    (public & set riichiDora [dora]
-            & set riichiWallTilesLeft (secret ^. riichiWall.to length))
-    []
-    where
-        (dora : wanpai') = secret ^. riichiWanpai
+setSecret :: RiichiSecret -> RiichiState -> RiichiState
+setSecret secret =
+    (riichiSecret .~ s secret) .
+    (riichiPublic %~ p) .
+    (riichiEvents .~ [])
+  where
+    (dora : wanpai') = secret ^. riichiWanpai
+    s = riichiWanpai .~ wanpai'
+    p = (riichiDora .~ [dora]) .
+        (riichiWallTilesLeft .~ (secret ^. riichiWall.to length))
