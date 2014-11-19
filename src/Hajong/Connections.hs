@@ -21,6 +21,7 @@ import           Mahjong hiding (Value)
 import           Prelude hiding ((.=))
 import qualified Data.Map as M
 import           Control.Monad.Trans.Either
+import           Control.Monad.Logger
 import qualified Network.WebSockets         as WS
 import           Data.Aeson
 import           Data.Aeson.Types (Pair)
@@ -88,10 +89,12 @@ multicast :: MonadIO m => GameState Client -> Event -> m ()
 multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
     -- TODO Just move this to server already
 
-unicastError :: MonadIO m => Client -> Text -> m ()
-unicastError c = unicast c . Invalid
+unicastError :: (MonadLogger m, MonadIO m) => Client -> Text -> m ()
+unicastError c txt = do
+    $logError $ "Client error [" ++ getNick c ++ "]: " <> txt
+    unicast c $ Invalid txt
 
-clientEither :: MonadIO m => Client -> Either Text a -> (a -> m ()) -> m ()
+clientEither :: (MonadLogger m, MonadIO m) => Client -> Either Text a -> (a -> m ()) -> m ()
 clientEither client (Left err) _ = unicastError client err
 clientEither _ (Right a) f  = f a
 
@@ -133,6 +136,7 @@ gamePairs (i,(t,n)) = object [ "ident"   .= i
                              ]
 
 -- Instances -----------------------------------------------------------------
+
 -- I hate this boilerplate; why was it better idea than deriving with aeson
 -- that some day...
 

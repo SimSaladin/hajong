@@ -17,6 +17,10 @@
 [x] (server) worker logging
 [ ] (server) games/worker status query
    * website?
+
+[ ] (game) kokushi musou ron
+[ ] (game) ask for new round
+[ ] (game) final scoring and possible next rounds
 [ ] (connections) revisit json instances - possibly derive?
 
 [ ] (docs) write json channel spec
