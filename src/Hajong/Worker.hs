@@ -292,7 +292,7 @@ waitForShouts = do
                 Nothing -> unicastError c "You are not playing in this game" >> waitAll xs
                 Just p  -> do
                     unicast c (InGamePrivateEvent $ RoundPrivateWaitForShout p 0 [])
-                    waitAll $ filter (^._1.to (== p)) xs
+                    waitAll $ filter (^._1.to (/= p)) xs
 
         shoutHandler xs c s = do
             mv <- atomically $ tryReadTMVar win_var

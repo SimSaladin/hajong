@@ -21,6 +21,7 @@
 [ ] (game) kokushi musou ron
 [ ] (game) ask for new round
 [ ] (game) final scoring and possible next rounds
+[ ] (game, elm, server) tsumo
 [ ] (connections) revisit json instances - possibly derive?
 
 [ ] (docs) write json channel spec
