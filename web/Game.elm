@@ -31,6 +31,9 @@ shout = input Nothing
 ankan : Input (Maybe Tile)
 ankan = input Nothing
 
+nocare : Input Bool
+nocare = input False
+
 shoutChooseTile : Input (Maybe Tile)
 shoutChooseTile = input Nothing
 -- }}}
@@ -41,9 +44,9 @@ events = merges
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
    , maybe Noop (InGameAction << GameShout) <~ shoutEvent
    , maybe Noop (InGameAction << GameTurn << TurnAnkan) <~ ankan.signal
+   , (\x -> if x then InGameAction GameDontCare else Noop) <~ nocare.signal
    ]
 
--- TODO: implement me
 shoutEvent : Signal (Maybe Shout)
 shoutEvent = getShout <~ shout.signal
 
@@ -64,13 +67,12 @@ display co gs = case gs.roundState of
            , shoutButton (gs.waitShout) Pon "Pon"
            , shoutButton (gs.waitShout) Chi "Chi"
            , shoutButton (gs.waitShout) Ron "Ron"
-           , ankanButton gs "Ankan"
+           , ankanButton rs "Ankan"
+           , nocareButton gs.waitShout "Pass"
            ]
         , container 1000 100 midTop <| dispHand co rs.myhand
-        ] `beside` dispLog rs.actions
+        ]
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
-
-dispLog = flow up << map asText
 -- }}}
 
 -- {{{ Per-player ---------------------------------------------------
@@ -84,7 +86,7 @@ dispDiscards co gs rs = group <| map
 
 moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
 moveRotateKaze off mypos pos =
-   case (kazeNth pos + kazeNth mypos - 2) % 4 of
+   case (kazeNth pos - kazeNth mypos) % 4 of
       0 -> moveY (-off)
       1 -> moveX off    << rotate (degrees 90) 
       2 -> moveY off    << rotate (degrees 180)
@@ -170,14 +172,16 @@ tileImage tile =
 -- {{{ Buttons 'n stuff --------------------------------------------------------
 shoutButton ss sk str = clickable shout.handle (Just sk) (buttonElem sk ss str)
 
-ankanButton gs str = case findFourTiles gs of
+ankanButton rs str = case findFourTiles rs of
    Just t  -> clickable ankan.handle (Just t) (buttonElem' str green)
    Nothing -> buttonElem' str gray
 
-findFourTiles : GameState -> Maybe Tile
-findFourTiles gs = case gs.roundState of
-   Nothing -> Nothing
-   Just rs -> counted 4 <| rs.myhand.concealed
+nocareButton w str = clickable nocare.handle True <| buttonElem' str <| case w of
+   Just (w, _ :: _) -> green
+   _                -> gray
+
+findFourTiles : RoundState -> Maybe Tile
+findFourTiles rs = counted 4 <| rs.myhand.concealed
 
 counted : Int -> [Tile] -> Maybe Tile
 counted m ts =
@@ -260,10 +264,13 @@ processTurnAction player action gs =
    case gs.roundState of
       Just rs -> case action of
          TurnTileDiscard riichi tile ->
-            { gs | roundState <- Just { rs | hands <- Util.listModify player
-                  (\h -> { h | discards <- h.discards ++ [(tile, Nothing)]
-                             , riichi   <- riichi }) rs.hands
-            }}
+            { gs | roundState <-
+                  Just { rs | hands  <- Util.listModify player
+                                          (\h -> { h | discards <- h.discards ++ [(tile, Nothing)]
+                                                     , riichi <- riichi }) rs.hands
+                       }
+                 , waitShout <- Just (WaitRecord 10 gs.updated, [])
+            }
          TurnTileDraw _ _ ->
             { gs | roundState <- Just { rs | tilesleft <- rs.tilesleft - 1 }
             }

@@ -15,9 +15,19 @@ import Graphics.Input.Field as Field
 
 -- {{{ Log view ---------------------------------------------------
 logView : GameState -> Element
-logView game =
-   (flow  down <| map (toText >> Text.color red >> leftAligned) game.debuglog)
-   `above` (flow down <| map (eventView >> leftAligned) game.eventlog)
+logView game = (
+   container 500 200 topLeft
+      <| titled "Log"
+      <| flow down
+      <| map (eventView >> leftAligned) game.eventlog
+   ) `beside` (
+   container 200 200 topLeft
+      <| titled "Debug log"
+      <| flow down
+      <| map (toText >> Text.color red >> leftAligned) game.debuglog)
+
+titled : String -> Element -> Element
+titled str = above (leftAligned <| Text.color charcoal <| toText str)
 
 eventView : Event -> Text.Text
 eventView ev = case ev of
@@ -124,7 +134,7 @@ deleteNick n l =
 
 -- {{{ Display ------------------------------------------------
 display : GameState -> Element -> Element
-display game view = flow right
+display game view = flow down
    [ view
    , logView game
    ]

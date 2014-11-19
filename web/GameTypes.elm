@@ -136,10 +136,10 @@ suitNth s = case s of
 
 kazeNth : Kaze -> Int
 kazeNth k = case k of
-   Ton  -> 1
-   Nan  -> 2
-   Shaa -> 3
-   Pei  -> 4
+   Ton  -> 0
+   Nan  -> 1
+   Shaa -> 2
+   Pei  -> 3
 
 sangenNth k = case k of
    Haku  -> 1
