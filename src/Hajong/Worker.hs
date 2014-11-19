@@ -257,8 +257,9 @@ afterDiscard = unsafeRoundM advanceAfterDiscard
 
 afterShout :: Player -> Shout -> WCont
 afterShout pp sh = do
-    $logDebug "Advancing with a shout"
-    roundM (runShout sh pp) >>= either $logError (go . snd)
+    $logDebug $ "Advancing with shout " ++ tshow sh
+    unsafeRoundM (runShout sh pp)
+    turnActionOrTimeout
     where
         go ma = ma >> turnActionOrTimeout
 
@@ -280,12 +281,17 @@ waitForShouts = do
     unless (null shoutable) $
         $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")
 
-    -- Important invariant of waitAll's first argument:
-    --  Shout priorities must be in /decreasing/ order. (This whole thing
-    --  is wrong as it takes players and not shouts - TODO)
+    -- Important invariant of waitAll's first argument: Shout priorities
+    -- must be in /decreasing/ order.
+    --
+    -- Also, shoutHandler below is rather wrong and ambiguous due to rule
+    -- set differences in cases of multiple ron "at the same time". There
+    -- should be a configurable threshold to others call overriding call or
+    -- another ron. -- TODO
 
     let waitAll [] = return afterDiscard
-        waitAll xs = withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
+        waitAll xs = do
+            withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
 
         passOn xs c = do
             case c `clientToPlayer` gs of

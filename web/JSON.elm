@@ -184,7 +184,6 @@ parseHand v =
             , called      = x.called
             , discards    = x.discards
             , riichi      = x.riichi
-            , turnDiscard = x.turnDiscard
             }
 
 parsePublicHand : Value -> HandPublic
@@ -192,7 +191,6 @@ parsePublicHand (Object o) =
    { called      = "called"       .: o |> withArray parseMentsu
    , discards    = "discards"     .: o |> withArray parseDiscardTile
    , riichi      = "riichi"       .: o |> parseBool
-   , turnDiscard = "turn-discard" .: o |> parseTileMaybe
    }
 
 parsePlayerHand : Value -> (Kaze, HandPublic)

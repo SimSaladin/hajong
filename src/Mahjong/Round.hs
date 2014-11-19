@@ -85,8 +85,15 @@ runTurn' pk ta = do
             TurnTileDraw False _       -> drawWall h
             TurnTileDraw True  _       -> drawDeadWall h
 
+-- | @runShout shout shouter@
 runShout :: RoundM m => Shout -> Player -> m ()
-runShout shout sp = runShout' shout =<< playerToKaze sp
+runShout shout sp = do
+    sk <- playerToKaze sp
+    tk <- view riichiTurn
+    (m, hand) <- shoutFromHand sk shout =<< handOf' tk
+    updateHand tk hand
+    handOf' sk >>= meldTo shout m >>= updateHand sk
+    tellEvent $ RoundTurnShouted sk shout
 
 getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
 getWaitingForShouts = do
@@ -97,15 +104,6 @@ getWaitingForShouts = do
                                                                -- ^ TODO hard-coded limit
     tell out
     return res
-
--- | @runShout shout shouter@
-runShout' :: RoundM m => Shout -> Kaze -> m ()
-runShout' shout sk = do
-    turnKaze  <- view riichiTurn
-    (m, hand) <- shoutFromHand shout =<< handOf' turnKaze
-    updateHand turnKaze hand
-    handOf' sk >>= meldTo shout m >>= updateHand sk
-    tellEvent $ RoundTurnShouted sk shout
 
 -- | If win(s) were declared, wall was exhausted or four kans were declared
 -- (and TODO declarer is not in the yakuman tenpai): return "RoundResults".
@@ -281,7 +279,7 @@ applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
 applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs
     $ GamePlayer (error "Not accessed") (error "_playerPlayer is not accessed") rp mempty hand
     where
-        hand = Hand [] Nothing Nothing $ HandPublic [] [(error "N/A", Nothing)] False Nothing
+        hand = Hand [] Nothing Nothing (HandPublic [] [(error "N/A", Nothing)] False)
 
 applyGameEvent' :: GameEvent -> RiichiPublic -> RiichiPublic
 applyGameEvent' ev = applyGameEvents' [ev]

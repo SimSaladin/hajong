@@ -162,7 +162,6 @@ type HandPublic' a =
    | called      : [Mentsu]
    , discards    : [(Tile, Maybe Kaze)]
    , riichi      : Bool
-   , turnDiscard : Maybe Tile
    }
 -- }}}
 

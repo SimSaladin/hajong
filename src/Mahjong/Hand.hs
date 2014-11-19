@@ -26,7 +26,6 @@ data HandPublic = HandPublic
                 { _handOpen :: [Mentsu]
                 , _handDiscards :: [(Tile, Maybe Kaze)]
                 , _handRiichi :: Bool
-                , _handTurnDiscard :: Maybe (Tile, UTCTime)
                 } deriving (Show, Read, Eq)
 
 data Hand = Hand
@@ -81,7 +80,7 @@ data Yaku = Yaku
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing $ HandPublic [] [] False Nothing
+initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False)
 
 -- * Discarding
 
@@ -167,13 +166,17 @@ meldTo shout mentsu hand
     todelete = (:) <$> shoutedTile <*> shoutedTo $ shout
 
 -- | Transfer the discard from the hand to a mentsu specified by the shout.
-shoutFromHand :: CanError m => Shout -> Hand -> m (Mentsu, Hand)
-shoutFromHand shout hand
-    | Just (tile, _) <- hand^.handPublic.handTurnDiscard
-    , shoutedTile shout == tile
-    = return (fromShout shout, hand & handPublic.handTurnDiscard .~ Nothing
-                                    & handPublic.handDiscards %~ shoutLastDiscard shout)
-    | otherwise = throwError "The hand has no discard to take."
+shoutFromHand :: CanError m => Kaze -> Shout -> Hand -> m (Mentsu, Hand)
+shoutFromHand sk shout hand =
+    case hand ^? handPublic.handDiscards._last of
+        Nothing          -> throwError "Player hasn't discarded anything"
+        Just (_, Just _) -> throwError "The discard has already been claimed"
+        Just (t, _)
+            | shoutedTile shout /= t -> throwError "The discard is not the shouted tile"
+            | otherwise              -> return
+                ( fromShout shout
+                , hand & handPublic.handDiscards._last .~ (t, Just sk)
+                       & handPublic.handDiscards %~ shoutLastDiscard shout)
 
 -- | Modify the last discard in the discard pile to indicate a shout.
 shoutLastDiscard :: Shout -> [(Tile, Maybe Kaze)] -> [(Tile, Maybe Kaze)]

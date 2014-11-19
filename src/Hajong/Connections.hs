@@ -190,7 +190,6 @@ instance ToJSON HandPublic where
         [ "called"       .= _handOpen p
         , "discards"     .= _handDiscards p
         , "riichi"       .= _handRiichi p
-        , "turn-discard" .= _handTurnDiscard p
         ]
 
 instance ToJSON Mentsu where

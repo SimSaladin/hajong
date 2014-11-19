@@ -25,7 +25,7 @@ discard = input Nothing
 discardHover : Input (Maybe Tile)
 discardHover = input Nothing
 
-shout : Input (Maybe ShoutKind)
+shout : Input (Maybe Shout)
 shout = input Nothing
 
 ankan : Input (Maybe Tile)
@@ -42,13 +42,10 @@ shoutChooseTile = input Nothing
 events : Signal Event
 events = merges
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
-   , maybe Noop (InGameAction << GameShout) <~ shoutEvent
+   , maybe Noop (InGameAction << GameShout) <~ shout.signal
    , maybe Noop (InGameAction << GameTurn << TurnAnkan) <~ ankan.signal
    , (\x -> if x then InGameAction GameDontCare else Noop) <~ nocare.signal
    ]
-
-shoutEvent : Signal (Maybe Shout)
-shoutEvent = getShout <~ shout.signal
 
 getShout : Maybe ShoutKind -> Maybe Shout
 getShout = maybe Nothing (\k -> Just <| Shout k Ton (Suited ManTile 1 False) [])
@@ -63,13 +60,10 @@ display co gs = case gs.roundState of
             , dispDiscards co gs rs |> scale 0.7
             ]
         , container 1000 40 midTop <| flow right
-           [ shoutButton (gs.waitShout) Kan "Kan"
-           , shoutButton (gs.waitShout) Pon "Pon"
-           , shoutButton (gs.waitShout) Chi "Chi"
-           , shoutButton (gs.waitShout) Ron "Ron"
-           , ankanButton rs "Ankan"
-           , nocareButton gs.waitShout "Pass"
-           ]
+           <| (
+              maybe [] (map shoutButton << snd) (gs.waitShout)
+               ++ [ankanButton rs "Ankan", nocareButton gs.waitShout "Pass" ]
+               )
         , container 1000 100 midTop <| dispHand co rs.myhand
         ]
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
@@ -170,15 +164,21 @@ tileImage tile =
 -- }}}
 
 -- {{{ Buttons 'n stuff --------------------------------------------------------
-shoutButton ss sk str = clickable shout.handle (Just sk) (buttonElem sk ss str)
+
+shoutButton : Shout -> Element
+shoutButton s =
+   clickable shout.handle (Just s) <| collage 80 40
+      [ oval 80 40 |> filled green
+      , toText (show s.shoutKind) |> centered |> toForm ]
+      -- TODO multiple chii identify
 
 ankanButton rs str = case findFourTiles rs of
    Just t  -> clickable ankan.handle (Just t) (buttonElem' str green)
-   Nothing -> buttonElem' str gray
+   Nothing -> empty
 
-nocareButton w str = clickable nocare.handle True <| buttonElem' str <| case w of
-   Just (w, _ :: _) -> green
-   _                -> gray
+nocareButton w str = case w of
+   Just (w, _ :: _) -> clickable nocare.handle True <| buttonElem' str green
+   _                -> empty
 
 findFourTiles : RoundState -> Maybe Tile
 findFourTiles rs = counted 4 <| rs.myhand.concealed
@@ -196,16 +196,6 @@ counted m ts =
 buttonElem' str col = collage 80 40
    [ oval 80 40 |> filled col
    , toText str |> centered |> toForm ]
-
-buttonElem sk ss s =
-   let col = case ss of
-               Nothing -> gray
-               Just (_, ss) -> case filter (\s -> sk == s.shoutKind) ss of
-                  [] -> gray
-                  _  -> green
-   in collage 80 40
-      [ oval 80 40 |> filled col
-      , toText s |> centered |> toForm ]
 -- }}}
 
 -- {{{ Process GameEvents
