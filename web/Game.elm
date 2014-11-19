@@ -36,13 +36,15 @@ shoutChooseTile = input Nothing
 events : Signal Event
 events = merges
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
-   --, maybe Noop (InGameAction << GameTurn << GameShout) <~ shoutEvent
+   , maybe Noop (InGameAction << GameShout) <~ shoutEvent
    ]
 
 -- TODO: implement me
--- shoutEvent : Signal (Maybe Shout)
--- shoutEvent = Shout <~ shout.signal ~ gameState
+shoutEvent : Signal (Maybe Shout)
+shoutEvent = getShout <~ shout.signal
 
+getShout : Maybe ShoutKind -> Maybe Shout
+getShout = maybe Nothing (\k -> Just <| Shout k Ton (Suited ManTile 1 False) [])
 -- }}}
 
 -- {{{ Display -------------------------------------------------------
