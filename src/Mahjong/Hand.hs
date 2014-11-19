@@ -50,7 +50,7 @@ instance Pretty Hand where
 
 instance Pretty HandPublic where
     pretty = do
-        -- FIXME 
+        -- FIXME
         tilenum <- view (handOpen.to length) <&> (13 -) . (*3)
         return $ string $ unwords $ replicate tilenum "_"
 
@@ -119,12 +119,26 @@ handAutoDiscard hand
 -- * Properties
 
 -- | All mentsu that could be melded with hand given some tile.
-shoutsOn :: Bool -- ^ Can shout to a shuntsu (from prev player)
-         -> Tile -- ^ TIle to shout
-         -> [Tile] -- ^ Tiles in the hand of shouter
-         -> [[Tile]] -- ^ List of possible shout to combinations
-shoutsOn withShuntsu x xs = filter (`isInfixOf` sort xs) $ possibleShouts withShuntsu x
-    -- NOTE: sort
+shoutsOn :: Kaze -- ^ Shout from (player in turn)
+         -> Tile -- ^ Tile to shout
+         -> Kaze -- ^ Shouter
+         -> Hand -- ^ shouter's
+         -> [Shout]
+shoutsOn np t p hand =
+    concatMap toShout $ filter (\xs -> snd xs `isInfixOf` ih) $ possibleShouts (nextKaze np == p) t
+  where
+    ih = sort (_handConcealed hand) -- NOTE: sort
+    toShout (mk, xs) = do
+        guard $ xs `isInfixOf` ih
+        s <- case mk of
+                Jantou  -> [Ron]
+                Kantsu  -> [Kan]
+                Koutsu  -> [Pon, Ron]
+                Shuntsu -> [Chi, Ron]
+        guard $ if s == Ron
+                then complete (toMentsu mk t xs : (hand^.handPublic.handOpen), _handConcealed hand L.\\ xs)
+                else mk /= Jantou
+        return $ Shout s np t xs
 
 -- * Melding
 
@@ -148,10 +162,8 @@ meldTo shout mentsu hand
              $ handConcealed %~ (L.\\ todelete)
              $ hand
     | otherwise = throwError "Tiles not available"
-    where todelete = ($ shout) $ case shout of
-             Pon{} -> replicate 2 . shoutedTile 
-             Kan{} -> replicate 3 . shoutedTile
-             _ -> shoutedTo
+  where
+    todelete = (:) <$> shoutedTile <*> shoutedTo $ shout
 
 -- | Transfer the discard from the hand to a mentsu specified by the shout.
 shoutFromHand :: CanError m => Shout -> Hand -> m (Mentsu, Hand)

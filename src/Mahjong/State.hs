@@ -55,7 +55,7 @@ data RiichiSecret = RiichiSecret
                  { _riichiWall :: [Tile]
                  , _riichiWanpai :: [Tile]
                  , _riichiHands :: Map Kaze Hand
-                 , _riichiWaitShoutsFrom :: [Kaze]
+                 , _riichiWaitShoutsFrom :: [(Kaze, Shout)]
                  } deriving (Show, Read)
 
 -- | Round state, public half.

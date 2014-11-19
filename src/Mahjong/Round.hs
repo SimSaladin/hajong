@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 ------------------------------------------------------------------------------
 -- |
 -- Module         : Mahjong.Round
@@ -97,12 +98,12 @@ runTurn' pk ta = do
 runShout :: RoundM m => Shout -> Player -> m ()
 runShout shout sp = runShout' shout =<< playerToKaze sp
 
-getWaitingForShouts :: RoundM m => m [(Kaze, Player)]
+getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
 getWaitingForShouts = do
     xs <- use riichiWaitShoutsFrom
-    ys <- mapM kazeToPlayer xs
-    tell $ map (`RoundPrivateWaitForShout` 20) ys
-    return $ zip xs ys
+    ps <- mapM (kazeToPlayer . fst) xs
+    tell $ map (`RoundPrivateWaitForShout` 30) ps -- TODO hard-coded limit
+    return $ zipWith (\p (k, s) -> (p, k, s)) ps xs
 
 -- | @runShout shout shouter@
 runShout' :: RoundM m => Shout -> Kaze -> m ()
@@ -190,10 +191,16 @@ drawDeadWall hand = preuse (riichiWall._Snoc)
 -- | Set riichiWaitShoutsFrom to players who could shout the discard.
 endTurn :: RoundM m => Tile -> m ()
 endTurn dt = do
-    np <- nextKaze <$> view riichiTurn
-    let pred p = not . null . shoutsOn (p == np) dt . _handConcealed
-    hands <- Map.filterWithKey pred <$> use riichiHands
-    riichiWaitShoutsFrom .= Map.keys hands
+    shouts <- filterCouldShout dt <$> view riichiTurn <*> use riichiHands
+    riichiWaitShoutsFrom .= shouts
+
+filterCouldShout :: Tile -- ^ Tile to shout
+                 -> Kaze -- ^ Whose tile
+                 -> Map Kaze Hand
+                 -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
+filterCouldShout dt np = sortBy (shoutPrecedence np) .
+    concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
+  where flatten (k, xs) = map (k,) xs
 
 -- ** Helpers
 
@@ -211,10 +218,6 @@ publishTurnAction pk ra = tellEvent $ case ra of
 
 handOf :: Kaze -> Lens RiichiSecret RiichiSecret (Maybe Hand) (Maybe Hand)
 handOf player = riichiHands.at player
-
--- | Next kaze or wrap back to Ton
-nextKaze :: Kaze -> Kaze
-nextKaze = toEnum . (`mod` 4) . (+ 1) . fromEnum
 
 playersNextRound :: [(Kaze, Player, a)] -> [(Kaze, Player, a)]
 playersNextRound xs = let (ks, ps', as') = unzip3 xs

@@ -141,6 +141,10 @@ terminal t = case tileNumber t of
     Just Chuu -> True
     _ -> False
 
+-- | Next kaze or wrap back to Ton
+nextKaze :: Kaze -> Kaze
+nextKaze = toEnum . (`mod` 4) . (+ 1) . fromEnum
+
 -- | Like @succ@ and @pred@, but fail as nothing if the succession wouldn't make sense
 -- (i.e the input or output would not be a (defined) suited tile).
 succMay, predMay :: Tile -> Maybe Tile

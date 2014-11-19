@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances #-}
 ------------------------------------------------------------------------------
 -- | 
@@ -192,10 +193,8 @@ instance ToJSON Mentsu where
 instance ToJSON MentsuKind where toJSON = toJSON . tshow
 
 instance ToJSON Shout where
-    toJSON (Pon p tile) = atType "pon"    ["from" .= p, "tile" .= tile, "to" .= ([] :: [Tile])]
-    toJSON (Kan p tile) = atType "kan"    ["from" .= p, "tile" .= tile, "to" .= ([] :: [Tile])]
-    toJSON (Chi p tile xs) = atType "chi" ["from" .= p, "tile" .= tile, "to" .= xs]
-    toJSON (Ron p tile xs) = atType "ron" ["from" .= p, "tile" .= tile, "to" .= xs]
+    toJSON Shout{..} = atType (toLower $ tshow shoutKind)
+        ["from" .= shoutedFrom, "tile" .= shoutedTile, "to" .= shoutedTo]
 
 instance ToJSON Tile where
     toJSON (Suited tk n a) = object [ "type" .= tk, "number" .= n, "aka" .= a ]
@@ -254,11 +253,14 @@ gameActionFromJSON o = do
         "ankan"   -> GameTurn . TurnAnkan <$> o .: "tile"
         "pass"    -> pure GameDontCare
         "shout"   -> do s <- o .: "shout"
-                        GameShout <$> case s :: Text of
-                            "pon" -> Pon <$> o .: "from" <*> o .: "tile"
-                            "kan" -> Kan <$> o .: "from" <*> o .: "tile"
-                            "chi" -> Chi <$> o .: "from" <*> o .: "tile" <*> o .: "into"
-                            "ron" -> Ron <$> o .: "from" <*> o .: "tile" <*> o .: "into"
+                        sk <- case s :: Text of
+                            "pon" -> return Pon
+                            "kan" -> return Kan
+                            "chi" -> return Chi
+                            "ron" -> return Ron
+                            _     -> fail "shout no parse"
+                        s' <- Shout sk <$> o .: "from" <*> o .: "tile" <*> o .: "into"
+                        return $ GameShout s'
 
 instance FromJSON Number where
     parseJSON = fmap (toEnum . (\x -> x - 1)) . parseJSON

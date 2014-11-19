@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
 -- | 
 -- Module         : Mahjong.Hand.Mentsu
@@ -10,27 +11,19 @@
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Mentsu
     (
-    -- * Build
-
-    -- ** From a tile
-    shuntsu, koutsu, kantsu, jantou
-    -- ** From a shout
-    , fromShout
-    -- ** With guards
-    , shuntsuWith
+    -- * Mentsu
+    Mentsu(..), MentsuKind(..),
+    toMentsu, shuntsu, koutsu, kantsu, jantou,
+    shuntsuWith, fromShout,
 
     -- * Functions
-    , mentsuKind
-    , mentsuTiles
-    , mentsuShout
-    , mentsuShouted
-    , isJantou, isShuntsu, isKoutsu, isKantsu
+    mentsuKind, mentsuTiles, mentsuShout, mentsuShouted,
+    isJantou, isShuntsu, isKoutsu, isKantsu,
 
-    -- * On shouts
-    , possibleShouts
+    -- * Shouts
+    Shout(..), ShoutKind(..),
+    possibleShouts, shoutPrecedence
 
-    -- * Types
-    , Mentsu(..), MentsuKind(..), Shout(..)
     ) where
 
 import Mahjong.Tiles
@@ -58,17 +51,23 @@ instance Pretty [Mentsu] where
 
 -- | A mentsu can result from a shout; and a shout always produces
 -- a mentsu.
-data Shout = Pon { shoutedFrom :: Kaze, shoutedTile :: Tile }
-           | Kan { shoutedFrom :: Kaze, shoutedTile :: Tile }
-           | Chi { shoutedFrom :: Kaze, shoutedTile :: Tile, shoutedTo :: [Tile] }
-           | Ron { shoutedFrom :: Kaze, shoutedTile :: Tile, shoutedTo :: [Tile] }
-           deriving (Show, Read, Eq, Ord)
+data Shout = Shout
+           { shoutKind :: ShoutKind
+           , shoutedFrom :: Kaze
+           , shoutedTile :: Tile
+           , shoutedTo :: [Tile]
+           } deriving (Show, Read, Eq, Ord)
+
+-- | Note: Ord instance is used to determine calling order.
+data ShoutKind = Ron | Kan | Pon | Chi
+               deriving (Show, Read, Eq, Ord)
 
 instance Pretty Shout where
-    pretty Pon{} = "Pon!"
-    pretty Ron{} = "Ron!"
-    pretty Kan{} = "Kan!"
-    pretty Chi{} = "Chi!"
+    pretty s = case shoutKind s of
+        Pon -> "Pon!"
+        Ron -> "Ron!"
+        Kan -> "Kan!"
+        Chi -> "Chi!"
 
 -- Helpers
 
@@ -91,6 +90,13 @@ mentsuShouted = isJust . mentsuShout
 
 -- Construct
 
+toMentsu :: MentsuKind -> Tile -> [Tile] -> Mentsu
+toMentsu mk t ts = case mk of
+    Shuntsu -> shuntsu $ headEx $ sort (t : ts)
+    Koutsu -> koutsu t
+    Kantsu -> kantsu t
+    Jantou -> jantou t
+
 shuntsu, koutsu, kantsu, jantou :: Tile -> Mentsu
 shuntsu = Mentsu Shuntsu `flip` Nothing
 koutsu  = Mentsu Koutsu `flip` Nothing
@@ -98,16 +104,16 @@ kantsu  = Mentsu Kantsu `flip` Nothing
 jantou  = Mentsu Jantou `flip` Nothing
 
 fromShout :: Shout -> Mentsu
-fromShout shout = setShout $ case shout of
-    Pon{} -> koutsu (shoutedTile shout)
-    Kan{} -> kantsu (shoutedTile shout)
-    Chi{} -> shuntsu (minimumEx $ shoutedTile shout : shoutedTo shout)
-    Ron{}
-        | [_]   <- shoutedTo shout         -> jantou (shoutedTile shout)
-        | [x,y] <- shoutedTo shout, x == y -> koutsu (shoutedTile shout)
-        | otherwise                       -> error "Impossible ron to a kantsu!"
+fromShout s@Shout{..} = setShout $ case shoutKind of
+    Pon -> koutsu shoutedTile
+    Kan -> kantsu shoutedTile
+    Chi -> shuntsu (minimumEx $ shoutedTile : shoutedTo)
+    Ron
+        | [_]   <- shoutedTo         -> jantou shoutedTile
+        | [x,y] <- shoutedTo, x == y -> koutsu shoutedTile
+        | otherwise                  -> error "Impossible ron to a kantsu!"
     where
-        setShout (Mentsu k t _) = Mentsu k t (Just shout)
+        setShout (Mentsu k t _) = Mentsu k t (Just s)
 
 -- | @shuntsuWith tiles@ attempts to build a shuntsu from `tiles`. Note
 -- that `tiles` __must be in order of succession__.
@@ -127,11 +133,18 @@ isKantsu  = (== Kantsu)  . mentsuKind
 
 -- On shouts
 
-possibleShouts :: Bool -> Tile -> [[Tile]]
-possibleShouts withShuntsu x = [x, x] : [x, x, x] : (if withShuntsu then shuntsus else [])
+possibleShouts :: Bool -> Tile -> [(MentsuKind, [Tile])]
+possibleShouts withShuntsu x = (Koutsu, [x, x])
+    : (Kantsu, [x, x, x])
+    : (Jantou, [x])
+    : (if withShuntsu then shuntsus else [])
   where
     shuntsus = catMaybes
-        [ succMay x >>= \y -> succMay y >>= \z -> return [y, z] --  x . .
-        , predMay x >>= \y -> succMay x >>= \z -> return [y, z] --  . x .
-        , predMay x >>= \y -> predMay y >>= \z -> return [y, z] --  . . x
+        [ succMay x >>= \y -> succMay y >>= \z -> return (Shuntsu, [y, z]) --  x . .
+        , predMay x >>= \y -> succMay x >>= \z -> return (Shuntsu, [y, z]) --  . x .
+        , predMay x >>= \y -> predMay y >>= \z -> return (Shuntsu, [y, z]) --  . . x
         ]
+
+-- | XXX: This doesn't work as of yet
+shoutPrecedence :: Kaze -> (Kaze, Shout) -> (Kaze, Shout) -> Ordering
+shoutPrecedence dk (_, s) (_, s') = comparing shoutKind s s'

@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 ------------------------------------------------------------------------------
 -- |
@@ -29,6 +30,7 @@ import           Control.Monad.Logger
 import           Control.Concurrent.Async
 import           Data.Maybe (fromJust)
 import           System.Log.FastLogger
+import qualified Data.List as L
 
 --------------------------------------------------------------
 import           Hajong.Connections hiding (multicast)
@@ -62,11 +64,8 @@ makeLenses ''WorkerState
 -- * Entry points
 
 -- | Fork a new worker thread
-startWorker :: TMVar WorkerInput
-            -> TVar (GameState Client)
-            -> LoggerSet
-            -> IO ThreadId
-startWorker i_var gs_var lgr = do
+startWorker :: TMVar WorkerInput -> TVar (GameState Client) -> LoggerSet -> IO ThreadId
+startWorker i_var gs_var lgr =
     forkIO $ runWCont (WorkerState gs_var i_var lgr) waitPlayersAndBegin
 
 -- * Unwrap monads
@@ -217,8 +216,7 @@ workerRace :: Int -> Worker a -> a -> Worker a
 workerRace secs ma b = do
     s   <- view id
     res <- liftIO $ runWCont s ma `race` threadDelay (secs * 1000000)
-    either (\a -> {- $logDebug "Proceed before time out" >> -} return a)
-           (\_ -> return b) res
+    either return (\_ -> return b) res
 
 -- * Game flow continuations
 
@@ -275,11 +273,11 @@ advanceWithShout pp sh = do
 waitForShouts :: WCont
 waitForShouts = do
 
-    gs           <- rview gameVar
-    winningShout <- liftIO newEmptyTMVarIO
-    (players, _) <- unsafeRoundM getWaitingForShouts -- TODO should include *and* be ordered by shout
+    gs         <- rview gameVar
+    win_var    <- liftIO newEmptyTMVarIO -- :: (Player, Kaze, Shout)
+    (shoutable, _) <- unsafeRoundM getWaitingForShouts
 
-    $logDebug ("Waiting for shouts " <> tshow players <> " after the discard")
+    $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")
 
     -- Important invariant of waitAll's first argument:
     --  Shout priorities must be in /decreasing/ order. (This whole thing
@@ -288,21 +286,29 @@ waitForShouts = do
     let waitAll [] = return afterDiscard
         waitAll xs = withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
 
-        passOn xs c = waitAll $ maybe id (\p -> filter (^._2.to (== p))) (c `clientToPlayer` gs) xs
+        passOn xs c = waitAll $ maybe id (\p -> filter (^._1.to (== p))) (c `clientToPlayer` gs) xs
 
-        shoutHandler                [] _     _ = error "shoutHandler: empty list (this is a bug)"
-        shoutHandler xs@((_, pp) : _ ) c shout = case c `clientToPlayer` gs of
-              Just p
-                | p == pp   -> return $ p `advanceWithShout` shout -- Highest priority
-                | otherwise -> 
-                        -- atomically $ putTMVar winningShout $ return $ p `advanceWithShout` shout
-                        error "This thing is broken TODO"
-                        passOn xs c
-              Nothing -> error "Client not found"
+        shoutHandler xs c s = do
+            mv <- atomically $ tryReadTMVar win_var
+            case c `clientToPlayer` gs of
+                Nothing     -> $logError "Client not found" >> waitAll xs
+                Just p      -> case L.findIndex (\(p',_,s') -> (p',s') == (p,s)) xs of
+                    Nothing -> $logError "Incorrect shout" >> waitAll xs
+                    Just i  -> do
+                        let shout@(_,k,_) = xs L.!! i
+                        case mv of
+                            Nothing
+                                | i == 0    -> return $ p `advanceWithShout` s
+                                | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
+                            Just (_,k',s') -> case shoutPrecedence undefined (k, s) (k', s') of
+                                GT | i == 0    -> return $ p `advanceWithShout` s
+                                   | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
+                                EQ -> $logError "Multiple shouts (ron) not yet implemented" >> waitAll xs
+                                LT -> waitAll xs
 
     join $ workerRace 20 -- TODO Configurable
-        (waitAll players)
-        (atomically (tryTakeTMVar winningShout) >>= fromMaybe afterDiscard)
+        (waitAll shoutable)
+        (atomically (tryTakeTMVar win_var) >>= maybe afterDiscard (\(p,_,s) -> advanceWithShout p s))
 
 -- | The round ended.
 endRound :: RoundResults -> WCont
