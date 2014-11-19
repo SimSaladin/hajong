@@ -220,6 +220,8 @@ workerRace secs ma b = do
 
 -- * Game flow continuations
 
+-- ** Begin game
+
 -- | Begin the game including the first round when all players have joined.
 waitPlayersAndBegin :: WCont
 waitPlayersAndBegin = $logInfo "Waiting for players" >> go
@@ -233,6 +235,8 @@ beginRound gs = do
     $logInfo "Round begins"
     unsafeRoundM_ startRound >> unsafeRoundM_ autoDraw
     turnActionOrTimeout
+
+-- ** Middle game
 
 -- | A new turn begins.
 --
@@ -253,10 +257,10 @@ afterDiscard :: WCont
 afterDiscard = do
     (r, ma) <- unsafeRoundM advanceAfterDiscard
     ma
-    maybe ({- $logDebug "New turn begins" >> -} unsafeRoundM_ autoDraw >> turnActionOrTimeout) endRound r
+    maybe (unsafeRoundM_ autoDraw >> turnActionOrTimeout) endRound r
 
-advanceWithShout :: Player -> Shout -> WCont
-advanceWithShout pp sh = do
+afterShout :: Player -> Shout -> WCont
+afterShout pp sh = do
     $logDebug "Advancing with a shout"
     roundM (runShout sh pp) >>= either $logError (go . snd)
     where
@@ -277,7 +281,8 @@ waitForShouts = do
     win_var    <- liftIO newEmptyTMVarIO -- :: (Player, Kaze, Shout)
     (shoutable, _) <- unsafeRoundM getWaitingForShouts
 
-    $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")
+    unless (null shoutable) $
+        $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")
 
     -- Important invariant of waitAll's first argument:
     --  Shout priorities must be in /decreasing/ order. (This whole thing
@@ -298,17 +303,23 @@ waitForShouts = do
                         let shout@(_,k,_) = xs L.!! i
                         case mv of
                             Nothing
-                                | i == 0    -> return $ p `advanceWithShout` s
+                                | i == 0    -> return $ p `afterShout` s
                                 | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
                             Just (_,k',s') -> case shoutPrecedence undefined (k, s) (k', s') of
-                                GT | i == 0    -> return $ p `advanceWithShout` s
+                                GT | i == 0    -> return $ p `afterShout` s
                                    | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
                                 EQ -> $logError "Multiple shouts (ron) not yet implemented" >> waitAll xs
                                 LT -> waitAll xs
 
-    join $ workerRace 20 -- TODO Configurable
-        (waitAll shoutable)
-        (atomically (tryTakeTMVar win_var) >>= maybe afterDiscard (\(p,_,s) -> advanceWithShout p s))
+    -- TODO Configurable timeout
+    join $ workerRace 20 (waitAll shoutable)
+         $ atomically (tryTakeTMVar win_var) >>= \case
+            Nothing      -> do $logDebug "Continue without shouts after timeout"
+                               afterDiscard
+            Just (p,_,s) -> do $logDebug "Continue with non-top priority shout after timeout"
+                               afterShout p s
+
+-- ** End game
 
 -- | The round ended.
 endRound :: RoundResults -> WCont

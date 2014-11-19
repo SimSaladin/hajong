@@ -51,16 +51,6 @@ turnWaiting n = do
     tp <- view riichiTurn >>= kazeToPlayer
     tellEvent $ RoundPrivateWaitForTurnAction tp n
 
-kazeToPlayer :: RoundM m => Kaze -> m Player
-kazeToPlayer k =
-    maybe (throwError "Player not found") (return . (^._2)) . find (^._1.to (== k))
-    =<< view riichiPlayers
-
-playerToKaze :: RoundM m => Player -> m Kaze
-playerToKaze p =
-    maybe (throwError "Player not found") (return . (^._1)) . find (^._2.to (== p))
-    =<< view riichiPlayers
-
 startTurn :: RoundM m => Kaze -> m ()
 startTurn = tellEvent . RoundTurnBegins
 
@@ -86,14 +76,14 @@ runTurn' :: RoundM m => Kaze -> TurnAction -> m ()
 runTurn' pk ta = do
     view riichiTurn >>= (`when` throwError "Not your turn") . (/= pk)
     publishTurnAction pk ta
-    handOf' pk >>= run >>= updateHand pk
+    handOf' pk >>= handAction >>= updateHand pk
     where
-        run = case ta of
-            TurnTileDiscard True  tile -> discardRiichi tile -- TODO move to next player
-            TurnTileDiscard False tile -> discard tile
-            TurnAnkan tile             -> ankanOn tile
-            TurnTileDraw False _       -> drawWall
-            TurnTileDraw True  _       -> drawDeadWall
+        handAction h = case ta of
+            TurnTileDiscard True  tile -> discardRiichi tile h <* endTurn tile -- TODO move to next player
+            TurnTileDiscard False tile -> discard tile h <* endTurn tile
+            TurnAnkan tile             -> ankanOn tile h
+            TurnTileDraw False _       -> drawWall h
+            TurnTileDraw True  _       -> drawDeadWall h
 
 runShout :: RoundM m => Shout -> Player -> m ()
 runShout shout sp = runShout' shout =<< playerToKaze sp
@@ -132,9 +122,6 @@ tellPlayerState p =
     maybe (throwError "tellPlayerState: player not found")
           (buildPlayerState >=> tellEvent . RoundPrivateStarts)
           . find (^. _2.to (== p)) =<< view riichiPlayers
-
-handOf' :: RoundM m => Kaze -> m Hand
-handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
 
 -- | Build the player's "@GamePlayer@" record, or the state of the game as
 -- seen by the player (hide "RiichiSecret" but show the player's own hand).
@@ -213,6 +200,21 @@ publishTurnAction :: RoundM m => Kaze -> TurnAction -> m ()
 publishTurnAction pk ra = tellEvent $ case ra of
     TurnTileDraw b _ -> RoundTurnAction pk (TurnTileDraw b Nothing)
     _                -> RoundTurnAction pk ra
+
+-- ** Query info
+
+kazeToPlayer :: RoundM m => Kaze -> m Player
+kazeToPlayer k =
+    maybe (throwError "Player not found") (return . (^._2)) . find (^._1.to (== k))
+    =<< view riichiPlayers
+
+playerToKaze :: RoundM m => Player -> m Kaze
+playerToKaze p =
+    maybe (throwError "Player not found") (return . (^._1)) . find (^._2.to (== p))
+    =<< view riichiPlayers
+
+handOf' :: RoundM m => Kaze -> m Hand
+handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
 
 -- * Functions
 
