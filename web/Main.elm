@@ -51,14 +51,16 @@ newState : GameState
 newState = { status     = InLounge
            , mynick     = ""
            , lounge     = defaultLounge
-           , updated    = 0
            , gameWait   = Nothing
+           , updated    = 0
+
            , roundState = Nothing
-           , turnBegan  = 0
-           , eventlog   = []
-           , debuglog   = []
            , waitTurnAction = Nothing
            , waitShout = Nothing
+           , turnBegan  = 0
+
+           , eventlog   = []
+           , debuglog   = []
            }
 -- }}}
 

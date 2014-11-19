@@ -133,6 +133,8 @@ gamePairs (i,(t,n)) = object [ "ident"   .= i
                              ]
 
 -- Instances -----------------------------------------------------------------
+-- I hate this boilerplate; why was it better idea than deriving with aeson
+-- that some day...
 
 instance ToJSON Event where
     toJSON (ClientIdentity nick)   = atType "identity"     ["nick" .= nick]
@@ -150,7 +152,7 @@ instance ToJSON Event where
 instance ToJSON GameEvent where
     toJSON ge = case ge of
         RoundPrivateStarts gameplayer           -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
-        RoundPrivateWaitForShout player secs      -> atEvent "wait-shout"   ["player" .= player, "seconds" .= secs]
+        RoundPrivateWaitForShout player secs shs  -> atEvent "wait-shout"   ["player" .= player, "seconds" .= secs, "shouts" .= shs]
         RoundPrivateWaitForTurnAction player secs -> atEvent "wait-turn"    ["player" .= player, "seconds" .= secs]
         RoundPrivateChange player hand            -> atEvent "my-hand"      ["player" .= player, "hand" .= hand]
         RoundTurnBegins pk                    -> atEvent "turn-changed" ["player-kaze" .= pk]
@@ -226,6 +228,8 @@ instance ToJSON RiichiPublic where
         , "players"    .= ((\(a,Player b,_) -> (a,b)) <$> _riichiPlayers x)
         , "results"    .= _riichiResults x
         ]
+
+-- FromJSON
 
 instance FromJSON Event where
     parseJSON (Object o) = do

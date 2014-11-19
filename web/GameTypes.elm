@@ -16,7 +16,7 @@ type GameState = { status     : Status
                   -- In-Game
                  , roundState     : Maybe RoundState
                  , waitTurnAction : Maybe WaitRecord
-                 , waitShout      : Maybe WaitRecord
+                 , waitShout      : Maybe (WaitRecord, [Shout])
                  , turnBegan      : Time
 
                  -- Debug
@@ -71,7 +71,7 @@ data Event = JoinServer  { nick : String } -- ^ Nick
            | Noop -- TODO work around elm WS lib signal limitations
 
 data GameEvent = RoundPrivateStarts            RoundState
-               | RoundPrivateWaitForShout      { player : Player, seconds : Int }
+               | RoundPrivateWaitForShout      { seconds : Int, shouts : [Shout] }
                | RoundPrivateWaitForTurnAction { player : Player, seconds : Int }
                | RoundPrivateChange            { player : Player, hand : Hand }
                | RoundTurnBegins               { player_kaze : Kaze }

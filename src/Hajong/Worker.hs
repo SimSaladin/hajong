@@ -81,13 +81,11 @@ roundM ma = liftM (fmap tores . runRoundM ma) $ rview gameVar
         tores (res, secret, events) =
             (res, updateState secret events >> sendGameEvents events)
 
-unsafeRoundM :: RoundM' a -> Worker (a, Worker ())
-unsafeRoundM = roundM >=> either failed return
+unsafeRoundM :: RoundM' a -> Worker a
+unsafeRoundM = roundM >=> either failed go
   where
     failed e = error $ "unsafeRoundM: unexpected Left: " <> unpack e
-
-unsafeRoundM_ :: RoundM' () -> Worker ()
-unsafeRoundM_ = join . fmap snd . unsafeRoundM
+    go (a, m) = m >> return a
 
 -- * Update state and emit events
 
@@ -110,14 +108,14 @@ sendGameEvents events = do
     multicast $ InGameEvents public
     where
         f gs e@(RoundPrivateChange p _) = sendPrivate gs p e
-        f gs e@(RoundPrivateWaitForShout p _) = sendPrivate gs p e
+        f gs e@(RoundPrivateWaitForShout p _ _) = print e >> sendPrivate gs p e
         f gs e@(RoundPrivateWaitForTurnAction p _) = sendPrivate gs p e
         f gs e@(RoundPrivateStarts pg)  = sendPrivate gs (_playerPlayer pg) e
         f _ _                           = return True
 
-        sendPrivate gs p e =
+        sendPrivate gs p e = do
             maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
-            >> return False
+            return False
 
 -- * Take input
 
@@ -170,7 +168,7 @@ runOtherAction wi = case wi of
 
         clientEither client e_gs $ \gs -> do
             when (gs^.gameRound.to isJust) $
-                unsafeRoundM_ $ tellPlayerState $ fromJust $ clientToPlayer client gs
+                unsafeRoundM $ tellPlayerState $ fromJust $ clientToPlayer client gs
             liftIO $ callback gs
 
     WorkerPartPlayer client callback -> do
@@ -233,7 +231,7 @@ beginRound :: GameState Client -> WCont
 beginRound gs = do
     void $ rswap gameVar gs
     $logInfo "Round begins"
-    unsafeRoundM_ startRound >> unsafeRoundM_ autoDraw
+    unsafeRoundM startRound >> unsafeRoundM autoDraw
     turnActionOrTimeout
 
 -- ** Middle game
@@ -246,18 +244,16 @@ turnActionOrTimeout :: WCont
 turnActionOrTimeout = do
     -- TODO configurable secs
 
-    unsafeRoundM_ (turnWaiting 30)
+    unsafeRoundM (turnWaiting 30)
 
     join $ workerRace 30 takeInputTurnAction
         ($logDebug "Time-out, auto-discarding"
-            >> unsafeRoundM_ autoDiscard >> waitForShouts)
+            >> unsafeRoundM autoDiscard >> waitForShouts)
 
 -- | Advance turn to the next player. After a discard by previous player.
 afterDiscard :: WCont
-afterDiscard = do
-    (r, ma) <- unsafeRoundM advanceAfterDiscard
-    ma
-    maybe (unsafeRoundM_ autoDraw >> turnActionOrTimeout) endRound r
+afterDiscard = unsafeRoundM advanceAfterDiscard
+    >>= maybe (unsafeRoundM autoDraw >> turnActionOrTimeout) endRound
 
 afterShout :: Player -> Shout -> WCont
 afterShout pp sh = do
@@ -277,9 +273,9 @@ afterShout pp sh = do
 waitForShouts :: WCont
 waitForShouts = do
 
-    gs         <- rview gameVar
-    win_var    <- liftIO newEmptyTMVarIO -- :: (Player, Kaze, Shout)
-    (shoutable, _) <- unsafeRoundM getWaitingForShouts
+    gs        <- rview gameVar
+    win_var   <- liftIO newEmptyTMVarIO -- :: (Player, Kaze, Shout)
+    shoutable <- unsafeRoundM getWaitingForShouts
 
     unless (null shoutable) $
         $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")

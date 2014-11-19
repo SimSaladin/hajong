@@ -48,7 +48,14 @@
       }
 
       socket.onmessage = function (e) {
-         console.log("in ", JSON.parse(e.data));
+         var data = JSON.parse(e.data);
+         if (data.events) {
+            for (i = 0; i < data.events.length; ++ i) {
+               console.log("game", data.events[0].event, data.events[0]);
+            }
+         } else {
+            console.log("other ", data);
+         }
          game.ports.downstream.send(e.data);
       }
 

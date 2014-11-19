@@ -99,7 +99,7 @@ data GamePlayer = GamePlayer
 -- * Actions and events
 
 data GameEvent = RoundPrivateStarts GamePlayer -- ^ Only at the start of a round
-               | RoundPrivateWaitForShout Player Int -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
+               | RoundPrivateWaitForShout Player Int [Shout] -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
                | RoundPrivateWaitForTurnAction Player Int
                | RoundPrivateChange Player Hand
                | RoundTurnBegins Kaze

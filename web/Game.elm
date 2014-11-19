@@ -4,7 +4,7 @@ import Util
 import GameTypes (..)
 
 import Graphics.Input (..)
-import Maybe (maybe)
+import Maybe (maybe, isNothing)
 import Array
 
 -- TODO: hard-coded tile widths; some other measures are also hard-coded
@@ -56,13 +56,12 @@ display co gs = case gs.roundState of
             , dispDiscards co gs rs |> scale 0.7
             ]
         , container 1000 40 midTop <| flow right
-           [ shoutButton Kan "Kan"
-           , shoutButton Pon "Pon"
-           , shoutButton Chi "Chi"
-           , shoutButton Ron "Ron"
+           [ shoutButton (gs.waitShout) Kan "Kan"
+           , shoutButton (gs.waitShout) Pon "Pon"
+           , shoutButton (gs.waitShout) Chi "Chi"
+           , shoutButton (gs.waitShout) Ron "Ron"
            ]
         , container 1000 100 midTop <| dispHand co rs.myhand
-        , asText gs.waitShout
         ] `beside` dispLog rs.actions
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
 
@@ -103,8 +102,10 @@ dispInfoBlock co gs rs =
       )
 
 turnIndicator : GameState -> Form
-turnIndicator gs = group
-   [ rotate (degrees 90) <| filled lightGreen <| ngon 3 80
+turnIndicator gs =
+   let col = if isNothing gs.waitShout then lightGreen else lightOrange
+                in group
+   [ rotate (degrees 90) <| filled col <| ngon 3 80
    , moveY 30
          <| toForm <| asText <| floor
          <| case gs.waitTurnAction of
@@ -162,7 +163,17 @@ tileImage tile =
 -- }}}
 
 -- {{{ Buttons 'n stuff --------------------------------------------------------
-shoutButton s = button shout.handle (Just s)
+shoutButton ss sk str = clickable shout.handle (Just sk) (buttonElem sk ss str)
+
+buttonElem sk ss s =
+   let col = case ss of
+               Nothing -> gray
+               Just (_, ss) -> case filter (\s -> sk == s.shoutKind) ss of
+                  [] -> gray
+                  _  -> green
+   in collage 80 40
+      [ oval 80 40 |> filled col
+      , toText s |> centered |> toForm ]
 -- }}}
 
 -- {{{ Process GameEvents
@@ -175,8 +186,8 @@ processInGameEvent event gs = case event of
 
    RoundPrivateWaitForTurnAction {seconds} ->
       { gs | waitTurnAction <- Just <| WaitRecord seconds gs.updated }
-   RoundPrivateWaitForShout {seconds} ->
-      { gs | waitShout      <- Just <| WaitRecord seconds gs.updated }
+   RoundPrivateWaitForShout {seconds, shouts} ->
+      { gs | waitShout      <- Just <| (WaitRecord seconds gs.updated, shouts) }
 
    RoundPrivateChange {hand} -> setMyHand hand gs
 

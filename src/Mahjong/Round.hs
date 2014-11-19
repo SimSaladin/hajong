@@ -90,10 +90,13 @@ runShout shout sp = runShout' shout =<< playerToKaze sp
 
 getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
 getWaitingForShouts = do
-    xs <- use riichiWaitShoutsFrom
-    ps <- mapM (kazeToPlayer . fst) xs
-    tell $ map (`RoundPrivateWaitForShout` 30) ps -- TODO hard-coded limit
-    return $ zipWith (\p (k, s) -> (p, k, s)) ps xs
+    ws <- use riichiWaitShoutsFrom
+    ps <- mapM (kazeToPlayer . fst) ws
+    let res = zipWith (\p (k, s) -> (p, k, s)) ps ws
+        out = map ( \xs@((p,_,_):_) -> RoundPrivateWaitForShout p 30 $ map (^._3) xs) $ groupBy ((==) `on` view _2) res
+                                                               -- ^ TODO hard-coded limit
+    tell out
+    return res
 
 -- | @runShout shout shouter@
 runShout' :: RoundM m => Shout -> Kaze -> m ()
@@ -246,7 +249,7 @@ nextRound rs = over riichiPublic r . logRound . flip setSecret rs <$> newSecret
                         xs@((k',n):_) | k == k'   -> (k, n + 1) : xs
                                       | otherwise -> (k, n) : xs )
 
--- ** Applying GameEvents
+-- ** Client functions
 
 applyGameEvents :: [GameEvent] -> GamePlayer -> GamePlayer
 applyGameEvents evs gp = foldr applyGameEvent gp evs
@@ -263,7 +266,7 @@ applyGameEvent ev = case ev of
     RoundEnded how           -> playerPublic.riichiResults .~ Just how
     RoundPrivateChange _ h   -> playerMyHand .~ h
     RoundPrivateStarts gp    -> const gp
-    RoundPrivateWaitForShout _ _ -> id
+    RoundPrivateWaitForShout{} -> id
     RoundPrivateWaitForTurnAction _ _ -> id
 
 applyTurnAction :: Kaze -> TurnAction -> GamePlayer -> GamePlayer
