@@ -201,7 +201,7 @@ parseMentsu : Value -> Mentsu
 parseMentsu (Object o) = Mentsu
    (parseMentsuKind <| "type" .: o)
    (parseTile       <| "tile" .: o)
-   (parseShoutMaybe <| "from" .: o)
+   (parseShoutMaybe <| "shouted" .: o)
 
 parseMentsuKind : Value -> MentsuKind
 parseMentsuKind (String s) = case s of
