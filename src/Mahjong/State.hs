@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
 -- |
 -- Module         : Mahjong.State
@@ -18,6 +19,7 @@ import           Mahjong.Hand.Mentsu
 import qualified Data.Map as Map
 import           System.Random.Shuffle (shuffleM)
 import           System.Random (randomRIO)
+import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 ------------------------------------------------------------------------------
 
@@ -68,6 +70,22 @@ data RiichiPublic = RiichiPublic
                  , _riichiPlayers :: [(Kaze, Player, Points)]
                  , _riichiResults :: Maybe RoundResults
                  } deriving (Show, Read)
+
+instance P.Pretty RiichiState where
+    pretty RiichiState{..} = P.pretty _riichiRounds P.<$$>
+                             P.pretty _riichiPublic P.<$$>
+                             P.pretty _riichiSecret
+
+instance P.Pretty RiichiSecret where
+    pretty RiichiSecret{..} = P.string "wall:" P.<+> P.hang 0 (list _riichiWall)
+        P.<$$> P.string "wanpai:" P.<+> P.hang 0 (list _riichiWanpai)
+        P.<$$> P.string "hands:" P.<+> P.hang 0 (P.list $ toList $ fmap (list . _handConcealed) _riichiHands)
+        where
+            list :: P.Pretty a => [a] -> P.Doc
+            list = foldr (P.<+>) P.empty . map P.pretty
+
+instance P.Pretty RiichiPublic where
+    pretty RiichiPublic{..} = P.string "(public)"
 
 -- | State of single player. Note that there is no RiichiSecret.
 data GamePlayer = GamePlayer

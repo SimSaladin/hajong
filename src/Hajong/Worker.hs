@@ -63,12 +63,11 @@ makeLenses ''WorkerState
 
 -- | Fork a new worker thread
 startWorker :: TMVar WorkerInput
-            -> GameState Client
+            -> TVar (GameState Client)
             -> LoggerSet
             -> IO ThreadId
-startWorker input gs logger = do
-    gsvar <- newTVarIO gs
-    forkIO $ runWCont (WorkerState gsvar input logger) waitPlayersAndBegin
+startWorker i_var gs_var lgr = do
+    forkIO $ runWCont (WorkerState gs_var i_var lgr) waitPlayersAndBegin
 
 -- * Unwrap monads
 
@@ -130,18 +129,25 @@ takeInput = liftIO . atomically . takeTMVar =<< view inputVar
 -- | Read (and apply) input from WorkerInput until a valid TurnAction.
 -- Returns the continuation derived from the TurnAction.
 takeInputTurnAction :: Worker WCont
-takeInputTurnAction = workerAction'
-    workerProcessTurnAction (\_ _ -> return Nothing) (\_ -> return Nothing) (return Nothing)
+takeInputTurnAction = withEvent
+    workerProcessTurnAction
+    (\c _ -> notExpected "Someones turn is in progress, you can shout only after a discard" c)
+    (notExpected "Someones turn is currently in progress, you ought to care about that")
+    (return Nothing)
     >>= maybe takeInputTurnAction return
+  where
+    notExpected txt c = unicastError c txt >> return Nothing
 
 -- * Helper combinators
 
-workerAction' :: (TurnAction -> Client -> Worker a) -- ^ TurnAction
-              -> (Client -> Shout -> Worker a) -- ^ Shout
-              -> (Client -> Worker a) -- ^ GameDontCare
-              -> Worker a -- ^ Action
-              -> Worker a
-workerAction' f_ta f_sh f_dc f_ac = do
+-- | Takes an event (running all other actions before one) and applies the
+-- relevant callback.
+withEvent :: (TurnAction -> Client -> Worker a) -- ^ TurnAction
+          -> (Client -> Shout -> Worker a) -- ^ Shout
+          -> (Client -> Worker a) -- ^ GameDontCare
+          -> Worker a -- ^ Action
+          -> Worker a
+withEvent f_ta f_sh f_dc f_ac = do
     wi <- takeInput
     case wi of
         WorkerGameAction c ga -> case ga of
@@ -280,7 +286,7 @@ waitForShouts = do
     --  is wrong as it takes players and not shouts - TODO)
 
     let waitAll [] = return afterDiscard
-        waitAll xs = workerAction' (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
+        waitAll xs = withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
 
         passOn xs c = waitAll $ maybe id (\p -> filter (^._2.to (== p))) (c `clientToPlayer` gs) xs
 

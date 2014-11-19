@@ -12,10 +12,10 @@ module Hajong.Server where
 
 import           Control.Monad.Logger
 import           Data.Set                   (mapMonotonic)
-import           Data.Default
 import qualified Network.WebSockets         as WS
 import qualified Data.Aeson                 as A
-import          System.Log.FastLogger (newStdoutLoggerSet, defaultBufSize)
+import          System.Log.FastLogger (LoggerSet)
+import Text.PrettyPrint.ANSI.Leijen (putDoc, pretty)
 
 ----------------------------------------------------
 import Hajong.Connections
@@ -29,13 +29,13 @@ data ServerState = ServerState
                  , _serverLounge :: Set Client
                  , _serverGames :: Map Int GameInfo
                  , _serverCounter :: Int
+                 , _serverLoggerSet :: LoggerSet
                  }
 
-type GameInfo = (TMVar WorkerInput, Text, Set Client)
+type GameInfo = (TMVar WorkerInput, Text, Set Client, TVar (GameState Client))
 
 data PartedException = PartedException deriving (Show, Typeable)
 
-instance Default ServerState where def = ServerState mempty mempty mempty 0
 instance Exception PartedException
 
 -- ** Lenses
@@ -95,10 +95,12 @@ withAtomic f = view ssVar >>= atomically . f
 
 -- * Main
 
-serverMain :: IO ()
-serverMain = do
-    ss <- atomically $ newTVar def
-    WS.runServer "0.0.0.0" 9160 $ serverApp ss
+newServer :: LoggerSet -> IO (TVar ServerState)
+newServer = atomically . newTVar . ServerState mempty mempty mempty 0
+
+-- | Starts websocket stuff
+runServer :: TVar ServerState -> IO ()
+runServer = WS.runServer "0.0.0.0" 9160 . serverApp
 
 -- | The websocket app
 serverApp :: TVar ServerState -> WS.ServerApp
@@ -113,6 +115,19 @@ serverApp ss_v pending = do
             runClientWorker ss_v c $ do
                 $logWarn $ "Received non-event or malformed json first: " <> tshow event
                 unicast c $ Invalid "No JoinServer received. Please identify yourself."
+
+serverDebugger :: TVar ServerState -> IO ()
+serverDebugger ss = go
+  where
+    go = do
+        putStrLn "> "
+        i <- getLine
+        case asText i of
+            ""  -> return ()
+            "s" -> readTVarIO ss >>=
+                mapM_ (readTVarIO >=> putDoc . pretty . fmap (unpack . getNick)) . toListOf (each._4) . view serverGames
+            _   -> putStrLn "Unknown command"
+        go
 
 -- * ClientWorkers
 
@@ -161,9 +176,9 @@ disconnects = do
 
         -- inform worker
         ss <- readTVar var
-        case (ss ^? gameId (getNick c)) >>= \gid -> ss ^. gameAt gid of
-            Just (wi_v,_,_) -> putTMVar wi_v $ WorkerPartPlayer c (const $ return ())
-            Nothing         -> return ()
+        case (ss ^? gameId (getNick c)) >>= \i -> ss ^. gameAt i of
+            Just (wi_v,_,_,_) -> putTMVar wi_v $ WorkerPartPlayer c (const $ return ())
+            Nothing           -> return ()
 
         modifyTVar var
             $ set (serverConnections.at nick._Just._1) (dummyClient nick)
@@ -204,18 +219,19 @@ broadcast' event ss = forM_ (ss ^. serverLounge) (`unicast` event)
 
 createGame :: Text -> ClientWorker Int
 createGame name = do
-    wvar <- liftIO newEmptyTMVarIO
+    wi_var <- liftIO newEmptyTMVarIO
+    gs_var <- liftIO . newTVarIO $ newEmptyGS (dummyClient "(nobody)") name
+    let ws = (wi_var, name, mempty, gs_var)
 
-    n <- withAtomic $ \var -> do
-        ss <- readTVar var
+    n <- withAtomic $ \ss_var -> do
+        ss <- readTVar ss_var
         let counter = ss ^. serverCounter
             ss' = ss & (serverCounter +~ 1)
-                     & (serverGames %~ insertMap counter (wvar, name, mempty))
-        writeTVar var ss'
+                     & (serverGames %~ insertMap counter ws)
+        writeTVar ss_var ss'
         return counter
 
-    let gs = newEmptyGS (dummyClient "(nobody)") name
-    _threadId <- liftIO $ startWorker wvar gs =<< newStdoutLoggerSet defaultBufSize
+    _threadId <- liftIO . startWorker wi_var gs_var . _serverLoggerSet =<< rview ssVar
     broadcast $ GameCreated (n, name, mempty)
     return n
 
@@ -231,7 +247,7 @@ joinGame n = do
         Just n'
             | n /= n' -> unicast c $ Invalid "You are already in some game. You cannot join multiple games simultaneously."
         _             -> case ss ^. gameAt n of
-            Just (wi_v,_,_) -> do
+            Just (wi_v,_,_,_) -> do
                 ss_v <- view ssVar
                 atomically $ putTMVar wi_v $ WorkerAddPlayer c $ \gs -> do
                     multicast gs (JoinGame n nick)
@@ -243,9 +259,9 @@ joinGame n = do
 forceStart :: Int -> ClientWorker ()
 forceStart n = do
     ss <- rview ssVar
-    case ss^.gameAt n of
+    case ss^?gameAt n._Just._1 of
         Nothing -> return ()
-        Just (wi_v,_,_) -> atomically $ putTMVar wi_v WorkerForceStart
+        Just wi_v -> atomically $ putTMVar wi_v WorkerForceStart
 
 -- | Pass the TA to relevant worker
 handleGameAction :: GameAction -> ClientWorker ()
@@ -253,6 +269,6 @@ handleGameAction action = do
     c  <- view client
     ss <- rview ssVar
     case ss ^? gameId (getNick c) of
-        Just n | Just (wi_v, _, _) <- ss ^. gameAt n
+        Just n | Just wi_v <- ss^?gameAt n._Just._1
             -> atomically $ putTMVar wi_v (c `WorkerGameAction` action)
         _   -> unicast c $ Invalid "You are not in a game"

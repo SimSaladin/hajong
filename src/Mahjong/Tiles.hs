@@ -82,6 +82,8 @@ instance IsString Number where
 instance Pretty Number where
     pretty = string . show . (+ 1) . fromEnum
 
+instance Pretty Kaze where
+    pretty = string . show
 
 -- * Build
 

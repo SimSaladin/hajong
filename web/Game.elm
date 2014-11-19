@@ -199,7 +199,6 @@ processInGameEvent event gs = case event of
 
    RoundEnded res ->
       Util.log (show res) gs -- TODO implement results logic
--- }}}
 
 -- {{{ Field modify boilerplate ----------------------------------------------
 setMyHand hand gs = case gs.roundState of
@@ -240,4 +239,5 @@ kantsu t = Mentsu Kantsu t Nothing
 addDiscard disc h = { h | discards <- h.discards ++ [disc] }
 setRiichi riichi h = { h | riichi <- riichi }
 updateHand player hand = Util.listModify player (\_ -> hand)
+-- }}}
 -- }}}

@@ -23,6 +23,6 @@ tests = testGroup "The websocket server"
 -- | Start a server process silenced
 setupProcess :: IO ProcessID
 setupProcess = do
-    pid <- forkProcess $ hSilence [stdout, stderr] serverMain
+    pid <- forkProcess $ hSilence [stdout, stderr] $ newServer >>= runServer
     threadDelay 1000000
     return pid

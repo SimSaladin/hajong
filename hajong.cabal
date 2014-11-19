@@ -117,6 +117,7 @@ executable hajong-server
                      , base
                      , classy-prelude
                      , text
+                     , fast-logger
 
 executable hajong-cli
   main-is:             cli.hs

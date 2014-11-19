@@ -13,6 +13,7 @@ import System.Posix
 import qualified Test.QuickCheck.Property as Q
 
 import qualified MahjongTest.Mentsu          as Mentsu
+import qualified MahjongTest.Hand            as Hand
 import qualified MahjongTest.HandValue       as HandValue
 import qualified MahjongTest.Mechanics       as Mechanics
 
@@ -36,6 +37,7 @@ tests = testGroup "Hajong tests"
     [ Mentsu.tests
     , Mechanics.tests
     , HandValue.tests
+    , Hand.tests
     --, PrettyPrint.tests
     --, Client.tests
     , Worker.tests

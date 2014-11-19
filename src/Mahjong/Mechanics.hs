@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
 -- | 
 -- Module         : Hajong.Game.Mechanics
@@ -19,6 +20,7 @@ import           Mahjong.State
 ------------------------------------------------------------------------------
 import           Control.Monad.RWS
 import qualified Data.Map as Map
+import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 ------------------------------------------------------------------------------
 
@@ -29,6 +31,12 @@ data GameState playerID = GameState
                    , _gameRound :: Maybe RiichiState -- maybe in running game
                    } deriving (Show, Read, Functor)
 makeLenses ''GameState
+
+instance P.Pretty p => P.Pretty (GameState p) where
+    pretty GameState{..} = P.pretty (unpack _gameName) P.<$$>
+                           P.prettyList (Map.elems _gamePlayers) P.<$$>
+                           P.pretty _gameRound
+                            
 
 type RoundM' = RWST RiichiPublic [GameEvent] RiichiSecret (Either Text)
 

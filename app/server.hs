@@ -9,7 +9,12 @@
 ------------------------------------------------------------------------------
 module Main where
 
-import Hajong.Server (serverMain)
+import Hajong.Server
+import Control.Concurrent (forkIO)
+import System.Log.FastLogger
 
 main :: IO ()
-main = serverMain
+main = do
+    ss <- newServer =<< newStderrLoggerSet defaultBufSize
+    _ <- forkIO $ runServer ss
+    serverDebugger ss
