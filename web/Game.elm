@@ -28,6 +28,9 @@ discardHover = input Nothing
 shout : Input (Maybe ShoutKind)
 shout = input Nothing
 
+ankan : Input (Maybe Tile)
+ankan = input Nothing
+
 shoutChooseTile : Input (Maybe Tile)
 shoutChooseTile = input Nothing
 -- }}}
@@ -37,6 +40,7 @@ events : Signal Event
 events = merges
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
    , maybe Noop (InGameAction << GameShout) <~ shoutEvent
+   , maybe Noop (InGameAction << GameTurn << TurnAnkan) <~ ankan.signal
    ]
 
 -- TODO: implement me
@@ -60,6 +64,7 @@ display co gs = case gs.roundState of
            , shoutButton (gs.waitShout) Pon "Pon"
            , shoutButton (gs.waitShout) Chi "Chi"
            , shoutButton (gs.waitShout) Ron "Ron"
+           , ankanButton gs "Ankan"
            ]
         , container 1000 100 midTop <| dispHand co rs.myhand
         ] `beside` dispLog rs.actions
@@ -164,6 +169,29 @@ tileImage tile =
 
 -- {{{ Buttons 'n stuff --------------------------------------------------------
 shoutButton ss sk str = clickable shout.handle (Just sk) (buttonElem sk ss str)
+
+ankanButton gs str = case findFourTiles gs of
+   Just t  -> clickable ankan.handle (Just t) (buttonElem' str green)
+   Nothing -> buttonElem' str gray
+
+findFourTiles : GameState -> Maybe Tile
+findFourTiles gs = case gs.roundState of
+   Nothing -> Nothing
+   Just rs -> counted 4 <| rs.myhand.concealed
+
+counted : Int -> [Tile] -> Maybe Tile
+counted m ts =
+   let go n xs = if n == 0
+           then Just (head xs)
+           else case xs of
+               x :: y :: zs -> if x == y then go (n - 1) (y :: zs)
+                                         else counted m (y :: zs)
+               _ -> Nothing
+   in go m ts
+
+buttonElem' str col = collage 80 40
+   [ oval 80 40 |> filled col
+   , toText str |> centered |> toForm ]
 
 buttonElem sk ss s =
    let col = case ss of

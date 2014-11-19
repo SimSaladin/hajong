@@ -1,7 +1,7 @@
-[ ] (web) in-game actions
+[x] (web) in-game actions
    [x] discard
-   [/] shout
-   [ ] ankan
+   [x] shout
+   [x] ankan
 [ ] (web) in-game view
    [ ] mentsu
    [x] player in turn -indicator
