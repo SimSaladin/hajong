@@ -124,8 +124,9 @@ shoutsOn :: Kaze -- ^ Shout from (player in turn)
          -> Kaze -- ^ Shouter
          -> Hand -- ^ shouter's
          -> [Shout]
-shoutsOn np t p hand =
-    concatMap toShout $ filter (\xs -> snd xs `isInfixOf` ih) $ possibleShouts (nextKaze np == p) t
+shoutsOn np t p hand
+    | np == p   = [] -- You're not shouting the thing you just discarded from yourself, right?
+    | otherwise = concatMap toShout $ filter (\xs -> snd xs `isInfixOf` ih) $ possibleShouts (nextKaze np == p) t
   where
     ih = sort (_handConcealed hand) -- NOTE: sort
     toShout (mk, xs) = do

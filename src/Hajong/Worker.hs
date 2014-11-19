@@ -108,7 +108,7 @@ sendGameEvents events = do
     multicast $ InGameEvents public
     where
         f gs e@(RoundPrivateChange p _) = sendPrivate gs p e
-        f gs e@(RoundPrivateWaitForShout p _ _) = print e >> sendPrivate gs p e
+        f gs e@(RoundPrivateWaitForShout p _ _) = sendPrivate gs p e
         f gs e@(RoundPrivateWaitForTurnAction p _) = sendPrivate gs p e
         f gs e@(RoundPrivateStarts pg)  = sendPrivate gs (_playerPlayer pg) e
         f _ _                           = return True
