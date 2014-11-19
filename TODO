@@ -3,9 +3,9 @@
    [x] shout
    [x] ankan
 [ ] (web) in-game view
-   [ ] mentsu
    [x] player in turn -indicator
    [/] real tiles
+   [ ] mentsu
    [ ] chat/dialog
 [x] (web) retain nick on refresh
 [ ] (web) allow nick..

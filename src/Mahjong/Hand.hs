@@ -157,13 +157,13 @@ ankanOn tile hand
 -- | Meld the mentsu to the hand
 meldTo :: CanError m => Shout -> Mentsu -> Hand -> m Hand
 meldTo shout mentsu hand
-    | hand^.handConcealed.to (\xs -> length todelete + length (xs L.\\ todelete) == length xs)
+    | hand^.handConcealed.to (\xs -> length ih + length (xs L.\\ ih) == length xs)
     = return $ handPublic.handOpen %~ (|> mentsu)
-             $ handConcealed %~ (L.\\ todelete)
+             $ handConcealed %~ (L.\\ ih)
              $ hand
-    | otherwise = throwError "Tiles not available"
+    | otherwise = throwError "meldTo: Tiles not available"
   where
-    todelete = (:) <$> shoutedTile <*> shoutedTo $ shout
+    ih = shoutedTo shout
 
 -- | Transfer the discard from the hand to a mentsu specified by the shout.
 shoutFromHand :: CanError m => Kaze -> Shout -> Hand -> m (Mentsu, Hand)

@@ -66,7 +66,10 @@ makeLenses ''WorkerState
 -- | Fork a new worker thread
 startWorker :: TMVar WorkerInput -> TVar (GameState Client) -> LoggerSet -> IO ThreadId
 startWorker i_var gs_var lgr =
-    forkIO $ runWCont (WorkerState gs_var i_var lgr) waitPlayersAndBegin
+    forkIO $ runWCont (WorkerState gs_var i_var lgr) $ do
+        $logInfo "New Worker started"
+        waitPlayersAndBegin
+        $logInfo "Worker has finished"
 
 -- * Unwrap monads
 
