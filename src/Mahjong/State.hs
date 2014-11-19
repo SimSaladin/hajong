@@ -61,6 +61,7 @@ data RiichiPublic = RiichiPublic
                  { _riichiDora :: [Tile]
                  , _riichiWallTilesLeft :: Int
                  , _riichiRound :: Kaze
+                 , _riichiRoundNth :: Int
                  , _riichiTurn :: Kaze
                  , _riichiOja :: Player
                  , _riichiFirstOja :: Player
@@ -135,6 +136,7 @@ newPublic players oja = RiichiPublic
     { _riichiDora          = []
     , _riichiWallTilesLeft = 0
     , _riichiRound         = Ton
+    , _riichiRoundNth      = 0
     , _riichiTurn          = Ton
     , _riichiOja           = oja
     , _riichiFirstOja      = oja
