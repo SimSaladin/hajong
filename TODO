@@ -2,10 +2,10 @@
    [x] discard
    [x] shout
    [x] ankan
-[ ] (web) in-game view
+[/] (web) in-game view
    [x] player in turn -indicator
    [/] real tiles
-   [ ] mentsu
+   [/] mentsu (needs correct from indicator)
    [ ] chat/dialog
 [x] (web) retain nick on refresh
 [ ] (web) allow nick..

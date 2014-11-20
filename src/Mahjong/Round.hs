@@ -59,18 +59,18 @@ advanceTurn = startTurn . nextKaze =<< view riichiTurn
 
 autoDiscard :: RoundM m => m ()
 autoDiscard = do
-    tp <- view riichiTurn
-    hand <- handOf' tp
+    tk <- view riichiTurn
+    hand <- handOf' tk
     dt <- handAutoDiscard hand
-    runTurn' tp (TurnTileDiscard False dt)
+    runTurn' tk (TurnTileDiscard False dt)
 
 autoDraw :: RoundM m => m ()
 autoDraw = flip runTurn' (TurnTileDraw False Nothing) =<< view riichiTurn
 
--- | Attempt to run a @TurnAction@ as the given user. Fails if it is not
--- his turn.
+-- | Attempt to run a @TurnAction@ as the given player. Fails if it is not
+-- his turn or the action would be invalid.
 runTurn :: RoundM m => Player -> TurnAction -> m ()
-runTurn pp ta = flip runTurn' ta =<< playerToKaze pp
+runTurn tp ta = flip runTurn' ta =<< playerToKaze tp
 
 runTurn' :: RoundM m => Kaze -> TurnAction -> m ()
 runTurn' pk ta = do
@@ -86,14 +86,15 @@ runTurn' pk ta = do
             TurnTileDraw True  _       -> drawDeadWall h
 
 -- | @runShout shout shouter@
-runShout :: RoundM m => Shout -> Player -> m ()
-runShout shout sp = do
+advanceWithShout :: RoundM m => Shout -> Player -> m ()
+advanceWithShout shout sp = do
     sk <- playerToKaze sp
     tk <- view riichiTurn
     (m, hand) <- shoutFromHand sk shout =<< handOf' tk
     updateHand tk hand
     handOf' sk >>= meldTo shout m >>= updateHand sk
-    tellEvent $ RoundTurnShouted sk shout
+    tell [ RoundTurnShouted sk shout
+         , RoundTurnBegins sk ]
 
 getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
 getWaitingForShouts = do
@@ -160,10 +161,11 @@ roundEndsWith results = do
 
 drawWall :: RoundM m => Hand -> m Hand
 drawWall hand = do
+    unless (canDraw hand) (throwError "Cannot draw from wall")
     wall <- use riichiWall
     case wall of
         (x:xs) -> do riichiWall .= xs
-                     return $ set handPick (Just x) hand
+                     return $ handPick .~ Just x $ hand
         _ -> throwError "No tiles left"
 
 drawDeadWall :: RoundM m => Hand -> m Hand
@@ -171,10 +173,11 @@ drawDeadWall hand = preuse (riichiWall._Snoc)
     >>= maybe (throwError "No tiles in wall!") (draw . fst)
     where
         draw wall = do
+            unless (hand^.handPublic.handDrawWanpai) (throwError "Cannot draw from wanpai")
             riichiWall .= wall
             Just (dt, wanpai) <- preuse (riichiWanpai._Cons)
             riichiWanpai .= wanpai
-            return $ handPick .~ Just dt $ hand
+            return $ handPick .~ Just dt $ handPublic.handDrawWanpai .~ False $ hand
 
 -- | Set riichiWaitShoutsFrom to players who could shout the discard.
 endTurn :: RoundM m => Tile -> m ()
@@ -279,7 +282,7 @@ applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
 applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs
     $ GamePlayer (error "Not accessed") (error "_playerPlayer is not accessed") rp mempty hand
     where
-        hand = Hand [] Nothing Nothing (HandPublic [] [(error "N/A", Nothing)] False)
+        hand = Hand [] Nothing Nothing (HandPublic [] [(error "N/A", Nothing)] False False)
 
 applyGameEvent' :: GameEvent -> RiichiPublic -> RiichiPublic
 applyGameEvent' ev = applyGameEvents' [ev]

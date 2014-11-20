@@ -58,6 +58,7 @@ display co gs = case gs.roundState of
         [ container 1000 650 midTop <| collage 650 650
             [ dispInfoBlock co gs rs
             , dispDiscards co gs rs |> scale 0.7
+            , dispCalled co gs rs |> scale 0.8
             ]
         , container 1000 40 midTop <| flow right
            <| (
@@ -73,10 +74,17 @@ display co gs = case gs.roundState of
 dispDiscards : Controls -> GameState -> RoundState -> Form
 dispDiscards co gs rs = group <| map
    (\k -> Util.listFind k rs.hands
-       |> dispPublicHand co
+       |> dispHandDiscards co
        |> toForm
        |> moveRotateKaze 330 rs.mypos k)
    [Ton, Nan, Shaa, Pei]
+
+dispCalled co gs rs = group <| map
+   (\k -> Util.listFind k rs.hands
+      |> dispPublicMentsu co k
+      |> toForm
+      |> moveRotateKaze 500 rs.mypos k)
+   ([Ton, Nan, Shaa, Pei] |> filter (\x -> x /= rs.mypos))
 
 moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
 moveRotateKaze off mypos pos =
@@ -132,12 +140,14 @@ dispHand k co hand = flow right
    , flow right <| map (dispMentsu co k) hand.called
    ]
 
-dispPublicHand co h =
+dispHandDiscards co h =
    container (6*(t_w+4)+2) (3*(t_h+4)) topLeft
    <| flow down
    <| map (flow right)
    <| Util.groupInto 6
    <| map (dispTile co << fst) h.discards
+
+dispPublicMentsu co k h = flow right <| map (dispMentsu co k) h.called
 
 dispMentsu : Controls -> Kaze -> Mentsu -> Element
 dispMentsu co k m = case m.from of

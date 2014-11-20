@@ -26,6 +26,7 @@ data HandPublic = HandPublic
                 { _handOpen :: [Mentsu]
                 , _handDiscards :: [(Tile, Maybe Kaze)]
                 , _handRiichi :: Bool
+                , _handDrawWanpai :: Bool -- ^ Should draw from wanpai
                 } deriving (Show, Read, Eq)
 
 data Hand = Hand
@@ -80,7 +81,7 @@ data Yaku = Yaku
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False)
+initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False)
 
 -- * Discarding
 
@@ -113,7 +114,7 @@ discardRiichi tile hand
 handAutoDiscard :: CanError m => Hand -> m Tile
 handAutoDiscard hand
     | Just tile <- _handPick hand = return tile
-    | otherwise                   = throwError "handAutoDiscard: no hand pick"
+    | otherwise                   = return $ hand ^?! handConcealed._last
 
 -- * Properties
 
@@ -140,12 +141,18 @@ shoutsOn np t p hand
                 else mk /= Jantou
         return $ Shout s np t xs
 
+-- | From wall (not wanpai).
+canDraw :: Hand -> Bool
+canDraw h = not (h^.handPublic.handDrawWanpai)
+    && isNothing (h^.handPick)
+    && (3 * length (h^.handPublic.handOpen) + length (h^.handConcealed) == 13)
+
 -- * Melding
 
 -- | Do an ankan on the given tile.
 ankanOn :: CanError m => Tile -> Hand -> m Hand
 ankanOn tile hand 
-    | [_,_,_,_] <- sameConcealed   = return hand'
+    | [_,_,_,_] <- sameConcealed  = return hand'
     | [_,_,_]   <- sameConcealed
     , hand^.handPick == Just tile = return $ hand' & handPick .~ Nothing
     | otherwise                   = throwError "Not enough same tiles"
@@ -153,6 +160,7 @@ ankanOn tile hand
         sameConcealed = hand^.handConcealed^..folded.filtered (== tile)
         hand'         = hand & handConcealed %~ filter (/= tile)
                              & handPublic.handOpen %~ (:) (kantsu tile)
+                             & handPublic.handDrawWanpai .~ True
 
 -- | Meld the mentsu to the hand
 meldTo :: CanError m => Shout -> Mentsu -> Hand -> m Hand

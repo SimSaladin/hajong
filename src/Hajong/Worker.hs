@@ -261,10 +261,8 @@ afterDiscard = unsafeRoundM advanceAfterDiscard
 afterShout :: Player -> Shout -> WCont
 afterShout pp sh = do
     $logDebug $ "Advancing with shout " ++ tshow sh
-    unsafeRoundM (runShout sh pp)
+    unsafeRoundM (advanceWithShout sh pp >> autoDraw)
     turnActionOrTimeout
-    where
-        go ma = ma >> turnActionOrTimeout
 
 -- | After a discard, there are three possible branchings:
 --
@@ -293,15 +291,13 @@ waitForShouts = do
     -- another ron. -- TODO
 
     let waitAll [] = return afterDiscard
-        waitAll xs = do
-            withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
+        waitAll xs = withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
 
-        passOn xs c = do
-            case c `clientToPlayer` gs of
-                Nothing -> unicastError c "You are not playing in this game" >> waitAll xs
-                Just p  -> do
-                    unicast c (InGamePrivateEvent $ RoundPrivateWaitForShout p 0 [])
-                    waitAll $ filter (^._1.to (/= p)) xs
+        passOn xs c = case c `clientToPlayer` gs of
+            Nothing -> unicastError c "You are not playing in this game" >> waitAll xs
+            Just p  -> do
+                unicast c (InGamePrivateEvent $ RoundPrivateWaitForShout p 0 [])
+                waitAll $ filter (^._1.to (/= p)) xs
 
         shoutHandler xs c s = do
             mv <- atomically $ tryReadTMVar win_var
