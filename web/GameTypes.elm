@@ -142,9 +142,9 @@ kazeNth k = case k of
    Pei  -> 3
 
 sangenNth k = case k of
-   Haku  -> 1
-   Hatsu -> 2
-   Chun  -> 3
+   Haku  -> 0
+   Hatsu -> 1
+   Chun  -> 2
 
 sortTiles = sortWith tileOrder
 -- }}}

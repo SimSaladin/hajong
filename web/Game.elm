@@ -64,7 +64,7 @@ display co gs = case gs.roundState of
               maybe [] (map shoutButton << snd) (gs.waitShout)
                ++ [ankanButton rs "Ankan", nocareButton gs.waitShout "Pass" ]
                )
-        , container 1000 100 midTop <| dispHand co rs.myhand
+        , container 1000 100 midTop <| dispHand rs.mypos co rs.myhand
         ]
    Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
 -- }}}
@@ -124,10 +124,12 @@ dispPlayerInfo rs k = flow right
 -- }}}
 
 -- {{{ Hands --------------------------------------------------------------
-dispHand co hand = flow right
+dispHand k co hand = flow right
    [ flow right <| map (dispTileClickable co) <| sortTiles hand.concealed
    , spacer 10 10
    , maybe empty (dispTileClickable co >> color lightGreen) hand.pick
+   , spacer 10 10
+   , flow right <| map (dispMentsu co k) hand.called
    ]
 
 dispPublicHand co h =
@@ -136,6 +138,13 @@ dispPublicHand co h =
    <| map (flow right)
    <| Util.groupInto 6
    <| map (dispTile co << fst) h.discards
+
+dispMentsu : Controls -> Kaze -> Mentsu -> Element
+dispMentsu co k m = case m.from of
+   Nothing -> empty -- We display only shouted
+   Just s  -> flow right <|
+    (collage t_h t_w [rotate (degrees 90) <| toForm <| dispTile co s.shoutTile])
+    :: map (dispTile co) s.shoutTo
 -- }}}
 
 -- {{{ Tiles -----------------------------------------------------------------------
@@ -157,8 +166,8 @@ tileImage tile =
                Suited ManTile n _  -> (125 + (n - 1) * 97, 47)
                Suited PinTile n _  -> (125 + (n - 1) * 97, 142)
                Suited SouTile n _  -> (125 + (n - 1) * 97, 237)
-               Honor (Kazehai k)   -> (222 + (kazeNth k - 1) * 97, 356)
-               Honor (Sangenpai s) -> (707 + (sangenNth s - 1) * 97, 356)
+               Honor (Kazehai k)   -> (222 + (kazeNth k) * 97, 356)
+               Honor (Sangenpai s) -> (707 + (sangenNth s) * 97, 356)
    in
       croppedImage (row, col) 62 82 "Mahjong-tiles.jpg"
 -- }}}
