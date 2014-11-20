@@ -85,22 +85,24 @@ initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False)
 
 -- * Discarding
 
--- | Discard a tile; returns Left if discard is not possible due to the
--- tile 1) not being in the hand or 2) due to riichi restriction.
+-- | Discard a tile; fails if
+--  
+--  1. tile not in the hand
+--  2. riichi restriction
+--  3. need to draw first
 discard :: CanError m => Tile -> Hand -> m Hand
 discard tile hand
     | hand ^. handPick == Just tile = return $ hand & set handPick Nothing . setDiscard
     | hand ^. handPublic.handRiichi = throwError "Cannot change wait in riichi"
-    | [] <- ys                      = throwError "Tile not in hand"
-    | Just pick <- hand^.handPick
-    , (_:ys')   <- ys               = return
-        . set handPick Nothing
-        . set handConcealed (pick : xs ++ ys')
-        $ setDiscard hand
-    | otherwise                     = throwError "No draw done"
+    | otherwise = case ys of
+        [] -> throwError "Tile not in hand"
+        _ : ys' | hand^.handPublic.handDrawWanpai || canDraw hand -> throwError "You need to draw first"
+                | Just pick <- hand^.handPick -> return
+                    $ handPick .~ Nothing $ handConcealed .~ (pick : xs ++ ys') $ setDiscard hand
+                | otherwise -> return $ handConcealed .~ (xs ++ ys') $ setDiscard hand
     where
         (xs, ys)   = break (== tile) (_handConcealed hand)
-        setDiscard = (handPublic.handDiscards) %~ (++ [(tile, Nothing)])
+        setDiscard = handPublic.handDiscards %~ (++ [(tile, Nothing)])
 
 -- | Do riichi if possible and discard.
 discardRiichi :: CanError m => Tile -> Hand -> m Hand
