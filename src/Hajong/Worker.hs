@@ -268,9 +268,12 @@ afterDiscard = unsafeRoundM advanceAfterDiscard
 afterShout :: Player -> Shout -> WCont
 afterShout pp sh = do
     $logDebug $ "Advancing with shout " ++ tshow sh
-    unsafeRoundM (advanceWithShout sh pp)
-    when (shoutKind sh == Kan) $ unsafeRoundM autoDrawWanpai
-    turnActionOrTimeout
+
+    let noEnd = do when (shoutKind sh == Kan) $ unsafeRoundM autoDrawWanpai
+                   turnActionOrTimeout
+
+    unsafeRoundM (advanceWithShout sh pp) >>= maybe noEnd endRound
+
 
 -- | After a discard, there are three possible branchings:
 --

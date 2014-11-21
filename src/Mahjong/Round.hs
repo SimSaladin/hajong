@@ -13,6 +13,7 @@ module Mahjong.Round where
 ------------------------------------------------------------------------------
 import           Mahjong.Tiles
 import           Mahjong.Hand
+import           Mahjong.Hand.Algo (tenpai)
 import           Mahjong.Hand.Mentsu
 import           Mahjong.State
 
@@ -56,16 +57,32 @@ startTurn = tellEvent . RoundTurnBegins
 advanceTurn :: RoundM m => m ()
 advanceTurn = startTurn . nextKaze =<< view riichiTurn
 
+-- | If win(s) were declared, wall was exhausted or four kans were declared
+-- (and TODO declarer is not in the yakuman tenpai): return "RoundResults".
+--
+-- Otherwise the turn is passed to next player as if the player in turn
+-- discarded previously.
+advanceAfterDiscard :: RoundM m => m (Maybe RoundResults)
+advanceAfterDiscard = do
+    tilesLeft <- view riichiWallTilesLeft
+    dora      <- view riichiDora
+    case () of
+        _ | tilesLeft == 0 || length dora == 5 -> Just <$> endDraw
+          | otherwise                          -> advanceTurn >> return Nothing
+
 -- | @advanceWithShout shout shouter@
-advanceWithShout :: RoundM m => Shout -> Player -> m ()
+advanceWithShout :: RoundM m => Shout -> Player -> m (Maybe RoundResults)
 advanceWithShout shout sp = do
     sk <- playerToKaze sp
     tk <- view riichiTurn
+    tp <- kazeToPlayer tk
     (m, hand) <- shoutFromHand sk shout =<< handOf' tk
     updateHand tk hand
     handOf' sk >>= meldTo shout m >>= updateHand sk
-    tell [ RoundTurnShouted sk shout
-         , RoundTurnBegins sk ]
+    tellEvent $ RoundTurnShouted sk shout
+    if shoutKind shout == Ron
+        then Just <$> roundEnds (RoundRon [sp] [tp])
+        else startTurn sk >> return Nothing
 
 -- ** Automatic
 
@@ -108,19 +125,6 @@ getWaitingForShouts = do
     tell out
     return res
 
--- | If win(s) were declared, wall was exhausted or four kans were declared
--- (and TODO declarer is not in the yakuman tenpai): return "RoundResults".
---
--- Otherwise the turn is passed to next player as if the player in turn
--- discarded previously.
-advanceAfterDiscard :: RoundM m => m (Maybe RoundResults)
-advanceAfterDiscard = do
-    tilesLeft <- view riichiWallTilesLeft
-    dora      <- view riichiDora
-    case () of
-        _ | tilesLeft == 0 || length dora == 5 -> Just <$> roundEndedDraw
-          | otherwise                          -> advanceTurn >> return Nothing
-
 tellPlayerState :: RoundM m => Player -> m ()
 tellPlayerState p =
     view (riichiPlayers.at p)
@@ -153,14 +157,15 @@ updateHand pk new = do
 
 -- ** Results
 
-roundEndedDraw :: RoundM m => m RoundResults
-roundEndedDraw =
-    roundEndsWith $ RoundDraw [] [] -- TODO tenpai players
+roundEnds :: RoundM m => RoundResults -> m RoundResults
+roundEnds results = tell [RoundEnded results] >> return results
 
-roundEndsWith :: RoundM m => RoundResults -> m RoundResults
-roundEndsWith results = do
-    tell [RoundEnded results]
-    return results
+endDraw :: RoundM m => m RoundResults
+endDraw = do
+    hands <- use riichiHands
+    let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
+    res <- RoundDraw <$> mapM kazeToPlayer tenpaiPlayers <*> mapM kazeToPlayer nootenPlayers
+    roundEnds res
 
 -- ** Player actions
 
