@@ -4,8 +4,6 @@ import Dict
 import Set (Set)
 import Set
 
-type Player = Int
-
 -- {{{ GameState -------------------------------------------------------------
 type GameState = { status     : Status
                  , mynick     : String
@@ -29,6 +27,9 @@ type WaitRecord = { seconds : Int, added : Time }
 -- }}}
 
 -- {{{ RoundState ------------------------------------------------------------
+
+type Player = Int
+
 -- This duplicates Hajong.Game.Round.GamePlayer
 type RoundState = 
         { mypos     : Kaze
@@ -40,8 +41,7 @@ type RoundState =
         , tilesleft : Int
         , dora      : [Tile]
         , hands     : [(Kaze, HandPublic)]
-        , points    : [(Kaze, Int)]
-        , players   : [(Kaze, Player)]
+        , players   : [(Kaze, (Player, Int, String))]
         , myhand    : Hand
         , results   : Maybe RoundResult
         , actions   : [(Kaze, TurnAction)]
@@ -79,6 +79,7 @@ data GameEvent = RoundPrivateStarts            RoundState
                | RoundTurnShouted              { player_kaze : Kaze, shout : Shout }
                | RoundHandChanged              { player_kaze : Kaze, hand : HandPublic }
                | RoundEnded                    RoundResult
+               | RoundNick                     { player_kaze : Kaze, nick : String }
 -- }}}
 
 -- {{{ Actions ---------------------------------------------------------------

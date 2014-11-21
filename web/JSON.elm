@@ -170,6 +170,7 @@ parseGameEvent (Object o) = case "event" .: o |> parseString of
     "shout"        -> RoundTurnShouted              <| hasPlayerKaze o { shout   = "shout"   .: o |> parseShout }
     "hand"         -> RoundHandChanged              <| hasPlayerKaze o { hand    = "hand" .: o |> parsePublicHand }
     "end"          -> RoundEnded                    <| fromJust <| parseResults <| "results" .: o
+    "nick"         -> RoundNick                     <| hasPlayerKaze o { nick = "nick" .: o |> parseString }
 
 -- * Hand -------------------------------------------------------
 parseHand : Value -> Hand
@@ -244,8 +245,7 @@ parseRoundState o = case "gamestate" .: o of
         , tilesleft = "tiles-left" .: game |> parseInt
         , dora      = "dora"       .: game |> withArray parseTile
         , hands     = "hands"      .: o    |> withArray parsePlayerHand
-        , points    = "points"     .: game |> withArray parsePoints
-        , players   = "players"    .: game |> withArray parsePoints -- TODO names instead
+        , players   = "players"    .: game |> withArray parsePlayers
         , myhand    = "myhand"     .: o    |> parseHand
         , results   = "results"    .: game |> parseResults
         , actions   = [] -- TODO receive actions?
@@ -253,6 +253,9 @@ parseRoundState o = case "gamestate" .: o of
 
 parsePoints : Value -> (Kaze, Int)
 parsePoints (Array [a, b]) = (parseKaze a, parseInt b)
+
+parsePlayers : Value -> (Kaze, (Player, Int, String))
+parsePlayers (Array [p, Array [k, ps, n]]) = (parseKaze k, (parseInt p, parseInt ps, parseString n))
 
 -- * RoundResult -------------------------------------------------------
 parseResults : Value -> Maybe RoundResult

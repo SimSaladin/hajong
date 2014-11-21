@@ -9,6 +9,12 @@
 ------------------------------------------------------------------------------
 module Hajong.Server where
 
+------------------------------------------------------------------------------
+import           Hajong.Connections
+import           Hajong.Worker
+import           Mahjong
+
+------------------------------------------------------------------------------
 import           Control.Monad.Logger
 import           Control.Concurrent (ThreadId)
 import           Data.Set                   (mapMonotonic)
@@ -16,11 +22,6 @@ import qualified Network.WebSockets         as WS
 import qualified Data.Aeson                 as A
 import           System.Log.FastLogger (LoggerSet)
 import           Text.PrettyPrint.ANSI.Leijen (putDoc, pretty)
-
-----------------------------------------------------
-import Hajong.Connections
-import Hajong.Worker
-import Mahjong
 
 -- * ServerState
 
@@ -122,23 +123,6 @@ serverApp ss_v pending = do
             runClientWorker ss_v c $ do
                 $logWarn $ "Received non-event or malformed json first: " <> tshow event
                 unicast c $ Invalid "No JoinServer received. Please identify yourself."
-
-serverDebugger :: TVar ServerState -> IO ()
-serverDebugger ss = go
-  where
-    go = do
-        putStrLn "> "
-        i <- getLine
-        case asText i of
-            ""  -> return ()
-            "s" -> do s <- readTVarIO ss
-                      mapM_ debugGameShow . itoList $ _serverGames s
-            _   -> putStrLn "Unknown command"
-        go
-
-    debugGameShow (n, g) = do
-        putStrLn $ "Game: " ++ tshow n
-        readTVarIO (g^.gWorker.wGame) >>= putDoc . pretty . fmap (unpack . getNick)
 
 -- * ClientWorkers
 
@@ -282,3 +266,22 @@ handleGameAction action = do
         Just n | Just g <- ss^.gameAt n
             -> putWorker g (c `WorkerGameAction` action)
         _   -> unicast c $ Invalid "You are not in a game"
+
+-- * Debug
+
+serverDebugger :: TVar ServerState -> IO ()
+serverDebugger ss = go
+  where
+    go = do
+        putStrLn "> "
+        i <- getLine
+        case asText i of
+            ""  -> return ()
+            "s" -> do s <- readTVarIO ss
+                      mapM_ debugGameShow . itoList $ _serverGames s
+            _   -> putStrLn "Unknown command"
+        go
+
+    debugGameShow (n, g) = do
+        putStrLn $ "Game: " ++ tshow n
+        readTVarIO (g^.gWorker.wGame) >>= putDoc . pretty . fmap (unpack . getNick)

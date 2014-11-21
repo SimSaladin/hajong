@@ -10,6 +10,8 @@ import Array
 -- TODO: hard-coded tile widths; some other measures are also hard-coded
 t_w = 62
 t_h = 82
+discards_off = 330
+called_off   = 500
 
 -- {{{ Controls ------------------------------------------------------
 type Controls = { hoveredTile : Maybe Tile
@@ -76,14 +78,14 @@ dispDiscards co gs rs = group <| map
    (\k -> Util.listFind k rs.hands
        |> dispHandDiscards co
        |> toForm
-       |> moveRotateKaze 330 rs.mypos k)
+       |> moveRotateKaze discards_off rs.mypos k)
    [Ton, Nan, Shaa, Pei]
 
 dispCalled co gs rs = group <| map
    (\k -> Util.listFind k rs.hands
       |> dispPublicMentsu co k
       |> toForm
-      |> moveRotateKaze 500 rs.mypos k)
+      |> moveRotateKaze called_off rs.mypos k)
    ([Ton, Nan, Shaa, Pei] |> filter (\x -> x /= rs.mypos))
 
 moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
@@ -122,13 +124,13 @@ turnIndicator gs =
                Just wr -> toFloat wr.seconds - (inSeconds (gs.updated - wr.added))
    ]
 
-dispPlayerInfo rs k = flow right
-   [ asText (Util.listFind k rs.players)
-   , spacer 5 5
-   , asText k
-   , spacer 5 5
-   , asText (Util.listFind k rs.points)
-   ] |> toForm
+dispPlayerInfo rs k =
+   let (p, points, name) = Util.listFind k rs.players
+   in ((if name == "" then toText "(bot)" else toText name |> bold) |> centered)
+      `above` flow right
+      [ asText p, spacer 5 5, asText k, spacer 5 5
+      , asText points
+      ] |> toForm
 -- }}}
 
 -- {{{ Hands --------------------------------------------------------------
@@ -253,19 +255,30 @@ processInGameEvent event gs = case event of
    RoundEnded res ->
       Util.log (show res) gs -- TODO implement results logic
 
+   RoundNick {player_kaze, nick} ->
+      setNick player_kaze nick gs
+
 -- {{{ Field modify boilerplate ----------------------------------------------
 setMyHand hand gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | myhand <- hand } }
+   Nothing -> gs
 
 setTurnPlayer player gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | turn <- player } }
+   Nothing -> gs
 
-addTurnAction : Kaze -> TurnAction -> GameState -> GameState
 addTurnAction player action gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | actions <- (player, action) :: rs.actions } }
+   Nothing -> gs
 
 setPlayerHand player hand gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | hands <- updateHand player hand rs.hands } }
+   Nothing -> gs
+
+setNick pk nick gs = case gs.roundState of
+   Just rs -> { gs | roundState <- Just { rs | players <- Util.listModify pk (\(p, n, _) -> (p, n, nick)) rs.players } }
+   Nothing -> gs
+
 -- }}}
 
 -- {{{ Turns ------------------------------------------------------------------

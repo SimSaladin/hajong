@@ -174,8 +174,10 @@ runOtherAction wi = case wi of
             return gs'
 
         clientEither client e_gs $ \gs -> do
-            when (gs^.gameRound.to isJust) $
-                unsafeRoundM $ tellPlayerState $ fromJust $ clientToPlayer client gs
+            when (gs^.gameRound.to isJust) $ do
+                let p = fromJust $ clientToPlayer client gs
+                unsafeRoundM $ updatePlayerNick p (getNick client)
+                unsafeRoundM $ tellPlayerState p
             liftIO $ callback gs
 
     WorkerPartPlayer client callback -> do

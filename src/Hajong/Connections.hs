@@ -166,6 +166,7 @@ instance ToJSON GameEvent where
         RoundTurnShouted pk shout             -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
         RoundHandChanged pk hand              -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
         RoundEnded results                      -> atEvent "end"          ["results" .= results]
+        RoundNick p pk nick                  -> atEvent "nick" ["player" .= p, "player-kaze" .= pk, "nick" .= nick]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard r t) = atType "discard" ["riichi" .= r, "tile" .= t]
@@ -229,8 +230,7 @@ instance ToJSON RiichiPublic where
         , "oja"        .= _riichiOja x
         , "first-oja"  .= _riichiFirstOja x
         , "turn"       .= _riichiTurn x
-        , "points"     .= ((\(a,_,c) -> (a,c)) <$> _riichiPlayers x)
-        , "players"    .= ((\(a,Player b,_) -> (a,b)) <$> _riichiPlayers x)
+        , "players"    .= map (toJSON *** toJSON) (M.toList $ _riichiPlayers x)
         , "results"    .= _riichiResults x
         ]
 

@@ -25,9 +25,11 @@ import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 -- * Players
 
--- | 0..3
-newtype Player = Player Int
-                 deriving (Show, Read, Eq, Ord)
+-- | Numerical identifier for players (@[0..3]@). Note that we use 'Kaze'
+-- to specifify players in-game (so the logic is simpler), and use `Player'
+-- in more general settings (obviously because players change positions
+-- between hands).
+newtype Player = Player Int deriving (Show, Read, Eq, Ord)
 
 -- * Points, results
 
@@ -67,7 +69,7 @@ data RiichiPublic = RiichiPublic
                  , _riichiTurn :: Kaze
                  , _riichiOja :: Player
                  , _riichiFirstOja :: Player
-                 , _riichiPlayers :: [(Kaze, Player, Points)]
+                 , _riichiPlayers :: Map Player (Kaze, Points, Text)
                  , _riichiResults :: Maybe RoundResults
                  } deriving (Show, Read, Typeable)
 
@@ -92,6 +94,7 @@ instance P.Pretty RiichiPublic where
 data GamePlayer = GamePlayer
                 { _playerKaze :: Kaze
                 , _playerPlayer :: Player -- ^ Me
+                , _playerName :: Text
                 , _playerPublic :: RiichiPublic
                 , _playerPublicHands :: Map Kaze HandPublic
                 , _playerMyHand :: Hand
@@ -111,6 +114,7 @@ data GameEvent = RoundPrivateStarts GamePlayer -- ^ Only at the start of a round
                         -- useful for clients.. perhaps could identify
                         -- between draws, kans, shouts.
                | RoundEnded RoundResults
+               | RoundNick Player Kaze Text
                deriving (Show, Read, Typeable)
 
 -- | Actions you do on your turn.
@@ -148,7 +152,7 @@ fourPlayers :: [Player]
 fourPlayers = Player <$> [0 .. 3]
 
 -- | Four-player riichi game
-newPublic :: [Player] -- ^ Players
+newPublic :: [Player] -- ^ Players, from Ton to Shaa
           -> Player   -- ^ Oja
           -> RiichiPublic
 newPublic players oja = RiichiPublic
@@ -159,7 +163,7 @@ newPublic players oja = RiichiPublic
     , _riichiTurn          = Ton
     , _riichiOja           = oja
     , _riichiFirstOja      = oja
-    , _riichiPlayers       = zip3 [Ton .. Pei] players (repeat 25000)
+    , _riichiPlayers       = mapFromList $ zip players (zip3 [Ton .. Pei] (repeat 25000) (repeat ""))
     , _riichiResults       = Nothing
     }
 

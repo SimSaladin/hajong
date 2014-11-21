@@ -42,8 +42,7 @@ type RoundM m =
 
 startRound :: RoundM m => m ()
 startRound = do
-    view riichiPlayers >>= mapM buildPlayerState
-                       >>= tell . map RoundPrivateStarts
+    view riichiPlayers >>= imapM_ (\p v -> buildPlayerState p v >>= tellEvent . RoundPrivateStarts)
     view riichiTurn >>= startTurn
 
 turnWaiting :: RoundM m => Int -> m ()
@@ -121,17 +120,20 @@ advanceAfterDiscard = do
 
 tellPlayerState :: RoundM m => Player -> m ()
 tellPlayerState p =
-    maybe (throwError "tellPlayerState: player not found")
-          (buildPlayerState >=> tellEvent . RoundPrivateStarts)
-          . find (^. _2.to (== p)) =<< view riichiPlayers
+    view (riichiPlayers.at p)
+    >>= maybe (throwError "tellPlayerState: player not found")
+              (buildPlayerState p >=> tellEvent . RoundPrivateStarts)
+
+updatePlayerNick :: RoundM m => Player -> Text -> m ()
+updatePlayerNick p nick = playerToKaze p >>= \pk -> tellEvent (RoundNick p pk nick)
 
 -- | Build the player's "@GamePlayer@" record, or the state of the game as
 -- seen by the player (hide "RiichiSecret" but show the player's own hand).
-buildPlayerState :: RoundM m => (Kaze, Player, a) -> m GamePlayer
-buildPlayerState (p, name, _) = GamePlayer p name
+buildPlayerState :: RoundM m => Player -> (Kaze, Points, Text) -> m GamePlayer
+buildPlayerState p (k, _, name) = GamePlayer k p name
     <$> view id
     <*> use (riichiHands.to (map _handPublic))
-    <*> use (riichiHands.at p.to fromJust)
+    <*> use (riichiHands.at k.to fromJust)
 
 -- | Set the hand of player
 updateHand :: RoundM m => Kaze -> Hand -> m ()
@@ -208,14 +210,15 @@ publishTurnAction pk ra = tellEvent $ case ra of
 -- ** Query info
 
 kazeToPlayer :: RoundM m => Kaze -> m Player
-kazeToPlayer k =
-    maybe (throwError "Player not found") (return . (^._2)) . find (^._1.to (== k))
-    =<< view riichiPlayers
+kazeToPlayer k = do
+    mp <- view riichiPlayers <&> ifind (\_ x -> x^._1 == k)
+    maybe (throwError "Player not found") (return . fst) mp
 
 playerToKaze :: RoundM m => Player -> m Kaze
-playerToKaze p =
-    maybe (throwError "Player not found") (return . (^._1)) . find (^._2.to (== p))
-    =<< view riichiPlayers
+playerToKaze p = do
+    rp <- view riichiPlayers
+    let mk = rp ^. at p
+    maybe (throwError "Player not found") (return . (^._1)) mk
 
 handOf' :: RoundM m => Kaze -> m Hand
 handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
@@ -225,24 +228,29 @@ handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") re
 handOf :: Kaze -> Lens RiichiSecret RiichiSecret (Maybe Hand) (Maybe Hand)
 handOf player = riichiHands.at player
 
-playersNextRound :: [(Kaze, Player, a)] -> [(Kaze, Player, a)]
-playersNextRound xs = let (ks, ps', as') = unzip3 xs
+playersNextRound :: [(Kaze, Player, a, b)] -> [(Kaze, Player, a, b)]
+playersNextRound xs = let (ks, ps', as', bs') = unzip4 xs
                           Just (ps, p) = unsnoc ps'
                           Just (as, a) = unsnoc as'
-                          in zip3 ks (p : ps) (a : as)
+                          Just (bs, b) = unsnoc bs'
+                          in zip4 ks (p : ps) (a : as) (b : bs)
 
 -- | Advance the game to next round
 nextRound :: RiichiState -> IO RiichiState
 nextRound rs = over riichiPublic r . logRound . flip setSecret rs <$> newSecret
   where
-    r = do np <- view $ riichiPlayers.to playersNextRound
-           let no = headEx np ^. _2
-           ar <- view $ riichiFirstOja.to (== no)
+    r = do np <- view riichiPlayers <&> each._1 %~ prevKaze
+           po <- view riichiOja
+        
+           let po_k                    = np^?!ix po._1
+           let Just (oja, (oja_k,_,_)) = np & ifind (\_ (k,_,_) -> k == po_k)
+
            (riichiPlayers .~ np)
-               . (riichiRound %~ if' ar nextKaze id)
-               . (riichiOja .~ no)
                . (riichiTurn .~ Ton)
                . (riichiResults .~ Nothing)
+               . (riichiOja .~ oja)
+               . (riichiRound %~ if' (oja_k == Ton) nextKaze id)
+
     logRound = do
         k <- view $ riichiPublic.riichiRound
         riichiRounds %~ (\case
@@ -269,6 +277,7 @@ applyGameEvent ev = case ev of
     RoundPrivateStarts gp    -> const gp
     RoundPrivateWaitForShout{} -> id
     RoundPrivateWaitForTurnAction _ _ -> id
+    RoundNick p _ n -> playerPublic.riichiPlayers.ix p._3 .~ n
 
 applyTurnAction :: Kaze -> TurnAction -> GamePlayer -> GamePlayer
 applyTurnAction p ta = case ta of
@@ -280,7 +289,8 @@ applyTurnAction p ta = case ta of
 
 applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
 applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs
-    $ GamePlayer (error "Not accessed") (error "_playerPlayer is not accessed") rp mempty hand
+    $ GamePlayer (error "Not accessed") (error "Not accessed") (error "Not accessed")
+                 rp mempty hand
     where
         hand = Hand [] Nothing Nothing (HandPublic [] [(error "N/A", Nothing)] False False)
 

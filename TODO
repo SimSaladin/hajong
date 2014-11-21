@@ -23,6 +23,7 @@
 [ ] (game) final scoring and possible next rounds
 [ ] (game, elm, server) tsumo
 [ ] (connections) revisit json instances - possibly derive?
-[ ] (game) BUG shoutedFrom cannot draw anymore "Cannot draw from wall"
+[X] (game) BUG shoutedFrom cannot draw anymore "Cannot draw from wall"
+[ ] (game) BUG shouting multiple: discard player's all other shouts.
 
 [ ] (docs) write json channel spec
