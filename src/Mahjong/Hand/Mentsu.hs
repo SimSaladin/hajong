@@ -111,7 +111,8 @@ fromShout s@Shout{..} = setShout $ case shoutKind of
     Ron
         | [_]   <- shoutedTo         -> jantou shoutedTile
         | [x,y] <- shoutedTo, x == y -> koutsu shoutedTile
-        | otherwise                  -> error "Impossible ron to a kantsu!"
+        | Just m <- shuntsuWith (shoutedTile : shoutedTo) -> m
+        | otherwise -> error "fromShout: malformed shout"
     where
         setShout (Mentsu k t _) = Mentsu k t (Just s)
 

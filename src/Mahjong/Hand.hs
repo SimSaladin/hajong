@@ -116,7 +116,8 @@ shoutsOn np t p hand
                 Koutsu  -> [Pon, Ron]
                 Shuntsu -> [Chi, Ron]
         guard $ if s == Ron
-                then complete (toMentsu mk t xs : (hand^.handPublic.handOpen), _handConcealed hand L.\\ xs)
+                then complete ( toMentsu mk t xs : (hand^.handPublic.handOpen)
+                              , _handConcealed hand L.\\ xs )
                 else mk /= Jantou
         return $ Shout s np t xs
 
