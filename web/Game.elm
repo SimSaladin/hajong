@@ -126,9 +126,9 @@ turnIndicator gs =
 
 dispPlayerInfo rs k =
    let (p, points, name) = Util.listFind k rs.players
-   in ((if name == "" then toText "(bot)" else toText name |> bold) |> centered)
+   in asText p `beside` ((if name == "" then toText "(bot)" else toText name |> bold) |> centered)
       `above` flow right
-      [ asText p, spacer 5 5, asText k, spacer 5 5
+      [ spacer 5 5, asText k, spacer 5 5
       , asText points
       ] |> toForm
 -- }}}

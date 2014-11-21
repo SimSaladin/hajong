@@ -108,7 +108,7 @@ newServer = atomically . newTVar . ServerState mempty mempty mempty 0
 
 -- | Starts websocket stuff
 runServer :: TVar ServerState -> IO ()
-runServer = WS.runServer "0.0.0.0" 9160 . serverApp
+runServer = WS.runServer "0.0.0.0" 8001 . serverApp
 
 -- | The websocket app
 serverApp :: TVar ServerState -> WS.ServerApp
@@ -213,7 +213,7 @@ broadcast' event ss = forM_ (ss ^. serverLounge) (`unicast` event)
 createGame :: Text -> ClientWorker Int
 createGame name = do
     wd <- WorkerData (GameSettings name)
-        <$> liftIO (newTVarIO $ newEmptyGS (dummyClient "(nobody)") name)
+        <$> liftIO (newTVarIO $ newEmptyGS (dummyClient "") name)
         <*> liftIO newEmptyTMVarIO
         <*> fmap _serverLoggerSet (rview ssVar)
     threadId <- liftIO $ startWorker wd

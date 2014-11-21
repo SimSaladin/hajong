@@ -32,7 +32,13 @@
        return false;
     }
 
-    var socket = new WebSocket("ws://localhost:9160");
+    mynick = localStorage.getItem("nick");
+    if (!mynick) {
+       mynick = prompt("Please enter a nick");
+       localStorage.setItem("nick", mynick);
+    }
+
+    var socket = new WebSocket("ws://84.248.82.156:8001");
 
     socket.onopen = function () {
 
@@ -64,7 +70,6 @@
         socket.send(e);
       });
 
-      mynick = localStorage.getItem("nick");
       socket.send( '{ "type" : "join", "nick": "' + mynick + '" }' );
     }
 

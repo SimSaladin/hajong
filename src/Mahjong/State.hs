@@ -141,9 +141,9 @@ makeLenses ''GamePlayer
 
 -- | New state with first round ready to start. Convenient composite of
 -- newPublic, newSecret and setSecret.
-newRiichiState :: IO RiichiState
-newRiichiState = do
-    p <- newPublic fourPlayers . Player <$> randomRIO (0, 3)
+newRiichiState :: [Text] -> IO RiichiState
+newRiichiState names = do
+    p <- newPublic fourPlayers names . Player <$> randomRIO (0, 3)
     s <- newSecret
     let rs = RiichiState [(Ton, 0)] (error "newRiichiState: not used") p []
     return $ setSecret s rs
@@ -153,9 +153,10 @@ fourPlayers = Player <$> [0 .. 3]
 
 -- | Four-player riichi game
 newPublic :: [Player] -- ^ Players, from Ton to Shaa
+          -> [Text]   -- ^ Names
           -> Player   -- ^ Oja
           -> RiichiPublic
-newPublic players oja = RiichiPublic
+newPublic players names oja = RiichiPublic
     { _riichiDora          = []
     , _riichiWallTilesLeft = 0
     , _riichiRound         = Ton
@@ -163,7 +164,7 @@ newPublic players oja = RiichiPublic
     , _riichiTurn          = Ton
     , _riichiOja           = oja
     , _riichiFirstOja      = oja
-    , _riichiPlayers       = mapFromList $ zip players (zip3 [Ton .. Pei] (repeat 25000) (repeat ""))
+    , _riichiPlayers       = mapFromList $ zip players (zip3 [Ton .. Pei] (repeat 25000) names)
     , _riichiResults       = Nothing
     }
 

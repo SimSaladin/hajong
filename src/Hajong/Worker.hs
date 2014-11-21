@@ -252,10 +252,11 @@ beginRound gs = do
 turnActionOrTimeout :: WCont
 turnActionOrTimeout = do
     -- TODO configurable secs
+    let secs = 15
 
-    unsafeRoundM (turnWaiting 30)
+    unsafeRoundM (turnWaiting secs)
 
-    join $ workerRace 30 takeInputTurnAction
+    join $ workerRace secs takeInputTurnAction
         ($logDebug "Time-out, auto-discarding"
             >> unsafeRoundM autoDiscard >> waitForShouts)
 
@@ -268,6 +269,7 @@ afterShout :: Player -> Shout -> WCont
 afterShout pp sh = do
     $logDebug $ "Advancing with shout " ++ tshow sh
     unsafeRoundM (advanceWithShout sh pp)
+    when (shoutKind sh == Kan) $ unsafeRoundM autoDrawWanpai
     turnActionOrTimeout
 
 -- | After a discard, there are three possible branchings:
@@ -324,7 +326,9 @@ waitForShouts = do
                                 LT -> waitAll xs
 
     -- TODO Configurable timeout
-    join $ workerRace 20 (waitAll shoutable)
+
+    let secs = 8
+    join $ workerRace secs (waitAll shoutable)
          $ atomically (tryTakeTMVar win_var) >>= \case
             Nothing      -> do $logDebug "Continue without shouts after timeout"
                                afterDiscard

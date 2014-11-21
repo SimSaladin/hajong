@@ -68,10 +68,7 @@ runRoundM m = maybe (Left "No active round!") run . _gameRound
 --      - it would be first round and all player seats are occupied, or
 --      - the previous round has ended. (TODO!)
 maybeNextRound :: IsPlayer p => GameState p -> Maybe (IO (GameState p))
-maybeNextRound gs = msum
-    [ maybeBeginGame gs
-    , beginNextRound gs
-    ]
+maybeNextRound = msum . sequence [maybeBeginGame, beginNextRound]
 
 beginNextRound :: GameState p -> Maybe (IO (GameState p))
 beginNextRound gs = do
@@ -87,7 +84,7 @@ maybeBeginGame gs = do
     guard . null            $ gs^.gamePlayers^..each.filtered (not . playerReady)
 
     return $ do
-        rs <- newRiichiState
+        rs <- newRiichiState (gs^.gamePlayers^..each.to playerNick)
         return $ gameRound .~ Just rs $ gs
 
 -- ** Modify

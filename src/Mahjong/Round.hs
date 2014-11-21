@@ -56,15 +56,29 @@ startTurn = tellEvent . RoundTurnBegins
 advanceTurn :: RoundM m => m ()
 advanceTurn = startTurn . nextKaze =<< view riichiTurn
 
+-- | @advanceWithShout shout shouter@
+advanceWithShout :: RoundM m => Shout -> Player -> m ()
+advanceWithShout shout sp = do
+    sk <- playerToKaze sp
+    tk <- view riichiTurn
+    (m, hand) <- shoutFromHand sk shout =<< handOf' tk
+    updateHand tk hand
+    handOf' sk >>= meldTo shout m >>= updateHand sk
+    tell [ RoundTurnShouted sk shout
+         , RoundTurnBegins sk ]
+
+-- ** Automatic
+
 autoDiscard :: RoundM m => m ()
 autoDiscard = do
     tk <- view riichiTurn
-    hand <- handOf' tk
-    dt <- handAutoDiscard hand
-    runTurn' tk (TurnTileDiscard False dt)
+    runTurn' tk . TurnTileDiscard False =<< handAutoDiscard =<< handOf' tk
 
-autoDraw :: RoundM m => m ()
+autoDraw, autoDrawWanpai :: RoundM m => m ()
 autoDraw = flip runTurn' (TurnTileDraw False Nothing) =<< view riichiTurn
+autoDrawWanpai = flip runTurn' (TurnTileDraw True Nothing) =<< view riichiTurn
+
+-- ** Do turn
 
 -- | Attempt to run a @TurnAction@ as the given player. Fails if it is not
 -- his turn or the action would be invalid.
@@ -83,17 +97,6 @@ runTurn' pk ta = do
             TurnAnkan tile             -> ankanOn tile h
             TurnTileDraw False _       -> drawWall h
             TurnTileDraw True  _       -> drawDeadWall h
-
--- | @advanceWithShout shout shouter@
-advanceWithShout :: RoundM m => Shout -> Player -> m ()
-advanceWithShout shout sp = do
-    sk <- playerToKaze sp
-    tk <- view riichiTurn
-    (m, hand) <- shoutFromHand sk shout =<< handOf' tk
-    updateHand tk hand
-    handOf' sk >>= meldTo shout m >>= updateHand sk
-    tell [ RoundTurnShouted sk shout
-         , RoundTurnBegins sk ]
 
 getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
 getWaitingForShouts = do
