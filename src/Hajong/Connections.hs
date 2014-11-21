@@ -54,9 +54,12 @@ data Event = JoinServer Nick
 
 type Nick = Text
 
+data GameSettings = GameSettings { gameTitle :: Text }
+                  deriving (Show, Read, Typeable)
+
 data Lounge = Lounge
             { _loungeNicksIdle :: Set Nick
-            , _loungeGames :: Map Int (Text, Set Nick)
+            , _loungeGames :: Map Int GameSettings
             } deriving (Show, Read)
 
 makeLenses ''Lounge
@@ -129,11 +132,10 @@ gamePlayerJSON x =
 loungeJSON :: Lounge -> [Pair]
 loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
 
-gamePairs :: (Int, (Text, Set Nick)) -> Value
-gamePairs (i,(t,n)) = object [ "ident"   .= i
-                             , "topic"   .= t
-                             , "players" .= n
-                             ]
+gamePairs :: (Int, GameSettings) -> Value
+gamePairs (i,GameSettings t) = object
+    [ "ident"   .= i , "topic"   .= t , "players" .= (mempty :: Set Text) ]
+        -- TODO players, necessary?
 
 -- Instances -----------------------------------------------------------------
 

@@ -85,7 +85,7 @@ runTurn' pk ta = do
             TurnTileDraw False _       -> drawWall h
             TurnTileDraw True  _       -> drawDeadWall h
 
--- | @runShout shout shouter@
+-- | @advanceWithShout shout shouter@
 advanceWithShout :: RoundM m => Shout -> Player -> m ()
 advanceWithShout shout sp = do
     sk <- playerToKaze sp

@@ -34,7 +34,7 @@ newtype Player = Player Int
 data RoundResults = RoundTsumo { winners :: [Player], payers :: [Player] }
                   | RoundRon   { winners :: [Player], payers :: [Player] }
                   | RoundDraw  { winners :: [Player], payers :: [Player] }
-                  deriving (Show, Read)
+                  deriving (Show, Read, Typeable)
 
 type Points = Int
 
@@ -48,7 +48,7 @@ data RiichiState = RiichiState
                  , _riichiSecret :: RiichiSecret
                  , _riichiPublic :: RiichiPublic
                  , _riichiEvents :: [GameEvent]
-                 } deriving (Show, Read)
+                 } deriving (Show, Read, Typeable)
 
 -- | Round state, secret half.
 data RiichiSecret = RiichiSecret
@@ -56,7 +56,7 @@ data RiichiSecret = RiichiSecret
                  , _riichiWanpai :: [Tile]
                  , _riichiHands :: Map Kaze Hand
                  , _riichiWaitShoutsFrom :: [(Kaze, Shout)]
-                 } deriving (Show, Read)
+                 } deriving (Show, Read, Typeable)
 
 -- | Round state, public half.
 data RiichiPublic = RiichiPublic
@@ -69,7 +69,9 @@ data RiichiPublic = RiichiPublic
                  , _riichiFirstOja :: Player
                  , _riichiPlayers :: [(Kaze, Player, Points)]
                  , _riichiResults :: Maybe RoundResults
-                 } deriving (Show, Read)
+                 } deriving (Show, Read, Typeable)
+
+-- Pretty instances 
 
 instance P.Pretty RiichiState where
     pretty RiichiState{..} = P.pretty _riichiRounds P.<$$>
@@ -77,15 +79,14 @@ instance P.Pretty RiichiState where
                              P.pretty _riichiSecret
 
 instance P.Pretty RiichiSecret where
-    pretty RiichiSecret{..} = P.string "wall:" P.<+> P.hang 0 (list _riichiWall)
-        P.<$$> P.string "wanpai:" P.<+> P.hang 0 (list _riichiWanpai)
-        P.<$$> P.string "hands:" P.<+> P.hang 0 (P.list $ toList $ fmap (list . _handConcealed) _riichiHands)
-        where
-            list :: P.Pretty a => [a] -> P.Doc
-            list = foldr (P.<+>) P.empty . map P.pretty
+    pretty RiichiSecret{..} =
+        P.string "wall:"   P.<+> P.hang 0 (prettyList' _riichiWall) P.<$$>
+        P.string "wanpai:" P.<+> P.hang 0 (prettyList' _riichiWanpai) P.<$$>
+        P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _riichiHands)
 
 instance P.Pretty RiichiPublic where
     pretty RiichiPublic{..} = P.string "(public)"
+
 
 -- | State of single player. Note that there is no RiichiSecret.
 data GamePlayer = GamePlayer
@@ -94,7 +95,7 @@ data GamePlayer = GamePlayer
                 , _playerPublic :: RiichiPublic
                 , _playerPublicHands :: Map Kaze HandPublic
                 , _playerMyHand :: Hand
-                } deriving (Show, Read)
+                } deriving (Show, Read, Typeable)
 
 -- * Actions and events
 
@@ -110,19 +111,19 @@ data GameEvent = RoundPrivateStarts GamePlayer -- ^ Only at the start of a round
                         -- useful for clients.. perhaps could identify
                         -- between draws, kans, shouts.
                | RoundEnded RoundResults
-               deriving (Show, Read)
+               deriving (Show, Read, Typeable)
 
 -- | Actions you do on your turn.
 data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ wanpai?, tile
                 | TurnAnkan Tile
-                deriving (Show, Read)
+                deriving (Show, Read, Typeable)
 
 -- | Actions you do on someone else's turn.
 data GameAction = GameTurn TurnAction
                 | GameShout Shout
                 | GameDontCare -- ^ About shouting last discarded tile
-                deriving (Show, Read)
+                deriving (Show, Read, Typeable)
 
 -- * Lenses
 

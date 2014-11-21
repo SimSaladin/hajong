@@ -17,6 +17,7 @@ import Control.Monad.Error.Class   as X
 import Control.Monad.Reader.Class  as X
 import Control.Monad.State.Class   as X
 import Control.Monad.Writer.Class  as X
+import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 type CanError = MonadError Text
 
@@ -34,3 +35,6 @@ rswap l a = view l >>= atomically . (`swapTVar` a)
 
 rmodify :: (MonadReader s m, MonadIO m) => Getting (TVar a) s (TVar a) -> (a -> a) -> m ()
 rmodify l f = view l >>= atomically . (`modifyTVar` f)
+
+prettyList' :: P.Pretty a => [a] -> P.Doc
+prettyList' = foldr ((P.<+>) . P.pretty) P.empty

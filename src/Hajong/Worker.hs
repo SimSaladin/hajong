@@ -19,7 +19,7 @@
 --  to end his turn).
 ------------------------------------------------------------------------------
 module Hajong.Worker
-    ( WorkerState(..)
+    ( WorkerData(..), wGame, wSettings, wInput, wLogger
     , WorkerInput(..)
     , startWorker
     ) where
@@ -40,46 +40,50 @@ default (Text)
 
 -- * Types
 
---  TODO This could probably use ContT.
-newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerState IO) a }
-                   deriving ( Functor, Applicative, Monad, MonadIO
-                            , MonadLogger, MonadReader WorkerState)
-
 -- type WorkerState = (TVar (GameState Client), TMVar WorkerInput)
-data WorkerState = WorkerState
-                 { _gameVar  :: TVar (GameState Client)
-                 , _inputVar :: TMVar WorkerInput
-                 , loggerSet :: LoggerSet
-                 }
+data WorkerData = WorkerData
+                { _wSettings  :: GameSettings
+                , _wGame      :: TVar (GameState Client)
+                , _wInput     :: TMVar WorkerInput
+                , _wLogger    :: LoggerSet
+                } deriving (Typeable)
 
 data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
                  | WorkerPartPlayer Client (GameState Client -> IO ())
                  | WorkerGameAction Client GameAction
                  | WorkerForceStart
 
+--  TODO This could probably use ContT.
+newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerData IO) a }
+                   deriving ( Functor, Applicative, Monad, MonadIO
+                            , MonadLogger, MonadReader WorkerData)
+
 type WCont = Worker ()
 
-makeLenses ''WorkerState
+-- * Lenses
+
+--
+makeLenses ''WorkerData
 
 -- * Entry points
 
 -- | Fork a new worker thread
-startWorker :: TMVar WorkerInput -> TVar (GameState Client) -> LoggerSet -> IO ThreadId
-startWorker i_var gs_var lgr =
-    forkIO $ runWCont (WorkerState gs_var i_var lgr) $ do
+startWorker :: WorkerData -> IO ThreadId
+startWorker wdata =
+    forkIO $ runWCont wdata $ do
         $logInfo "New Worker started"
         waitPlayersAndBegin
         $logInfo "Worker has finished"
 
 -- * Unwrap monads
 
-runWCont :: WorkerState -> Worker a -> IO a
+runWCont :: WorkerData -> Worker a -> IO a
 runWCont st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
     where
-        logger loc src level = pushLogStr (loggerSet st) . defaultLogStr loc src level
+        logger loc src level = pushLogStr (st^.wLogger) . defaultLogStr loc src level
 
 roundM :: RoundM' a -> Worker (Either Text (a, Worker ()))
-roundM ma = liftM (fmap tores . runRoundM ma) $ rview gameVar
+roundM ma = liftM (fmap tores . runRoundM ma) $ rview wGame
     where
         tores (res, secret, events) =
             (res, updateState secret events >> sendGameEvents events)
@@ -94,11 +98,11 @@ unsafeRoundM = roundM >=> either failed go
 
 -- | Documentation for 'multicast'
 multicast :: Event -> Worker ()
-multicast ev = rview gameVar >>= (`Con.multicast` ev)
+multicast ev = rview wGame >>= (`Con.multicast` ev)
 
 -- | The game state has changed.
 updateState :: RiichiSecret -> [GameEvent] -> Worker ()
-updateState secret events = rmodify gameVar $
+updateState secret events = rmodify wGame $
     gameRound._Just %~
         ( (riichiSecret .~ secret)
         . (riichiPublic %~ applyGameEvents' events) )
@@ -106,7 +110,7 @@ updateState secret events = rmodify gameVar $
 -- | Hide sensitive info per player
 sendGameEvents :: [GameEvent] -> Worker ()
 sendGameEvents events = do
-    gs <- rview gameVar
+    gs <- rview wGame
     public <- filterM (f gs) events
     multicast $ InGameEvents public
     where
@@ -124,7 +128,7 @@ sendGameEvents events = do
 
 -- | Take the next element from input queue (blocking).
 takeInput :: Worker WorkerInput
-takeInput = liftIO . atomically . takeTMVar =<< view inputVar
+takeInput = liftIO . atomically . takeTMVar =<< view wInput
 
 -- | Read (and apply) input from WorkerInput until a valid TurnAction.
 -- Returns the continuation derived from the TurnAction.
@@ -159,7 +163,7 @@ withEvent f_ta f_sh f_dc f_ac = do
 runOtherAction :: WorkerInput -> Worker ()
 runOtherAction wi = case wi of
     WorkerAddPlayer client callback -> do
-        gsv  <- view gameVar
+        gsv  <- view wGame
 
         e_gs <- atomically $ runEitherT $ do
             gs  <- lift $ readTVar gsv
@@ -175,7 +179,7 @@ runOtherAction wi = case wi of
             liftIO $ callback gs
 
     WorkerPartPlayer client callback -> do
-        gsv <- view gameVar
+        gsv <- view wGame
 
         mgs <- atomically $ do
             gs <- readTVar gsv
@@ -190,14 +194,14 @@ runOtherAction wi = case wi of
         maybe ($logError $ "Parting client " ++ getNick client ++ ", but it doesn't exist.")
               (liftIO . callback) mgs
 
-    WorkerForceStart     -> rmodify gameVar $ over (gamePlayers.each) (\c -> c { isReady = True })
+    WorkerForceStart     -> rmodify wGame $ over (gamePlayers.each) (\c -> c { isReady = True })
     WorkerGameAction _ _ -> $logWarn "WorkerGameAction when other was expected"
 
 -- | Attempt to apply the TurnAction. Return the continuation if it
 -- succeeded.
 workerProcessTurnAction :: TurnAction -> Client -> Worker (Maybe WCont)
 workerProcessTurnAction ta c = do
-    gs <- rview gameVar
+    gs <- rview wGame
 
     case clientToPlayer c gs of
         Nothing     -> unicastError c "You are not a player in this game!" >> return Nothing
@@ -227,12 +231,12 @@ workerRace secs ma b = do
 waitPlayersAndBegin :: WCont
 waitPlayersAndBegin = $logInfo "Waiting for players" >> go
     where
-        go = rview gameVar >>= maybe (takeInput >>= runOtherAction >> go)
+        go = rview wGame >>= maybe (takeInput >>= runOtherAction >> go)
                                      (liftIO >=> beginRound) . maybeNextRound
 
 beginRound :: GameState Client -> WCont
 beginRound gs = do
-    void $ rswap gameVar gs
+    void $ rswap wGame gs
     $logInfo "Round begins"
     unsafeRoundM startRound >> unsafeRoundM autoDraw
     turnActionOrTimeout
@@ -261,7 +265,7 @@ afterDiscard = unsafeRoundM advanceAfterDiscard
 afterShout :: Player -> Shout -> WCont
 afterShout pp sh = do
     $logDebug $ "Advancing with shout " ++ tshow sh
-    unsafeRoundM (advanceWithShout sh pp >> autoDraw)
+    unsafeRoundM (advanceWithShout sh pp)
     turnActionOrTimeout
 
 -- | After a discard, there are three possible branchings:
@@ -275,7 +279,7 @@ afterShout pp sh = do
 waitForShouts :: WCont
 waitForShouts = do
 
-    gs        <- rview gameVar
+    gs        <- rview wGame
     win_var   <- liftIO newEmptyTMVarIO -- :: (Player, Kaze, Shout)
     shoutable <- unsafeRoundM getWaitingForShouts
 
@@ -331,7 +335,7 @@ waitForShouts = do
 endRound :: RoundResults -> WCont
 endRound results = do
     $logInfo $ "Round ended (" ++ tshow results ++ ")"
-    maybe endGame (liftIO >=> beginRound) . maybeNextRound =<< rview gameVar
+    maybe endGame (liftIO >=> beginRound) . maybeNextRound =<< rview wGame
 
 endGame :: WCont
 endGame = $logInfo "Game ended, stopping worker."

@@ -36,6 +36,13 @@ data Hand = Hand
           , _handPublic :: HandPublic
           } deriving (Show, Read, Eq)
 
+-- | A hand that contains provided tiles in starting position
+initHand :: [Tile] -> Hand
+initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False)
+
+-- ** Lenses
+
+--
 makeLenses ''HandPublic
 makeLenses ''Hand
 
@@ -43,10 +50,9 @@ instance HasGroupings Hand where
     getGroupings h = getGroupings $ (,) <$> _handOpen . _handPublic <*> _handConcealed $ h
 
 instance Pretty Hand where
-    pretty = do
-        concealed <- view handConcealed
-        mpick     <- view handPick
-        return $ pretty concealed P.<> maybe "" (\p -> " | " P.<> pretty p) mpick
+    pretty h =
+        prettyList' (h^.handConcealed) P.<+>
+        maybe "" (("|-" P.<+>) . pretty) (h^.handPick)
 
 instance Pretty HandPublic where
     pretty = do
@@ -54,39 +60,10 @@ instance Pretty HandPublic where
         tilenum <- view (handOpen.to length) <&> (13 -) . (*3)
         return $ string $ unwords $ replicate tilenum "_"
 
--- * Hand value
-
--- | Required info to calculate the value from a hand.
-data ValueInfo = ValueInfo
-              { vRound :: Kaze
-              , vPlayer :: Kaze
-              , vRiichi :: Bool
-              , vConcealed :: Bool
-              , vDiscarded :: [Tile] -- ^ To check furiten
-              , vMentsu :: [Mentsu]
-              , vWinWith :: Tile
-              } deriving (Show)
-
-data Value = Value [Yaku] Fu
-type Fu    = Int
-
--- ** Yaku Information
-
-data Yaku = Yaku
-          { yaku :: Int
-          , yakuName :: Text
-          }
-
--- * Create
-
--- | A hand that contains provided tiles in starting position
-initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False)
-
--- * Discarding
+-- * Discard
 
 -- | Discard a tile; fails if
---  
+--
 --  1. tile not in the hand
 --  2. riichi restriction
 --  3. need to draw first
@@ -118,7 +95,7 @@ handAutoDiscard hand
     | Just tile <- _handPick hand = return tile
     | otherwise                   = return $ hand ^?! handConcealed._last
 
--- * Properties
+-- * Checks
 
 -- | All mentsu that could be melded with hand given some tile.
 shoutsOn :: Kaze -- ^ Shout from (player in turn)
@@ -149,11 +126,11 @@ canDraw h = not (h^.handPublic.handDrawWanpai)
     && isNothing (h^.handPick)
     && (3 * length (h^.handPublic.handOpen) + length (h^.handConcealed) == 13)
 
--- * Melding
+-- * Ankan
 
 -- | Do an ankan on the given tile.
 ankanOn :: CanError m => Tile -> Hand -> m Hand
-ankanOn tile hand 
+ankanOn tile hand
     | [_,_,_,_] <- sameConcealed  = return hand'
     | [_,_,_]   <- sameConcealed
     , hand^.handPick == Just tile = return $ hand' & handPick .~ Nothing
@@ -163,6 +140,8 @@ ankanOn tile hand
         hand'         = hand & handConcealed %~ filter (/= tile)
                              & handPublic.handOpen %~ (:) (kantsu tile)
                              & handPublic.handDrawWanpai .~ True
+
+-- * Call
 
 -- | Meld the mentsu to the hand
 meldTo :: CanError m => Shout -> Mentsu -> Hand -> m Hand
@@ -184,13 +163,27 @@ shoutFromHand sk shout hand =
         Just (t, _)
             | shoutedTile shout /= t -> throwError "The discard is not the shouted tile"
             | otherwise              -> return
-                ( fromShout shout
-                , hand & handPublic.handDiscards._last .~ (t, Just sk)
-                       & handPublic.handDiscards %~ shoutLastDiscard shout)
+                (fromShout shout, hand & handPublic.handDiscards._last .~ (t, Just sk))
 
--- | Modify the last discard in the discard pile to indicate a shout.
-shoutLastDiscard :: Shout -> [(Tile, Maybe Kaze)] -> [(Tile, Maybe Kaze)]
-shoutLastDiscard     _     [] = error "shoutLastDiscard: empty list"
-shoutLastDiscard shout (x:xs) = go x xs
-    where go (tile, _) [] = [(tile, Just $ shoutedFrom shout)]
-          go d     (y:ys) = d : go y ys
+-- * Hand value
+
+-- | Required info to calculate the value from a hand.
+data ValueInfo = ValueInfo
+              { vRound :: Kaze
+              , vPlayer :: Kaze
+              , vRiichi :: Bool
+              , vConcealed :: Bool
+              , vDiscarded :: [Tile] -- ^ To check furiten
+              , vMentsu :: [Mentsu]
+              , vWinWith :: Tile
+              } deriving (Show)
+
+data Value = Value [Yaku] Fu
+type Fu    = Int
+
+-- ** Yaku Information
+
+data Yaku = Yaku
+          { yaku :: Int
+          , yakuName :: Text
+          }
