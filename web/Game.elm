@@ -61,6 +61,7 @@ display co gs = case gs.roundState of
             [ dispInfoBlock co gs rs
             , dispDiscards co gs rs |> scale 0.7
             , dispCalled co gs rs |> scale 0.8
+            , maybe (toForm empty) dispResults rs.results
             ]
         , container 1000 40 midTop <| flow right
            <| (
@@ -131,6 +132,22 @@ dispPlayerInfo rs k =
       [ spacer 5 5, asText k, spacer 5 5
       , asText points
       ] |> toForm
+-- }}}
+
+-- {{{ Results
+dispResults : RoundResult -> Form
+dispResults res =
+   let col = case res.endKind of
+               Tsumo -> lightBlue
+               ByRon -> lightGreen
+               Draw  -> lightYellow
+   in toForm
+         <| color col
+         <| container 700 300 middle
+         <| flow down
+      [ asText "Win: " `beside` asText res.winners
+      , asText "Payers: " `beside` asText res.payers
+      ]
 -- }}}
 
 -- {{{ Hands --------------------------------------------------------------
