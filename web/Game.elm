@@ -145,7 +145,8 @@ dispHandDiscards co h =
    <| flow down
    <| map (flow right)
    <| Util.groupInto 6
-   <| map (dispTile co << fst) h.discards
+   <| map (dispTile co << fst)
+   <| filter (snd >> isNothing) h.discards
 
 dispPublicMentsu co k h = flow right <| map (dispMentsu co k) h.called
 
