@@ -274,7 +274,6 @@ afterShout pp sh = do
 
     unsafeRoundM (advanceWithShout sh pp) >>= maybe noEnd endRound
 
-
 -- | After a discard, there are three possible branchings:
 --
 --  * Highest priority shout is called: it is then processed immediately.

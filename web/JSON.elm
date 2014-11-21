@@ -85,6 +85,8 @@ parseBoolMaybe x = case x of
 
 withArray f (Array xs) = map f xs
 
+parsePlayer = parseInt
+
 -- ** Event ------------------------------------------------------
 parseEvent : Value -> Event
 parseEvent (Object o) = case "type" .: o |> parseString of
@@ -262,8 +264,8 @@ parsePlayers (Array [p, Array [k, ps, n]]) = (parseKaze k, (parseInt p, parseInt
 parseResults : Value -> Maybe RoundResult
 parseResults v = case v of
    Object o -> Just { endKind = "type"    .: o |> parseEndKind
-                    , winners = "winners" .: o |> withArray parseKaze
-                    , payers  = "payers"  .: o |> withArray parseKaze
+                    , winners = "winners" .: o |> withArray parsePlayer
+                    , payers  = "payers"  .: o |> withArray parsePlayer
                     }
    Null     -> Nothing
 

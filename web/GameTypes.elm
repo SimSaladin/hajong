@@ -47,7 +47,7 @@ type RoundState =
         , actions   : [(Kaze, TurnAction)]
         }
 
-type RoundResult = { endKind : EndKind, winners : [Kaze], payers : [Kaze] }
+type RoundResult = { endKind : EndKind, winners : [Player], payers : [Player] }
 data EndKind     = Tsumo | ByRon | Draw
 -- }}}
 

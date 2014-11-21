@@ -121,6 +121,7 @@ data GameEvent = RoundPrivateStarts GamePlayer -- ^ Only at the start of a round
 data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ wanpai?, tile
                 | TurnAnkan Tile
+                | TurnTsumo
                 deriving (Show, Read, Typeable)
 
 -- | Actions you do on someone else's turn.
