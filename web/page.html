@@ -66,8 +66,11 @@
       }
 
       game.ports.upstream.subscribe(function(e) {
-        console.log("out", JSON.parse(e));
-        socket.send(e);
+        var d = JSON.parse(e);
+        if (d.type !== "noop") {
+          console.log("out", JSON.parse(e));
+          socket.send(e);
+        }
       });
 
       socket.send( '{ "type" : "join", "nick": "' + mynick + '" }' );

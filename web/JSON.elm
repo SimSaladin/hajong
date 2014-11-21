@@ -29,6 +29,7 @@ toJSON_Event ev = case ev of
     CreateGame g          -> atType "game-create" [("topic", String g)]
     ForceStart {ident}    -> atType "game-fstart" [("ident", Number <| toFloat ident)]
     InGameAction action   -> atType "game-action" <| toJSON_GameAction action
+    Noop                  -> atType "noop" []
 
 toJSON_GameAction : GameAction -> [(String, Value)]
 toJSON_GameAction a = case a of
