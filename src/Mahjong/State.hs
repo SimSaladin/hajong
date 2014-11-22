@@ -122,13 +122,13 @@ data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ wanpai?, tile
                 | TurnAnkan Tile
                 | TurnTsumo
-                deriving (Show, Read, Typeable)
+                deriving (Eq, Show, Read, Typeable)
 
 -- | Actions you do on someone else's turn.
 data GameAction = GameTurn TurnAction
                 | GameShout Shout
                 | GameDontCare -- ^ About shouting last discarded tile
-                deriving (Show, Read, Typeable)
+                deriving (Eq, Show, Read, Typeable)
 
 -- * Lenses
 

@@ -172,6 +172,7 @@ instance ToJSON TurnAction where
     toJSON (TurnTileDiscard r t) = atType "discard" ["riichi" .= r, "tile" .= t]
     toJSON (TurnTileDraw w mt)   = atType "draw" ["wanpai" .= w, "tile" .= mt]
     toJSON (TurnAnkan t)         = atType "ankan" ["tile" .= t]
+    toJSON TurnTsumo             = atType "tsumo" []
 
 instance ToJSON Player where
     toJSON (Player k) = toJSON k
@@ -237,7 +238,7 @@ instance ToJSON RiichiPublic where
 -- FromJSON
 
 instance FromJSON Event where
-    parseJSON (Object o) = do
+    parseJSON v@(Object o) = do
         t <- o .: "type"
         case t :: Text of
             "join"         -> JoinServer         <$> o .: "nick"
@@ -245,34 +246,58 @@ instance FromJSON Event where
             "msg"          -> Message            <$> o .: "from" <*> o .: "content"
             "game-created" -> (\x y z -> GameCreated (x,y,z)) <$> o .: "ident" <*> o .: "topic" <*> o .: "players"
             "game-join"    -> JoinGame           <$> o .: "ident" <*> o .: "nick"
-            "game-secret"  -> InGamePrivateEvent <$> undefined
-            "game-public"  -> InGameEvents       <$> undefined
-            "game-action"  -> InGameAction       <$> gameActionFromJSON o
+            "game-secret"  -> fail "From server only event" -- InGamePrivateEvent <$> undefined
+            "game-public"  -> fail "From server only event" -- InGameEvents       <$> undefined
+            "game-action"  -> InGameAction       <$> parseJSON v
             "game-create"  -> CreateGame         <$> o .: "topic"
             "game-fstart"  -> ForceStart         <$> o .: "ident"
             _              -> pure (Invalid ("Unknown or unsupported type: " <> t))
     parseJSON _ = pure (Invalid "Top-level object expected")
 
 
-gameActionFromJSON o = do
-    t <- o .: "action"
-    case t :: Text of
-        "discard" -> (\x y -> GameTurn $ TurnTileDiscard x y) <$> o .: "riichi" <*> o .: "tile"
-        "draw"    -> (\x y -> GameTurn $ TurnTileDraw x y) <$> o .: "dead" <*> pure Nothing
-        "ankan"   -> GameTurn . TurnAnkan <$> o .: "tile"
-        "pass"    -> pure GameDontCare
-        "shout"   -> do s <- o .: "shout"
-                        sk <- case s :: Text of
-                            "pon" -> return Pon
-                            "kan" -> return Kan
-                            "chi" -> return Chi
-                            "ron" -> return Ron
-                            _     -> fail "shout no parse"
-                        s' <- Shout sk <$> o .: "from" <*> o .: "tile" <*> o .: "into"
-                        return $ GameShout s'
+instance FromJSON GameAction where
+    parseJSON v@(Object o)
+        | Success ta <- fromJSON v = return $ GameTurn ta
+        | otherwise = do
+            t <- o .: "action"
+            case t :: Text of
+                "pass"    -> pure GameDontCare
+                "shout"   -> GameShout <$> parseJSON v
+                _         -> fail "Game 'action' not recognized"
+    parseJSON _ = fail "Expected an object"
+                
+instance FromJSON Shout where
+    parseJSON (Object o) = Shout <$> o .: "shout"
+                                 <*> o .: "from"
+                                 <*> o .: "tile"
+                                 <*> o .: "into"
+    parseJSON _ = fail "Expected an object"
+
+instance FromJSON ShoutKind where
+    parseJSON (String s) = case s of
+        "pon" -> return Pon
+        "kan" -> return Kan
+        "chi" -> return Chi
+        "ron" -> return Ron
+        _     -> fail "shout no parse"
+    parseJSON _ = fail "Expected a string"
+
+instance FromJSON TurnAction where
+    parseJSON (Object o) = do
+        t <- o .: "action"
+        case t :: Text of
+            "discard" -> TurnTileDiscard <$> o .: "riichi" <*> o .: "tile"
+            "draw"    -> TurnTileDraw    <$> o .: "dead"   <*> pure Nothing
+            "ankan"   -> TurnAnkan       <$> o .: "tile"
+            _         -> fail "TurnAction type not recognized"
+    parseJSON _ = fail "Expected an object"
 
 instance FromJSON Number where
-    parseJSON = fmap (toEnum . (\x -> x - 1)) . parseJSON
+    parseJSON v = do
+        n <- parseJSON v
+        if n < fromEnum (maxBound :: Number) && n > fromEnum (minBound :: Number)
+            then pure (toEnum n)
+            else fail "Tile number out of bounds"
 
 instance FromJSON Player where
     parseJSON = fmap Player . parseJSON
@@ -285,20 +310,26 @@ instance FromJSON Tile where
             "PinTile"   -> Suited PinTile <$> o .: "number" <*> o .: "aka"
             "SouTile"   -> Suited SouTile <$> o .: "number" <*> o .: "aka"
             "HonorTile" -> Honor <$> o .: "ident"
+            _ -> fail "Tile type not recognized"
+    parseJSON _ = fail "Expected an object"
 
 instance FromJSON Honor where
-    parseJSON (String s) = pure $ case s of
-                               "Haku"  -> Sangenpai Haku
-                               "Hatsu" -> Sangenpai Hatsu
-                               "Chun"  -> Sangenpai Chun
-                               "Ton"  -> Kazehai Ton
-                               "Nan"  -> Kazehai Nan
-                               "Shaa" -> Kazehai Shaa
-                               "Pei"  -> Kazehai Pei
+    parseJSON (String s) = case s of
+        "Haku"  -> pure $ Sangenpai Haku
+        "Hatsu" -> pure $ Sangenpai Hatsu
+        "Chun"  -> pure $ Sangenpai Chun
+        "Ton"   -> pure $ Kazehai Ton
+        "Nan"   -> pure $ Kazehai Nan
+        "Shaa"  -> pure $ Kazehai Shaa
+        "Pei"   -> pure $ Kazehai Pei
+        _       -> fail "Honor not recognized"
+    parseJSON _ = fail "Expected a string"
 
 instance FromJSON Kaze where
-    parseJSON (String s) = pure $ case s of
-                               "Ton"  -> Ton
-                               "Nan"  -> Nan
-                               "Shaa" -> Shaa
-                               "Pei"  -> Pei
+    parseJSON (String s) = case s of
+        "Ton"  -> pure Ton
+        "Nan"  -> pure Nan
+        "Shaa" -> pure Shaa
+        "Pei"  -> pure Pei
+        _      -> fail "Kaze not recognized"
+    parseJSON _ = fail "Expected a string"

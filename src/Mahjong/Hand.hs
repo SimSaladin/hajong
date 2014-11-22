@@ -46,6 +46,8 @@ initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False)
 makeLenses ''HandPublic
 makeLenses ''Hand
 
+-- Instances
+
 instance HasGroupings Hand where
     getGroupings h = getGroupings $ (,) <$> _handOpen . _handPublic <*> _handConcealed $ h
 
@@ -126,6 +128,9 @@ canDraw :: Hand -> Bool
 canDraw h = not (h^.handPublic.handDrawWanpai)
     && isNothing (h^.handPick)
     && (3 * length (h^.handPublic.handOpen) + length (h^.handConcealed) == 13)
+
+handWin :: CanError m => Hand -> m Hand
+handWin h = if complete h then return h else throwError "Cannot tsumo, hand is not complete"
 
 -- * Ankan
 

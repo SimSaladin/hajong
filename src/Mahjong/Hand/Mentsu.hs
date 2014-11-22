@@ -146,6 +146,15 @@ possibleShouts withShuntsu x = (Koutsu, [x, x])
         , predMay x >>= \y -> predMay y >>= \z -> return (Shuntsu, [y, z]) --  . . x
         ]
 
--- | XXX: This doesn't work as of yet
-shoutPrecedence :: Kaze -> (Kaze, Shout) -> (Kaze, Shout) -> Ordering
-shoutPrecedence dk (_, s) (_, s') = comparing shoutKind s s'
+-- | Which shout takes precedence. Never @EQ@, always 'GT' or 'LT'.
+shoutPrecedence :: Kaze -- ^ shout from
+                -> (Kaze, Shout)
+                -> (Kaze, Shout)
+                -> Ordering
+shoutPrecedence dk (k, s) (k', s') = case comparing shoutKind s s' of
+    EQ | nextKaze dk == k  -> GT
+       | nextKaze dk == k' -> LT
+       | prevKaze dk == k  -> LT
+       | prevKaze dk == k' -> GT
+       | otherwise         -> error "shoutPrecedence: undecidable, this is not possible"
+    other                  -> other

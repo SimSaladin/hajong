@@ -135,7 +135,7 @@ takeInput = liftIO . atomically . takeTMVar =<< view wInput
 takeInputTurnAction :: Worker WCont
 takeInputTurnAction = withEvent
     workerProcessTurnAction
-    (\c _ -> notExpected "Someones turn is in progress, you can shout only after a discard" c)
+    (\c _ -> notExpected "Someones turn is in progress, you can only call right after a discard" c)
     (notExpected "Someones turn is currently in progress, you ought to care about that")
     (return Nothing)
     >>= maybe takeInputTurnAction return
@@ -211,12 +211,15 @@ workerProcessTurnAction ta c = do
             res <- roundM (runTurn player ta)
             case res of
                 Left err      -> unicastError c err >> return Nothing
-                Right (_, ma) -> return $ Just $ do
+                Right (rr, ma) -> return . Just $ do
                     ma
                     case ta of
                         TurnTileDraw _ _    -> turnActionOrTimeout
                         TurnAnkan _         -> turnActionOrTimeout
                         TurnTileDiscard _ _ -> waitForShouts
+                        TurnTsumo
+                            | Just roundRes <- rr -> endRound roundRes
+                            | otherwise           -> $logError "TurnTsumo went through but results were Nothing"
 
 -- | "workerRace n ma b" races between "ma" and "threadDelay n" (return b)
 workerRace :: Int -> Worker a -> a -> Worker a
@@ -257,8 +260,9 @@ turnActionOrTimeout = do
     unsafeRoundM (turnWaiting secs)
 
     join $ workerRace secs takeInputTurnAction
-        ($logDebug "Time-out, auto-discarding"
-            >> unsafeRoundM autoDiscard >> waitForShouts)
+         $ do $logDebug "Time-out, auto-discarding"
+              unsafeRoundM autoDiscard
+              waitForShouts
 
 -- | Advance turn to the next player. After a discard by previous player.
 afterDiscard :: WCont
@@ -288,6 +292,8 @@ waitForShouts = do
     gs        <- rview wGame
     win_var   <- liftIO newEmptyTMVarIO -- :: (Player, Kaze, Shout)
     shoutable <- unsafeRoundM getWaitingForShouts
+
+    let tk = gs^?!gameRound._Just.riichiPublic.riichiTurn
 
     unless (null shoutable) $
         $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")
@@ -321,11 +327,11 @@ waitForShouts = do
                             Nothing
                                 | i == 0    -> return $ p `afterShout` s
                                 | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
-                            Just (_,k',s') -> case shoutPrecedence undefined (k, s) (k', s') of -- TODO shoutPrecedence here not correct
+                            Just (_,k',s')  -> case shoutPrecedence tk (k, s) (k', s') of
+                                LT             -> waitAll xs
                                 GT | i == 0    -> return $ p `afterShout` s
                                    | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
-                                EQ -> $logError "Multiple shouts (ron) not yet implemented" >> waitAll xs
-                                LT -> waitAll xs
+                                EQ             -> $logError "Multiple shouts (ron) not yet implemented" >> waitAll xs
 
     -- TODO Configurable timeout
 
@@ -343,6 +349,8 @@ waitForShouts = do
 endRound :: RoundResults -> WCont
 endRound results = do
     $logInfo $ "Round ended (" ++ tshow results ++ ")"
+    let secs = 15
+    liftIO $ threadDelay (secs * 1000000)
     maybe endGame (liftIO >=> beginRound) . maybeNextRound =<< rview wGame
 
 endGame :: WCont

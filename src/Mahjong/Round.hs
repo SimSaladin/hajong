@@ -19,6 +19,7 @@ import           Mahjong.State
 
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
+import qualified Data.List as L (delete)
 import           Data.Maybe (fromJust)
 
 -- * RoundM
@@ -89,31 +90,33 @@ advanceWithShout shout sp = do
 autoDiscard :: RoundM m => m ()
 autoDiscard = do
     tk <- view riichiTurn
-    runTurn' tk . TurnTileDiscard False =<< handAutoDiscard =<< handOf' tk
+    void $ runTurn' tk . TurnTileDiscard False =<< handAutoDiscard =<< handOf' tk
 
 autoDraw, autoDrawWanpai :: RoundM m => m ()
-autoDraw = flip runTurn' (TurnTileDraw False Nothing) =<< view riichiTurn
-autoDrawWanpai = flip runTurn' (TurnTileDraw True Nothing) =<< view riichiTurn
+autoDraw = void . flip runTurn' (TurnTileDraw False Nothing) =<< view riichiTurn
+autoDrawWanpai = void . flip runTurn' (TurnTileDraw True Nothing) =<< view riichiTurn
 
 -- ** Do turn
 
 -- | Attempt to run a @TurnAction@ as the given player. Fails if it is not
 -- his turn or the action would be invalid.
-runTurn :: RoundM m => Player -> TurnAction -> m ()
+runTurn :: RoundM m => Player -> TurnAction -> m (Maybe RoundResults)
 runTurn tp ta = flip runTurn' ta =<< playerToKaze tp
 
-runTurn' :: RoundM m => Kaze -> TurnAction -> m ()
+runTurn' :: RoundM m => Kaze -> TurnAction -> m (Maybe RoundResults)
 runTurn' pk ta = do
     view riichiTurn >>= (`when` throwError "Not your turn") . (/= pk)
     publishTurnAction pk ta
     handOf' pk >>= handAction >>= updateHand pk
+    if ta == TurnTsumo then Just <$> endTsumo else return Nothing
     where
         handAction h = case ta of
-            TurnTileDiscard True  tile -> discardRiichi tile h <* endTurn tile -- TODO move to next player
+            TurnTileDiscard True  tile -> discardRiichi tile h <* endTurn tile
             TurnTileDiscard False tile -> discard tile h <* endTurn tile
             TurnAnkan tile             -> ankanOn tile h
             TurnTileDraw False _       -> drawWall h
             TurnTileDraw True  _       -> drawDeadWall h
+            TurnTsumo                  -> handWin h
 
 getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
 getWaitingForShouts = do
@@ -157,15 +160,23 @@ updateHand pk new = do
 
 -- ** Results
 
-roundEnds :: RoundM m => RoundResults -> m RoundResults
-roundEnds results = tell [RoundEnded results] >> return results
-
 endDraw :: RoundM m => m RoundResults
 endDraw = do
     hands <- use riichiHands
     let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
     res <- RoundDraw <$> mapM kazeToPlayer tenpaiPlayers <*> mapM kazeToPlayer nootenPlayers
     roundEnds res
+
+endTsumo :: RoundM m => m RoundResults
+endTsumo = do
+    tk      <- view riichiTurn
+    players <- view riichiPlayers <&> map fst . itoList
+    tp      <- kazeToPlayer tk
+    _hand   <- use (riichiHands.at tk)
+    roundEnds $ RoundTsumo [tp] (L.delete tp players)
+
+roundEnds :: RoundM m => RoundResults -> m RoundResults
+roundEnds results = tell [RoundEnded results] >> return results
 
 -- ** Player actions
 
@@ -294,6 +305,7 @@ applyTurnAction p ta = case ta of
         . set (playerPublicHands.at p._Just.handRiichi) riichi
     TurnTileDraw _ _ -> playerPublic.riichiWallTilesLeft -~ 1
     TurnAnkan tile   -> over (playerPublicHands.at p._Just.handOpen) (|> kantsu tile)
+    TurnTsumo -> id -- XXX: is this function sensible?
 
 applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
 applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs
