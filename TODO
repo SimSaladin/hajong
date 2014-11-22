@@ -4,12 +4,12 @@
    [x] ankan
 [/] (web) in-game view
    [x] player in turn -indicator
+   [x] mentsu (needs correct from indicator)
    [/] real tiles
-   [/] mentsu (needs correct from indicator)
    [ ] chat/dialog
 [x] (web) retain nick on refresh
-[ ] (web) allow nick..
-   [ ] set
+[/] (web) allow nick..
+   [/] set
    [ ] change in-game
 [x] (web) re-enter game on refresh
 [ ] (web) BUG game ended and back in lobby -> cannot join games
@@ -19,7 +19,7 @@
    * website?
 
 [ ] (game) kokushi musou ron
-[ ] (game) ask for new round
+[ ] (game) ask for new round when enough non-related tiles
 [ ] (game) final scoring and possible next rounds
 [ ] (game, elm, server) tsumo
 [ ] (connections) revisit json instances - possibly derive?

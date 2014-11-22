@@ -11,7 +11,7 @@ import Array
 t_w = 62
 t_h = 82
 discards_off = 330
-called_off   = 500
+called_off   = 650
 
 -- {{{ Controls ------------------------------------------------------
 type Controls = { hoveredTile : Maybe Tile
@@ -57,10 +57,10 @@ getShout = maybe Nothing (\k -> Just <| Shout k Ton (Suited ManTile 1 False) [])
 display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
    Just rs -> flow down
-        [ container 1000 650 midTop <| collage 650 650
+        [ container 1000 650 midTop <| collage 1000 650
             [ dispInfoBlock co gs rs
             , dispDiscards co gs rs |> scale 0.7
-            , dispCalled co gs rs |> scale 0.8
+            , dispCalled co gs rs |> scale 0.6
             , maybe (toForm empty) dispResults rs.results
             ]
         , container 1000 40 midTop <| flow right
@@ -82,12 +82,15 @@ dispDiscards co gs rs = group <| map
        |> moveRotateKaze discards_off rs.mypos k)
    [Ton, Nan, Shaa, Pei]
 
-dispCalled co gs rs = group <| map
-   (\k -> Util.listFind k rs.hands
-      |> dispPublicMentsu co k
-      |> toForm
-      |> moveRotateKaze called_off rs.mypos k)
-   ([Ton, Nan, Shaa, Pei] |> filter (\x -> x /= rs.mypos))
+dispCalled co gs rs = [Ton, Nan, Shaa, Pei]
+   |> filter (\x -> x /= rs.mypos)
+   |> map (
+      \k -> Util.listFind k rs.hands
+         |> dispPublicMentsu co k
+         |> toForm
+         |> moveRotateKaze called_off rs.mypos k
+      )
+   |> group
 
 moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
 moveRotateKaze off mypos pos =
@@ -172,9 +175,16 @@ dispPublicMentsu co k h = flow right <| map (dispMentsu co k) h.called
 dispMentsu : Controls -> Kaze -> Mentsu -> Element
 dispMentsu co k m = case m.from of
    Nothing -> empty -- We display only shouted
-   Just s  -> flow right <|
-    (collage t_h t_w [rotate (degrees 90) <| toForm <| dispTile co s.shoutTile])
-    :: map (dispTile co) s.shoutTo
+   Just s  ->
+      let (a :: b :: xs) = map (dispTile co) s.shoutTo
+          t            = rotate (degrees 90) <| toForm <| dispTile co s.shoutTile
+          shoutTile    = case xs of
+             [] -> collage t_h t_w [t]
+             _  -> collage t_h (2*t_w) [moveY (t_w / 2) t, moveY (-t_w / 2) t]
+      in flow right <| case abs (kazeNth s.shoutFrom - kazeNth k) of
+         1 -> a :: b :: shoutTile :: []
+         2 -> a :: shoutTile :: b :: []
+         3 -> shoutTile :: a :: b :: []
 -- }}}
 
 -- {{{ Tiles -----------------------------------------------------------------------
