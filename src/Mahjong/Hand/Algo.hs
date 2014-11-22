@@ -184,11 +184,9 @@ instance HasGroupings [x] => HasGroupings [[x]] where
 shanten :: HasGroupings x => x -> Shanten
 shanten = minimumMay . mapMaybe shanten' . getGroupings
 
-complete :: HasGroupings x => x -> Bool
+complete, tenpai :: HasGroupings x => x -> Bool
 complete = (== Just (-1)) . shanten
-
-tenpai :: HasGroupings x => x -> Bool
-tenpai = (== Just 0) . shanten
+tenpai   = (== Just 0) . shanten
 
 shanten' :: Grouping -> Shanten
 shanten' = fmap minimumEx . sequence <$> sequence
@@ -219,31 +217,28 @@ shanten' = fmap minimumEx . sequence <$> sequence
 -- a Nothing is returned to indicate invalid or non-winning hand.
 groupingShanten :: Int -> Grouping -> Shanten
 groupingShanten n tgs = case foldl' (\i -> (i -) . tgval) n tgs of
-                    -1 | Nothing <- find isPair tgs -> Nothing
-                        -- complete (-1) only when there are 14 or more
-                        -- tiles, so without a pair it's invalid hand
-                    s -> Just $ s + max 0 (length (filter notPairable tgs) - 4)
-    where
-        tgval (GroupWait{})     = 1
-        tgval (GroupComplete{}) = 2
-        tgval (GroupLeftover{}) = 0
+    -1 | length (filter isPair tgs) /= 1 -> Nothing
+    s -> Just $ s + max 0 (length (filter notPairable tgs) - 4)
+  where
+    tgval (GroupComplete m)
+        | Jantou <- mentsuKind m = 1
+        | otherwise              = 2
+    tgval (GroupWait{})          = 1
+    tgval (GroupLeftover{})      = 0
 
-        notPairable (GroupComplete _)       = True
-        notPairable (GroupWait Shuntsu _ _) = True
-        notPairable                       _ = False
-
-kokushiShanten :: Grouping -> Shanten
-kokushiShanten = Just . (13 -) . length . nub . filter ((||) <$> not . isSuited <*> isTerminal) . concatMap tileGroupTiles
-
-isTerminal :: Tile -> Bool
-isTerminal t = Just minBound == tileNumber t || tileNumber t == Just maxBound
-
-chiitoitsuShanten :: Grouping -> Shanten
+kokushiShanten, chiitoitsuShanten :: Grouping -> Shanten
+kokushiShanten = Just . (13 -) . length . nub. filter suitedOrTerminal . concatMap tileGroupTiles
+  where suitedOrTerminal = liftA2 (||) honor terminal
 chiitoitsuShanten = Just . (6 -) . length . filter isPair
 
-isPair :: TileGroup -> Bool
-isPair (GroupWait Koutsu _ _) = True
-isPair                      _ = False
+isPair, notPairable :: TileGroup -> Bool
+isPair (GroupWait Koutsu _ _)              = True
+isPair (GroupComplete (Mentsu Jantou _ _)) = True
+isPair                      _              = False
+
+notPairable (GroupComplete _)       = True
+notPairable (GroupWait Shuntsu _ _) = True
+notPairable                       _ = False
 
 -- Auxilary funtions
 
