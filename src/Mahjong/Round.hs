@@ -22,8 +22,6 @@ import qualified Data.Map as Map
 import qualified Data.List as L (delete)
 import           Data.Maybe (fromJust)
 
--- * RoundM
-
 -- | Context of game and deal flow.
 --
 -- Note that RiichiSecret is freely modifiable as a state, but
@@ -39,6 +37,8 @@ type RoundM m =
     , Applicative m
     , Monad m
     )
+
+----------------------------------------------------------------------------------------
 
 -- * Logic
 
@@ -85,24 +85,16 @@ advanceWithShout shout sp = do
         then Just <$> roundEnds (RoundRon [sp] [tp])
         else startTurn sk >> return Nothing
 
--- ** Automatic
+-- ** Actions
 
-autoDiscard :: RoundM m => m ()
-autoDiscard = do
-    tk <- view riichiTurn
-    void $ runTurn' tk . TurnTileDiscard False =<< handAutoDiscard =<< handOf' tk
-
-autoDraw, autoDrawWanpai :: RoundM m => m ()
-autoDraw = void . flip runTurn' (TurnTileDraw False Nothing) =<< view riichiTurn
-autoDrawWanpai = void . flip runTurn' (TurnTileDraw True Nothing) =<< view riichiTurn
-
--- ** Do turn
+-- *** Run
 
 -- | Attempt to run a @TurnAction@ as the given player. Fails if it is not
 -- his turn or the action would be invalid.
 runTurn :: RoundM m => Player -> TurnAction -> m (Maybe RoundResults)
 runTurn tp ta = flip runTurn' ta =<< playerToKaze tp
 
+-- | Like 'runTurn' but takes a kaze.
 runTurn' :: RoundM m => Kaze -> TurnAction -> m (Maybe RoundResults)
 runTurn' pk ta = do
     view riichiTurn >>= (`when` throwError "Not your turn") . (/= pk)
@@ -118,15 +110,68 @@ runTurn' pk ta = do
             TurnTileDraw True  _       -> drawDeadWall h
             TurnTsumo                  -> handWin h
 
-getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
-getWaitingForShouts = do
-    ws <- use riichiWaitShoutsFrom
-    ps <- mapM (kazeToPlayer . fst) ws
-    let res = zipWith (\p (k, s) -> (p, k, s)) ps ws
-        out = map ( \xs@((p,_,_):_) -> RoundPrivateWaitForShout p 30 $ map (^._3) xs) $ groupBy ((==) `on` view _2) res
-                                                               -- ^ TODO hard-coded limit
-    tell out
-    return res
+-- *** Player in turn
+
+drawWall :: RoundM m => Hand -> m Hand
+drawWall hand = do
+    unless (canDraw hand) (throwError "Cannot draw from wall")
+    wall <- use riichiWall
+    case wall of
+        (x:xs) -> do riichiWall .= xs
+                     return $ handPick .~ Just x $ hand
+        _ -> throwError "No tiles left"
+
+drawDeadWall :: RoundM m => Hand -> m Hand
+drawDeadWall hand = preuse (riichiWall._Snoc)
+    >>= maybe (throwError "No tiles in wall!") (draw . fst)
+    where
+        draw wall = do
+            unless (hand^.handPublic.handDrawWanpai) (throwError "Cannot draw from wanpai")
+            riichiWall .= wall
+            Just (dt, wanpai) <- preuse (riichiWanpai._Cons)
+            riichiWanpai .= wanpai
+            return $ handPick .~ Just dt $ handPublic.handDrawWanpai .~ False $ hand
+
+-- | Set riichiWaitShoutsFrom to players who could shout the discard.
+endTurn :: RoundM m => Tile -> m ()
+endTurn dt = do
+    shouts <- filterCouldShout dt <$> view riichiTurn <*> use riichiHands
+    riichiWaitShoutsFrom .= shouts
+
+-- *** Automatic actions
+
+autoDiscard :: RoundM m => m ()
+autoDiscard = do
+    tk <- view riichiTurn
+    void $ runTurn' tk . TurnTileDiscard False =<< handAutoDiscard =<< handOf' tk
+
+autoDraw, autoDrawWanpai :: RoundM m => m ()
+autoDraw = void . flip runTurn' (TurnTileDraw False Nothing) =<< view riichiTurn
+autoDrawWanpai = void . flip runTurn' (TurnTileDraw True Nothing) =<< view riichiTurn
+
+-- ** Results
+
+endDraw :: RoundM m => m RoundResults
+endDraw = do
+    hands <- use riichiHands
+    let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
+    res <- RoundDraw <$> mapM kazeToPlayer tenpaiPlayers <*> mapM kazeToPlayer nootenPlayers
+    roundEnds res
+
+endTsumo :: RoundM m => m RoundResults
+endTsumo = do
+    tk      <- view riichiTurn
+    players <- view riichiPlayers <&> map fst . itoList
+    tp      <- kazeToPlayer tk
+    _hand   <- use (riichiHands.at tk)
+    roundEnds $ RoundTsumo [tp] (L.delete tp players)
+
+roundEnds :: RoundM m => RoundResults -> m RoundResults
+roundEnds results = tell [RoundEnded results] >> return results
+
+----------------------------------------------------------------------------------------
+
+-- * Events
 
 tellPlayerState :: RoundM m => Player -> m ()
 tellPlayerState p =
@@ -158,64 +203,6 @@ updateHand pk new = do
     when (_handPublic old /= _handPublic new)
         $ tellEvent (RoundHandChanged pk $ _handPublic new)
 
--- ** Results
-
-endDraw :: RoundM m => m RoundResults
-endDraw = do
-    hands <- use riichiHands
-    let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
-    res <- RoundDraw <$> mapM kazeToPlayer tenpaiPlayers <*> mapM kazeToPlayer nootenPlayers
-    roundEnds res
-
-endTsumo :: RoundM m => m RoundResults
-endTsumo = do
-    tk      <- view riichiTurn
-    players <- view riichiPlayers <&> map fst . itoList
-    tp      <- kazeToPlayer tk
-    _hand   <- use (riichiHands.at tk)
-    roundEnds $ RoundTsumo [tp] (L.delete tp players)
-
-roundEnds :: RoundM m => RoundResults -> m RoundResults
-roundEnds results = tell [RoundEnded results] >> return results
-
--- ** Player actions
-
-drawWall :: RoundM m => Hand -> m Hand
-drawWall hand = do
-    unless (canDraw hand) (throwError "Cannot draw from wall")
-    wall <- use riichiWall
-    case wall of
-        (x:xs) -> do riichiWall .= xs
-                     return $ handPick .~ Just x $ hand
-        _ -> throwError "No tiles left"
-
-drawDeadWall :: RoundM m => Hand -> m Hand
-drawDeadWall hand = preuse (riichiWall._Snoc)
-    >>= maybe (throwError "No tiles in wall!") (draw . fst)
-    where
-        draw wall = do
-            unless (hand^.handPublic.handDrawWanpai) (throwError "Cannot draw from wanpai")
-            riichiWall .= wall
-            Just (dt, wanpai) <- preuse (riichiWanpai._Cons)
-            riichiWanpai .= wanpai
-            return $ handPick .~ Just dt $ handPublic.handDrawWanpai .~ False $ hand
-
--- | Set riichiWaitShoutsFrom to players who could shout the discard.
-endTurn :: RoundM m => Tile -> m ()
-endTurn dt = do
-    shouts <- filterCouldShout dt <$> view riichiTurn <*> use riichiHands
-    riichiWaitShoutsFrom .= shouts
-
-filterCouldShout :: Tile -- ^ Tile to shout
-                 -> Kaze -- ^ Whose tile
-                 -> Map Kaze Hand
-                 -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
-filterCouldShout dt np = sortBy (shoutPrecedence np) .
-    concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
-  where flatten (k, xs) = map (k,) xs
-
--- ** Helpers
-
 tellEvent :: RoundM m => GameEvent -> m ()
 tellEvent ev = tell [ev]
 
@@ -226,7 +213,9 @@ publishTurnAction pk ra = tellEvent $ case ra of
     TurnTileDraw b _ -> RoundTurnAction pk (TurnTileDraw b Nothing)
     _                -> RoundTurnAction pk ra
 
--- ** Query info
+----------------------------------------------------------------------------------------
+
+-- * Query info
 
 kazeToPlayer :: RoundM m => Kaze -> m Player
 kazeToPlayer k = do
@@ -241,6 +230,18 @@ playerToKaze p = do
 
 handOf' :: RoundM m => Kaze -> m Hand
 handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
+
+getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
+getWaitingForShouts = do
+    ws <- use riichiWaitShoutsFrom
+    ps <- mapM (kazeToPlayer . fst) ws
+    let res = zipWith (\p (k, s) -> (p, k, s)) ps ws
+        out = map ( \xs@((p,_,_):_) -> RoundPrivateWaitForShout p 30 $ map (^._3) xs) $ groupBy ((==) `on` view _2) res
+                                                               -- ^ TODO hard-coded limit
+    tell out
+    return res
+
+----------------------------------------------------------------------------------------
 
 -- * Functions
 
@@ -276,6 +277,14 @@ nextRound rs = over riichiPublic r . logRound . flip setSecret rs <$> newSecret
                         [] -> [(k, 0)]
                         xs@((k',n):_) | k == k'   -> (k, n + 1) : xs
                                       | otherwise -> (k, n) : xs )
+
+filterCouldShout :: Tile -- ^ Tile to shout
+                 -> Kaze -- ^ Whose tile
+                 -> Map Kaze Hand
+                 -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
+filterCouldShout dt np = sortBy (shoutPrecedence np) .
+    concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
+  where flatten (k, xs) = map (k,) xs
 
 -- ** Client functions
 
