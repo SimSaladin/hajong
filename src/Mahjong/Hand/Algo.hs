@@ -231,6 +231,8 @@ kokushiShanten = Just . (13 -) . length . nub. filter suitedOrTerminal . concatM
   where suitedOrTerminal = liftA2 (||) honor terminal
 chiitoitsuShanten = Just . (6 -) . length . filter isPair
 
+-- Auxilary funtions
+
 isPair, notPairable :: TileGroup -> Bool
 isPair (GroupWait Koutsu _ _)              = True
 isPair (GroupComplete (Mentsu Jantou _ _)) = True
@@ -239,8 +241,6 @@ isPair                      _              = False
 notPairable (GroupComplete _)       = True
 notPairable (GroupWait Shuntsu _ _) = True
 notPairable                       _ = False
-
--- Auxilary funtions
 
 -- | Leftover tiles in the hand.
 leftovers :: Grouping -> [Tile]

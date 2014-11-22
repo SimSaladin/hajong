@@ -41,7 +41,7 @@ import           Mahjong
 ------------------------------------------------------------------------------
 default (Text)
 
--- * Types
+-- * Worker
 
 -- type WorkerState = (TVar (GameState Client), TMVar WorkerInput)
 data WorkerData = WorkerData
@@ -118,16 +118,16 @@ sendGameEvents events = do
     gs <- rview wGame
     public <- filterM (f gs) events
     multicast $ InGameEvents public
-    where
-        f gs e@(RoundPrivateChange p _) = sendPrivate gs p e
-        f gs e@(RoundPrivateWaitForShout p _ _) = sendPrivate gs p e
-        f gs e@(RoundPrivateWaitForTurnAction p _) = sendPrivate gs p e
-        f gs e@(RoundPrivateStarts pg)  = sendPrivate gs (_playerPlayer pg) e
-        f _ _                           = return True
+  where
+    f gs e@(RoundPrivateChange p _) = sendPrivate gs p e
+    f gs e@(RoundPrivateWaitForShout p _ _) = sendPrivate gs p e
+    f gs e@(RoundPrivateWaitForTurnAction p _) = sendPrivate gs p e
+    f gs e@(RoundPrivateStarts pg)  = sendPrivate gs (_playerPlayer pg) e
+    f _ _                           = return True
 
-        sendPrivate gs p e = do
-            maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
-            return False
+    sendPrivate gs p e = do
+        maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
+        return False
 
 ------------------------------------------------------------------------------
 

@@ -176,6 +176,7 @@ dispMentsu : Controls -> Kaze -> Mentsu -> Element
 dispMentsu co k m = case m.from of
    Nothing -> empty -- We display only shouted
    Just s  ->
+         -- | TODO: this can be jantou from ron
       let (a :: b :: xs) = map (dispTile co) s.shoutTo
           t            = rotate (degrees 90) <| toForm <| dispTile co s.shoutTile
           shoutTile    = case xs of

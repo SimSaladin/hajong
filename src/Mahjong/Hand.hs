@@ -20,8 +20,6 @@ import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Algo
 import Mahjong.Tiles
 
-import qualified Debug.Trace as Debug
-
 -- * Hand
 
 data HandPublic = HandPublic
@@ -120,7 +118,7 @@ shoutsOn np t p hand
                 Koutsu  -> [Pon, Ron]
                 Shuntsu -> [Chi, Ron]
         guard $ if s == Ron
-                then Debug.traceShowId $ complete $ Debug.traceShowId
+                then complete
                     ( toMentsu mk t xs : (hand^.handPublic.handOpen), _handConcealed hand L.\\ xs )
                 else mk /= Jantou
         return $ Shout s np t xs

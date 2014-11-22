@@ -13,14 +13,14 @@
 module Mahjong.Tiles where
 
 import Prelude hiding ((<>))
-import Text.PrettyPrint.ANSI.Leijen (Pretty(..), string, (<>))
+import Text.PrettyPrint.ANSI.Leijen (Pretty(..), string, (<>), displayS, renderCompact)
 
 -- * Types
 
 -- | A (japanese) mahjong tile.
 data Tile = Suited TileKind Number Aka
           | Honor Honor
-          deriving (Show, Read, Eq, Ord)
+          deriving (Read, Eq, Ord)
 
 data TileKind = ManTile | PinTile | SouTile | HonorTile
               deriving (Show, Read, Eq, Ord)
@@ -30,7 +30,7 @@ type Aka = Bool
 
 -- | The number of man, pin and sou tiles.
 data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
-            deriving (Show, Read, Eq, Ord, Enum, Bounded)
+            deriving (Read, Eq, Ord, Enum, Bounded)
 
 data Honor = Sangenpai Sangen
            | Kazehai Kaze
@@ -44,6 +44,7 @@ data Kaze = Ton | Nan | Shaa | Pei
 
 -- Instances
 
+-- Tile
 instance IsString Tile where
     fromString [a]     = fromString [a, ' ']
     fromString [k,num] = case k of
@@ -75,15 +76,17 @@ instance Pretty Tile where
                          Nan     -> "S "
                          Shaa    -> "W "
                          Pei     -> "N "
+instance Show Tile where showsPrec _ = displayS . renderCompact . pretty
 
+-- Number
+instance Pretty Number where pretty = string . show . (+ 1) . fromEnum
+instance Show Number where showsPrec _ = displayS . renderCompact . pretty
 instance IsString Number where
-    fromString = toEnum . (\i -> i - 1 :: Int) . fromMaybe (error "Number: no read") . readMay
+    fromString = toEnum . (\i -> i - 1 :: Int) .
+        fromMaybe (error "Number: no read") . readMay
 
-instance Pretty Number where
-    pretty = string . show . (+ 1) . fromEnum
-
-instance Pretty Kaze where
-    pretty = string . show
+-- Kaze
+instance Pretty Kaze where pretty = string . show
 
 -- * Build
 
@@ -127,6 +130,10 @@ suitedSame :: Tile -> Tile -> Bool
 suitedSame (Suited tk _ _) (Suited tk' _ _) = tk == tk'
 suitedSame _ _ = False
 
+honor :: Tile -> Bool
+honor (Honor _) = True
+honor _ = False
+
 sangenpai :: Tile -> Bool
 sangenpai (Honor (Sangenpai _)) = True
 sangenpai _ = False
@@ -137,9 +144,8 @@ kazehai _ = False
 
 terminal :: Tile -> Bool
 terminal t = case tileNumber t of
-    Just Ii -> True
-    Just Chuu -> True
-    _ -> False
+    Just n -> n == minBound || n == maxBound
+    _      -> False
 
 -- | Next or previous kaze. Wraps around.
 nextKaze, prevKaze :: Kaze -> Kaze

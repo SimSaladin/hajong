@@ -11,13 +11,16 @@
 module Prelude (module Prelude, module X) where
 
 ------------------------------------------------------------------------------
-import ClassyPrelude               as X hiding (Index, (<.>), uncons, unsnoc, cons, snoc)
-import Control.Applicative         as X
-import Control.Lens                as X
-import Control.Monad.Error.Class   as X
-import Control.Monad.Reader.Class  as X
-import Control.Monad.State.Class   as X
-import Control.Monad.Writer.Class  as X
+import           ClassyPrelude                as X hiding (Index, (<.>), uncons, unsnoc, cons, snoc)
+import           Control.Applicative          as X
+import           Control.Lens                 as X
+import           Control.Monad.Error.Class    as X
+import           Control.Monad.Reader.Class   as X
+import           Control.Monad.State.Class    as X
+import           Control.Monad.Writer.Class   as X
+import           Control.Monad.Trans.Either   as X
+
+------------------------------------------------------------------------------
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 ------------------------------------------------------------------------------

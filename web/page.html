@@ -16,6 +16,7 @@
     var mainDiv = document.getElementById('game');
     var waitDiv = document.getElementById('wait');
     var game;
+    var ignore = ["turn-changed", "draw", "discard"];
 
     mainDiv.hidden = true;
 
@@ -57,7 +58,11 @@
          var data = JSON.parse(e.data);
          if (data.events) {
             for (i = 0; i < data.events.length; ++ i) {
-               console.log("game", data.events[0].event, data.events[0]);
+               var t = data.events[i];
+               if (ignore.every( function(x){ return (t.event !== x) &&
+               (t.action === undefined || (t.action.type !== x)) } )) {
+                  console.log("game", t.event, t.action ? t.action.type : "", [t]);
+               }
             }
          } else {
             console.log("other ", data);

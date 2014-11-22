@@ -213,6 +213,21 @@ publishTurnAction pk ra = tellEvent $ case ra of
     TurnTileDraw b _ -> RoundTurnAction pk (TurnTileDraw b Nothing)
     _                -> RoundTurnAction pk ra
 
+getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
+getWaitingForShouts = do
+
+    let secs = 15 -- ^ TODO hard-coded limit
+
+    allWaits <- use riichiWaitShoutsFrom
+    players  <- mapM (kazeToPlayer . fst) allWaits
+
+    let res = zipWith (uncurry . (,,)) players allWaits
+        out = map (RoundPrivateWaitForShout <$> (^?!_head._1) <*> pure secs <*> (^..each._3))
+            $ groupBy ((==) `on` view _1) res
+
+    tell out
+    return res
+
 ----------------------------------------------------------------------------------------
 
 -- * Query info
@@ -230,16 +245,6 @@ playerToKaze p = do
 
 handOf' :: RoundM m => Kaze -> m Hand
 handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
-
-getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
-getWaitingForShouts = do
-    ws <- use riichiWaitShoutsFrom
-    ps <- mapM (kazeToPlayer . fst) ws
-    let res = zipWith (\p (k, s) -> (p, k, s)) ps ws
-        out = map ( \xs@((p,_,_):_) -> RoundPrivateWaitForShout p 30 $ map (^._3) xs) $ groupBy ((==) `on` view _2) res
-                                                               -- ^ TODO hard-coded limit
-    tell out
-    return res
 
 ----------------------------------------------------------------------------------------
 
@@ -296,9 +301,9 @@ applyGameEvent ev = case ev of
     RoundTurnBegins p        -> playerPublic.riichiTurn .~ p
     RoundTurnAction p ta     -> applyTurnAction p ta
     RoundTurnShouted p shout ->
-        over (playerPublicHands.at p._Just.handOpen) (|> fromShout shout)
-        . set (playerPublic.riichiTurn) p
-        . set (playerPublicHands.at (shoutedFrom shout)._Just.handDiscards._last._2) (Just p)
+        (playerPublicHands.at p._Just.handOpen %~ (|> fromShout shout)) .
+        (playerPublic.riichiTurn .~ p) .
+        (playerPublicHands.at (shoutedFrom shout)._Just.handDiscards._last._2 .~ Just p)
     RoundHandChanged p hp    -> playerPublicHands.at p._Just .~ hp
     RoundEnded how           -> playerPublic.riichiResults .~ Just how
     RoundPrivateChange _ h   -> playerMyHand .~ h
