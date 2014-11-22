@@ -23,7 +23,9 @@ import qualified Data.Aeson                 as A
 import           System.Log.FastLogger (LoggerSet)
 import           Text.PrettyPrint.ANSI.Leijen (putDoc, pretty)
 
--- * ServerState
+------------------------------------------------------------------------------
+
+-- * Server main
 
 data ServerState = ServerState
                  { _serverConnections :: Map Nick (Client, Maybe Int)
@@ -39,7 +41,6 @@ data Game = Game
           }
 
 data PartedException = PartedException deriving (Show, Typeable)
-
 instance Exception PartedException
 
 -- ** Lenses
@@ -60,48 +61,12 @@ ssVar = _1
 client :: Lens' (TVar ServerState, Client) Client
 client = _2
 
--- ** Functions
+-- ** Utility
 
-buildLounge :: ServerState -> Lounge
-buildLounge = Lounge
-    <$> view (serverLounge.to (mapMonotonic getNick))
-    <*> view (serverGames.to (fmap $ view $ gWorker.wSettings))
+broadcast' :: Event -> ServerState -> IO ()
+broadcast' event ss = forM_ (ss ^. serverLounge) (`unicast` event)
 
--- | Remove from serverLounge
-clientToGame :: Int -> Client -> ServerState -> ServerState
-clientToGame n c = (serverLounge %~ deleteSet c)
-        . (serverConnections.at (getNick c)._Just._2 .~ Just n)
-
-tryAddClient :: Client -> ServerState -> Maybe (ServerState -> ServerState)
-tryAddClient c ss = case ss ^. serverConnections.at nick of
-    -- Completely new client nick, goes to lounge
-    Nothing -> Just $ over serverConnections (insertMap nick (c, Nothing))
-                    . over serverLounge (insertSet c)
-    -- Previously known client, maybe to game
-    Just (sc, sg) | not (isReal sc) -> Just
-        $ set (serverConnections.at nick._Just._1) c
-        . (if isNothing sg then over serverLounge (insertSet c) else id)
-    -- Nick taken by a real client
-    _ -> Nothing
-    where
-        nick = getNick c
-
-putWorker :: Game -> WorkerInput -> ClientWorker ()
-putWorker g = atomically . putTMVar (g^.gWorker.wInput)
-
--- * ClientWorker
-
-newtype ClientWorker a = ClientWorker { unClientWorker :: LoggingT (ReaderT (TVar ServerState, Client) IO) a }
-                         deriving ( Functor, Applicative, Monad, MonadIO
-                                  , MonadReader (TVar ServerState, Client), MonadLogger)
-
-runClientWorker :: TVar ServerState -> Client -> ClientWorker a -> IO a
-runClientWorker ss c m = runReaderT (runStdoutLoggingT (unClientWorker m)) (ss, c)
-
-withAtomic :: (TVar ServerState -> STM a) -> ClientWorker a
-withAtomic f = view ssVar >>= atomically . f
-
--- * Main
+-- ** Entry points
 
 newServer :: LoggerSet -> IO (TVar ServerState)
 newServer = atomically . newTVar . ServerState mempty mempty mempty 0
@@ -124,13 +89,38 @@ serverApp ss_v pending = do
                 $logWarn $ "Received non-event or malformed json first: " <> tshow event
                 unicast c $ Invalid "No JoinServer received. Please identify yourself."
 
--- * ClientWorkers
+------------------------------------------------------------------------------
+
+-- * ClientWorker
+
+newtype ClientWorker a = ClientWorker { unClientWorker :: LoggingT (ReaderT (TVar ServerState, Client) IO) a }
+                         deriving ( Functor, Applicative, Monad, MonadIO
+                                  , MonadReader (TVar ServerState, Client), MonadLogger)
+
+-- ** Utility
+
+withAtomic :: (TVar ServerState -> STM a) -> ClientWorker a
+withAtomic f = view ssVar >>= atomically . f
+
+putWorker :: Game -> WorkerInput -> ClientWorker ()
+putWorker g = atomically . putTMVar (g^.gWorker.wInput)
+
+-- | Send to everyone in lounge.
+broadcast :: Event -> ClientWorker ()
+broadcast event = rview ssVar >>= liftIO . broadcast' event
+
+-- ** Entry points
+
+runClientWorker :: TVar ServerState -> Client -> ClientWorker a -> IO a
+runClientWorker ss c m = runReaderT (runStdoutLoggingT (unClientWorker m)) (ss, c)
 
 -- | After-handshake stuff
 clientWorkerMain :: TVar ServerState -> Client -> IO ()
 clientWorkerMain ss_v c = go connects `finally` go disconnects
   where
     go = runClientWorker ss_v c
+
+-- ** Client care
 
 -- | Execute usual connection rituals with the new connection.
 connects :: ClientWorker ()
@@ -201,13 +191,6 @@ handleEventOf c event = case event of
         unicast c $ Invalid "Event not allowed or not implemented."
         $logWarn $ "Ignored event: " <> tshow event
 
--- | Send to everyone in lounge.
-broadcast :: Event -> ClientWorker ()
-broadcast event = rview ssVar >>= liftIO . broadcast' event
-
-broadcast' :: Event -> ServerState -> IO ()
-broadcast' event ss = forM_ (ss ^. serverLounge) (`unicast` event)
-
 -- ** Games
 
 createGame :: Text -> ClientWorker Int
@@ -267,7 +250,37 @@ handleGameAction action = do
             -> putWorker g (c `WorkerGameAction` action)
         _   -> unicast c $ Invalid "You are not in a game"
 
--- * Debug
+------------------------------------------------------------------------------
+
+-- * Pure functions
+
+buildLounge :: ServerState -> Lounge
+buildLounge = Lounge
+    <$> view (serverLounge.to (mapMonotonic getNick))
+    <*> view (serverGames.to (fmap $ view $ gWorker.wSettings))
+
+-- | Remove from serverLounge
+clientToGame :: Int -> Client -> ServerState -> ServerState
+clientToGame n c = (serverLounge %~ deleteSet c)
+        . (serverConnections.at (getNick c)._Just._2 .~ Just n)
+
+tryAddClient :: Client -> ServerState -> Maybe (ServerState -> ServerState)
+tryAddClient c ss = case ss ^. serverConnections.at nick of
+    -- Completely new client nick, goes to lounge
+    Nothing -> Just $ over serverConnections (insertMap nick (c, Nothing))
+                    . over serverLounge (insertSet c)
+    -- Previously known client, maybe to game
+    Just (sc, sg) | not (isReal sc) -> Just
+        $ set (serverConnections.at nick._Just._1) c
+        . (if isNothing sg then over serverLounge (insertSet c) else id)
+    -- Nick taken by a real client
+    _ -> Nothing
+    where
+        nick = getNick c
+
+------------------------------------------------------------------------------
+
+-- * Debugger
 
 serverDebugger :: TVar ServerState -> IO ()
 serverDebugger ss = go

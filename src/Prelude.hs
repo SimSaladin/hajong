@@ -10,6 +10,7 @@
 ------------------------------------------------------------------------------
 module Prelude (module Prelude, module X) where
 
+------------------------------------------------------------------------------
 import ClassyPrelude               as X hiding (Index, (<.>), uncons, unsnoc, cons, snoc)
 import Control.Applicative         as X
 import Control.Lens                as X
@@ -19,10 +20,15 @@ import Control.Monad.State.Class   as X
 import Control.Monad.Writer.Class  as X
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 
+------------------------------------------------------------------------------
+
 type CanError = MonadError Text
 
 if' :: Bool -> t -> t -> t
 if' cond th el = if cond then th else el
+
+(?) :: Monad m => Maybe a -> e -> EitherT e m a
+mr ? err = maybe (left err) return mr
 
 liftE :: CanError m => Either Text a -> m a
 liftE = either throwError return

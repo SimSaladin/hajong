@@ -28,9 +28,6 @@ import           Data.Aeson.Types (Pair)
 
 ------------------------------------------------------------------------------
 
-(?) :: Monad m => Maybe a -> e -> EitherT e m a
-mr ? err = maybe (left err) return mr
-
 -- * Event
 
 data Event = JoinServer Nick

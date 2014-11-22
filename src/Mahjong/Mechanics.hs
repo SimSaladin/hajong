@@ -9,7 +9,7 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 --
--- The mechanics to play a game of mahjong.
+-- This is the next abstraction above "Mahjong.Round".
 ------------------------------------------------------------------------------
 module Mahjong.Mechanics where
 
@@ -24,32 +24,10 @@ import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 ------------------------------------------------------------------------------
 
--- | "GameState" records all information of a single game.
-data GameState playerID = GameState
-                   { _gamePlayers :: Map Player playerID
-                   , _gameName :: Text
-                   , _gameRound :: Maybe RiichiState -- maybe in running game
-                   } deriving (Show, Read, Functor)
-makeLenses ''GameState
+-- * RoundM'
 
-instance P.Pretty p => P.Pretty (GameState p) where
-    pretty GameState{..} = P.pretty (unpack _gameName) P.<$$>
-                           P.prettyList (Map.elems _gamePlayers) P.<$$>
-                           P.pretty _gameRound
-                            
-
+-- | Concrete instance of "Mahjong.Round.RoundM".
 type RoundM' = RWST RiichiPublic [GameEvent] RiichiSecret (Either Text)
-
-class Eq playerID => IsPlayer playerID where
-    isBot        :: playerID -> Bool
-    playerReady  :: playerID -> Bool
-    playerNick   :: playerID -> Text
-
--- * GameState
-
--- | Create a new GameState with the given label.
-newEmptyGS :: p -> Text -> GameState p
-newEmptyGS defPlayer name = GameState (Map.fromList $ zip fourPlayers $ repeat defPlayer) name Nothing
 
 -- | Execute a round action in the "GameState".
 --
@@ -63,6 +41,44 @@ newEmptyGS defPlayer name = GameState (Map.fromList $ zip fourPlayers $ repeat d
 runRoundM :: RoundM' r -> GameState p -> Either Text (r, RiichiSecret, [GameEvent])
 runRoundM m = maybe (Left "No active round!") run . _gameRound
     where run rs = runRWST m (_riichiPublic rs) (_riichiSecret rs)
+
+------------------------------------------------------------------------------
+
+-- * Players
+
+class Eq playerID => IsPlayer playerID where
+    isBot        :: playerID -> Bool
+    playerReady  :: playerID -> Bool
+    playerNick   :: playerID -> Text
+
+------------------------------------------------------------------------------
+
+-- * GameState
+
+-- | "GameState" records all information of a single game.
+data GameState playerID = GameState
+                   { _gamePlayers :: Map Player playerID
+                   , _gameName :: Text
+                   , _gameRound :: Maybe RiichiState -- maybe in running game
+                   } deriving (Show, Read, Functor)
+
+instance P.Pretty p => P.Pretty (GameState p) where
+    pretty GameState{..} = P.pretty (unpack _gameName) P.<$$>
+                           P.prettyList (Map.elems _gamePlayers) P.<$$>
+                           P.pretty _gameRound
+
+-- | Create a new GameState with the given label.
+newEmptyGS :: p -> Text -> GameState p
+newEmptyGS defPlayer name = GameState (Map.fromList $ zip fourPlayers $ repeat defPlayer) name Nothing
+
+-- ** Lenses
+
+--
+makeLenses ''GameState
+
+------------------------------------------------------------------------------
+
+-- * Rounds
 
 -- | Return an IO action to create the next round if
 --      - it would be first round and all player seats are occupied, or
@@ -87,7 +103,7 @@ maybeBeginGame gs = do
         rs <- newRiichiState (gs^.gamePlayers^..each.to playerNick)
         return $ gameRound .~ Just rs $ gs
 
--- ** Modify
+-- * Modify
 
 -- | Try putting the given client to an empty player seat. Returns Nothing
 -- if the game is already full.
@@ -105,7 +121,7 @@ removeClient client gs = do
     p <- clientToPlayer client gs
     return $ (gamePlayers.at p .~ Nothing) gs
 
--- ** Read
+-- * Query
 
 playerToClient :: GameState p -> Player -> Maybe p
 playerToClient gs p = gs^.gamePlayers.at p

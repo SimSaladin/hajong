@@ -24,6 +24,7 @@ module Hajong.Worker
     , startWorker
     ) where
 
+------------------------------------------------------------------------------
 import           Control.Concurrent
 import           Control.Monad.Trans.Either
 import           Control.Monad.Logger
@@ -32,10 +33,12 @@ import           Data.Maybe (fromJust)
 import           System.Log.FastLogger
 import qualified Data.List as L
 
---------------------------------------------------------------
+------------------------------------------------------------------------------
 import           Hajong.Connections hiding (multicast)
 import qualified Hajong.Connections as Con (multicast)
 import           Mahjong
+
+------------------------------------------------------------------------------
 default (Text)
 
 -- * Types
@@ -60,7 +63,7 @@ newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerData IO) a }
 
 type WCont = Worker ()
 
--- * Lenses
+-- ** Lenses
 
 --
 makeLenses ''WorkerData
@@ -94,6 +97,8 @@ unsafeRoundM = roundM >=> either failed go
     failed e = error $ "unsafeRoundM: unexpected Left: " <> unpack e
     go (a, m) = m >> return a
 
+------------------------------------------------------------------------------
+
 -- * Update state and emit events
 
 -- | Documentation for 'multicast'
@@ -123,6 +128,8 @@ sendGameEvents events = do
         sendPrivate gs p e = do
             maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
             return False
+
+------------------------------------------------------------------------------
 
 -- * Take input
 
@@ -228,6 +235,8 @@ workerRace secs ma b = do
     res <- liftIO $ runWCont s ma `race` threadDelay (secs * 1000000)
     either return (\_ -> return b) res
 
+------------------------------------------------------------------------------
+
 -- * Game flow continuations
 
 -- ** Begin game
@@ -235,9 +244,9 @@ workerRace secs ma b = do
 -- | Begin the game including the first round when all players have joined.
 waitPlayersAndBegin :: WCont
 waitPlayersAndBegin = $logInfo "Waiting for players" >> go
-    where
-        go = rview wGame >>= maybe (takeInput >>= runOtherAction >> go)
-                                     (liftIO >=> beginRound) . maybeNextRound
+  where
+    go = rview wGame >>= maybe (takeInput >>= runOtherAction >> go)
+                               (liftIO >=> beginRound) . maybeNextRound
 
 beginRound :: GameState Client -> WCont
 beginRound gs = do

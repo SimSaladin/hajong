@@ -18,7 +18,9 @@
 [ ] (server) games/worker status query
    * website?
 
-[ ] (game) kokushi musou ron
+[ ] (game) kan täydennys
+[ ] (game) kokushi musou
+[ ] (game) chiitoi
 [ ] (game) ask for new round when enough non-related tiles
 [ ] (game) final scoring and possible next rounds
 [ ] (game, elm, server) tsumo
