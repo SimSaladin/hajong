@@ -20,6 +20,8 @@ import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Algo
 import Mahjong.Tiles
 
+import qualified Debug.Trace as Debug
+
 -- * Hand
 
 data HandPublic = HandPublic
@@ -74,7 +76,7 @@ discard tile hand
     | hand ^. handPick == Just tile = return $ hand & set handPick Nothing . setDiscard
     | hand ^. handPublic.handRiichi = throwError "Cannot change wait in riichi"
     | otherwise = case ys of
-        [] -> throwError "Tile not in hand"
+        [] -> throwError $ "Tile not in hand: " ++ tshow tile
         _ : ys' | hand^.handPublic.handDrawWanpai || canDraw hand -> throwError "You need to draw first"
                 | Just pick <- hand^.handPick -> return
                     $ handPick .~ Nothing $ handConcealed .~ (pick : xs ++ ys') $ setDiscard hand
@@ -118,8 +120,8 @@ shoutsOn np t p hand
                 Koutsu  -> [Pon, Ron]
                 Shuntsu -> [Chi, Ron]
         guard $ if s == Ron
-                then complete ( toMentsu mk t xs : (hand^.handPublic.handOpen)
-                              , _handConcealed hand L.\\ xs )
+                then Debug.traceShowId $ complete $ Debug.traceShowId
+                    ( toMentsu mk t xs : (hand^.handPublic.handOpen), _handConcealed hand L.\\ xs )
                 else mk /= Jantou
         return $ Shout s np t xs
 

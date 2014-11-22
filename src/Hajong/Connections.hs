@@ -294,8 +294,8 @@ instance FromJSON TurnAction where
 
 instance FromJSON Number where
     parseJSON v = do
-        n <- parseJSON v
-        if n < fromEnum (maxBound :: Number) && n > fromEnum (minBound :: Number)
+        n <- parseJSON v <&> id -~ 1
+        if n <= fromEnum (maxBound :: Number) && n >= fromEnum (minBound :: Number)
             then pure (toEnum n)
             else fail "Tile number out of bounds"
 

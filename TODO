@@ -25,5 +25,7 @@
 [ ] (connections) revisit json instances - possibly derive?
 [X] (game) BUG shoutedFrom cannot draw anymore "Cannot draw from wall"
 [ ] (game) BUG shouting multiple: discard player's all other shouts.
+[ ] (game) BUG draw; round changes even if oja is tenpai or no-one is tenpai
+[ ] (game) renchans
 
 [ ] (docs) write json channel spec

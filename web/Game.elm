@@ -280,7 +280,7 @@ processInGameEvent event gs = case event of
    RoundHandChanged {player_kaze, hand} -> setPlayerHand player_kaze hand gs
 
    RoundEnded res ->
-      Util.log (show res) gs -- TODO implement results logic
+      setResults res gs
 
    RoundNick {player_kaze, nick} ->
       setNick player_kaze nick gs
@@ -306,6 +306,9 @@ setNick pk nick gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | players <- Util.listModify pk (\(p, n, _) -> (p, n, nick)) rs.players } }
    Nothing -> gs
 
+setResults res gs = case gs.roundState of
+   Just rs -> { gs | roundState <- Just { rs | results <- Just res } }
+   Nothing -> gs
 -- }}}
 
 -- {{{ Turns ------------------------------------------------------------------
