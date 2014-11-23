@@ -316,29 +316,29 @@ waitForShouts = do
     let waitAll [] = return afterDiscard
         waitAll xs = withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
 
-        passOn xs c = case c `clientToPlayer` gs of
+        withPlayer c xs f = case c `clientToPlayer` gs of
             Nothing -> unicastError c "You are not playing in this game" >> waitAll xs
-            Just p  -> do
-                unicast c (InGamePrivateEvent $ DealPrivateWaitForShout p 0 [])
-                waitAll $ filter (^._1.to (/= p)) xs
+            Just p -> f p
 
-        shoutHandler xs c s = do
+        passOn xs c = withPlayer c xs $ \p -> do
+            unicast c (InGamePrivateEvent $ DealPrivateWaitForShout p 0 [])
+            waitAll $ filter (^._1.to (/= p)) xs
+
+        shoutHandler xs c s = withPlayer c xs $ \p -> do
             mv <- atomically $ tryReadTMVar win_var
-            case c `clientToPlayer` gs of
-                Nothing     -> unicastError c "You are not playing in this game" >> waitAll xs
-                Just p      -> case L.findIndex (\(p',_,s') -> (p',s') == (p,s)) xs of
-                    Nothing -> unicastError c "Incorrect shout" >> waitAll xs
-                    Just i  -> do
-                        let shout@(_,k,_) = xs L.!! i
-                        case mv of
-                            Nothing
-                                | i == 0    -> return $ p `afterShout` s
-                                | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
-                            Just (_,k',s')  -> case shoutPrecedence tk (k, s) (k', s') of
-                                LT             -> waitAll xs
-                                GT | i == 0    -> return $ p `afterShout` s
-                                   | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
-                                EQ             -> $logError "Multiple shouts (ron) not yet implemented" >> waitAll xs
+            case L.findIndex (\(p',_,s') -> (p',s') == (p,s)) xs of
+                Nothing -> unicastError c "Incorrect shout" >> waitAll xs
+                Just i  -> do
+                    let shout@(_,k,_) = xs L.!! i
+                    case mv of
+                        Nothing
+                            | i == 0    -> return $ p `afterShout` s
+                            | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
+                        Just (_,k',s')  -> case shoutPrecedence tk (k, s) (k', s') of
+                            LT             -> waitAll xs
+                            GT | i == 0    -> return $ p `afterShout` s
+                               | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
+                            EQ             -> $logError "Multiple shouts (ron) not yet implemented" >> waitAll xs
 
     -- TODO Configurable timeout
 

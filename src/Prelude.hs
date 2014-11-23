@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Prelude
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
@@ -51,10 +51,11 @@ prettyList' = foldr ((P.<+>) . P.pretty) P.empty
 
 aesonOptions :: Int -> Options
 aesonOptions n = defaultOptions
-    { fieldLabelModifier = unpack . toLower . asText . pack . drop n
-    , sumEncoding        = TwoElemArray
+    { fieldLabelModifier     = unpack . toLower . asText . pack . drop n
+    , constructorTagModifier = unpack . toLower . asText . pack
+    , sumEncoding            = TwoElemArray
     }
 
 aesonOptions' :: Int -> Int -> Options
 aesonOptions' n m = (aesonOptions n)
-    { constructorTagModifier = unpack . toLower . asText . pack . drop m }
+    { constructorTagModifier = constructorTagModifier (aesonOptions n) . drop m }

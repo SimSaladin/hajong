@@ -17,17 +17,24 @@
 [ ] (server) games/worker status query
    * website?
 
-[/] (game) kokushi musou
-[/] (game) chiitoi
-[ ] (game) chankan
-[ ] (game) ask for new round when enough non-related tiles
+[ ] (game) nonstandard hands
+   [/] (game) kokushi musou
+   [/] (game) chiitoi
+   [ ] (game) chankan
+
+[ ] (game) yaku checks
+
 [ ] (game) final scoring and possible next rounds
 [ ] (game, elm, server) tsumo
-[ ] (connections) revisit json instances - possibly derive?
 [X] (game) BUG shoutedFrom cannot draw anymore "Cannot draw from wall"
-[ ] (game) BUG shouting multiple: discard player's all other shouts.
-[ ] (game) BUG draw; round changes even if oja is tenpai or no-one is tenpai
+[x] (game) BUG shouting multiple: discard player's all other shouts.
+[X] (game) BUG draw; round changes even if oja is tenpai or no-one is tenpai
+
 [ ] (game) renchans
+   [ ] honba in scoring
+
 [ ] (game) tochuu ryuukoku
+   [ ] (game) ask for new round when enough non-related tiles
 
 [ ] (docs) write json channel spec
+[x] (connections) revisit json instances - possibly derive?

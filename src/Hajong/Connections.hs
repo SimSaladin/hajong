@@ -110,8 +110,6 @@ instance WS.WebSocketsData Event where
     toLazyByteString   = encode
     fromLazyByteString = fromMaybe (Invalid "Malformed event") . decode
 
--- ToJSON boilerplate - TODO derive us instead? ------------------------------
-
 -- Helpers -------------------------------------------------------------------
 
 atType, atEvent :: Text -> [(Text, A.Value)] -> A.Value

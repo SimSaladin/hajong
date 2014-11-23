@@ -37,7 +37,14 @@ newtype Player = Player Int deriving (Show, Read, Eq, Ord)
 data DealResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                  | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
                  | DealDraw  { dTenpais :: [Player], dNooten :: [Payer] }
+                 | DealAbort { dReason :: AbortiveDraw }
                   deriving (Show, Read, Typeable)
+
+data AbortiveDraw = Unrelated9
+                  | SuufontsuRenta -- ^ All four winds
+                  | SuuchaRiichi -- ^ All players riichi
+                  | SuukanSanra -- ^ Fourth kon declared (or fifth if one player declared all four)
+                  | Sanchahou -- ^ Three players ron
 
 type Winner = (Player, ValuedHand)
 type Payer  = (Player, Points)

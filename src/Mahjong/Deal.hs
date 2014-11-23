@@ -158,6 +158,8 @@ endDraw :: DealM m => m DealResults
 endDraw = do
     hands <- use sHands
     let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
+    if null tenpaiPlayers
+        then 
     res <- DealDraw <$> mapM kazeToPlayer tenpaiPlayers
                     <*> mapM (kazeToPlayer >=> return . (, 1000)) nootenPlayers
     roundEnds res
@@ -182,10 +184,9 @@ toWinner p = do
     return (p, valueHand h rk pk)
 
 tsumoPayers :: Player -> Points -> [Player] -> [Payer]
-tsumoPayers oja points payers
-    | oja `elem` payers = map (, floor $ fromIntegral points / 3) payers
-    | otherwise         = (oja, floor $ fromIntegral points /  2)
-                        : map (, floor $ fromIntegral points / 4) (L.delete oja payers)
+tsumoPayers oja basic payers
+    | oja `elem` payers = map (\p -> (p, basic * if' (p == oja) 2 1)) payers
+    | otherwise         = map (, basic) payers
 
 ----------------------------------------------------------------------------------------
 
@@ -306,11 +307,15 @@ nextDeal deal = case maybeGameResults deal of
 -- | Results are returned if west or higher round has just ended and
 -- someone is winning (over 30000 points).
 maybeGameResults :: Deal -> Maybe GameResults
-maybeGameResults Deal{..} = do
-    guard (_pRound >= Nan)
-    guard (_pPlayers ^? at _pOja._Just._1 == Just Pei)
-    guard (maximumOf (traversed._2) _pPlayers > Just 30000)
-    return . finalPoints $ view _2 <$> _pPlayers
+maybeGameResults d@Deal{..}
+    | minimumOf (traversed._2) _pPlayers < Just 0 = score
+    | otherwise = do
+        guard (_pRound >= Nan)
+        guard (_pPlayers ^? at _pOja._Just._1 == Just Pei)
+        guard (maximumOf (traversed._2) _pPlayers > Just 30000)
+        score
+  where
+    score = return . finalPoints $ view _2 <$> _pPlayers
 
 filterCouldShout :: Tile -- ^ Tile to shout
                  -> Kaze -- ^ Whose tile
