@@ -5,6 +5,7 @@ import GameTypes (..)
 
 import Graphics.Input (..)
 import Maybe (maybe, isNothing)
+import List
 import Array
 
 -- TODO: hard-coded tile widths; some other measures are also hard-coded
@@ -145,17 +146,23 @@ dispPlayerInfo rs k =
 -- {{{ Results
 dispResults : RoundResult -> Form
 dispResults res =
-   let col = case res.endKind of
-               Tsumo -> lightBlue
-               ByRon -> lightGreen
-               Draw  -> lightYellow
+   let (col, view) = case res of
+               DealTsumo {winners, payers} -> (lightBlue,
+                  [ asText "Win: " `beside` asText winners
+                  , asText "Payers: " `beside` asText payers
+                  ])
+               DealRon {winners, payers} -> (lightGreen,
+                  [ asText "Win: " `beside` asText winners
+                  , asText "Payers: " `beside` asText payers
+                  ])
+               DealDraw {tenpai, nooten} -> (lightYellow,
+                  [ asText "Tenpai players: " `beside` asText tenpai
+                  , asText "Nooten: " `beside` asText nooten
+                  ])
    in toForm
          <| color col
          <| container 700 300 middle
-         <| flow down
-      [ asText "Win: " `beside` asText res.winners
-      , asText "Payers: " `beside` asText res.payers
-      ]
+         <| flow down view
 -- }}}
 
 -- {{{ Hands --------------------------------------------------------------
@@ -242,7 +249,8 @@ nocareButton w str = case w of
 findFourTiles : RoundState -> Maybe Tile
 findFourTiles rs = counted 4 <| rs.myhand.concealed ++ maybe [] identity rs.myhand.pick
 
-findShouminkan h = filter (\x -> x.mentsuKind == Koutsu) h.called
+findShouminkan h = filter (\x -> x.mentsuKind == Koutsu &&
+   (List.any (\t -> t == x.tile) h.concealed || h.pick == Just x.tile)) h.called
    |> map .tile
 
 counted : Int -> [Tile] -> Maybe Tile
