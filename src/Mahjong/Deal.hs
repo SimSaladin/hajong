@@ -344,7 +344,7 @@ applyGameEvent ev = case ev of
     DealTurnShouted p shout ->
         (playerPublicHands.at p._Just.handCalled %~ (|> fromShout shout)) .
         (playerPublic.pTurn .~ p) .
-        (playerPublicHands.at (shoutedFrom shout)._Just.handDiscards._last._2 .~ Just p)
+        (playerPublicHands.at (shoutFrom shout)._Just.handDiscards._last._2 .~ Just p)
     DealHandChanged p hp    -> playerPublicHands.at p._Just .~ hp
     DealEnded how           -> playerPublic.pResults .~ Just how
     DealPrivateChange _ h   -> playerMyHand .~ h

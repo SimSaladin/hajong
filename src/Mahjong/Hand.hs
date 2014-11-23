@@ -180,7 +180,7 @@ meldTo shout mentsu hand
              $ hand
     | otherwise = throwError "meldTo: Tiles not available"
   where
-    ih = shoutedTo shout
+    ih = shoutTo shout
 
 -- | Transfer the discard from the hand to a mentsu specified by the shout.
 shoutFromHand :: CanError m => Kaze -> Shout -> Hand -> m (Mentsu, Hand)
@@ -189,7 +189,7 @@ shoutFromHand sk shout hand =
         Nothing          -> throwError "Player hasn't discarded anything"
         Just (_, Just _) -> throwError "The discard has already been claimed"
         Just (t, _)
-            | shoutedTile shout /= t -> throwError "The discard is not the shouted tile"
+            | shoutTile shout /= t -> throwError "The discard is not the shouted tile"
             | otherwise              -> return
                 (fromShout shout, hand & handPublic.handDiscards._last .~ (t, Just sk))
 

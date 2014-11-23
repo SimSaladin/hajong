@@ -1,7 +1,6 @@
 [x] (web) in-game actions
-   [x] discard
-   [x] shout
    [x] ankan
+   [/] minshoukan
 [/] (web) in-game view
    [x] player in turn -indicator
    [x] mentsu (needs correct from indicator)
@@ -18,7 +17,6 @@
 [ ] (server) games/worker status query
    * website?
 
-[x] (game) kan täydennys
 [/] (game) kokushi musou
 [/] (game) chiitoi
 [ ] (game) chankan

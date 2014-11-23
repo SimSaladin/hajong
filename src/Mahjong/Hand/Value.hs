@@ -43,7 +43,7 @@ getValue vi = Value yaku fu han val name
     yaku        = getYaku vi
     fu          = getFu yaku vi
     han         = (each.to yakuHan) `sumOf` yaku
-    (val, name) = han `valued` fu
+    (val, name) = valued yaku han fu
 
 getYaku :: ValueInfo -> [Yaku]
 getYaku vi = mapMaybe (runYakuCheck vi) allStandard
@@ -86,5 +86,20 @@ mentsuValue (Mentsu mk t ms) = product [gokind mk, gotile, goshout ms]
 
 -- ** Meta
 
-valued :: Han -> Fu -> (Points, Maybe Text)
-valued yaku fu = undefined
+-- | Calculate basic points.
+valued :: [Yaku] -> Han -> Fu -> (Points, Maybe Text)
+valued yaku han fu
+    | han <= 4  = if' (basic >= 2000) mangan (basic, Nothing)
+    | han == 5  = mangan
+    | han <= 7  = haneman
+    | han <= 10 = baiman
+    | han <= 12 = sanbaiman
+    | anyOf (each.to yakuHan) (== 13) yaku = yakuman
+    | otherwise = kazoeYakuman
+  where basic        = fu * (2 ^ (2 + han))
+        mangan       = (2000, Just "Mangan")
+        haneman      = (3000, Just "Haneman")
+        baiman       = (4000, Just "Baiman")
+        sanbaiman    = (6000, Just "Sanbaiman")
+        kazoeYakuman = (8000, Just "Kazoe-yakuman")
+        yakuman      = (8000, Just "Yakuman")

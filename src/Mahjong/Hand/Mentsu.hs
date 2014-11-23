@@ -56,9 +56,9 @@ instance Pretty [Mentsu] where
 -- a mentsu.
 data Shout = Shout
            { shoutKind :: ShoutKind
-           , shoutedFrom :: Kaze
-           , shoutedTile :: Tile
-           , shoutedTo :: [Tile]
+           , shoutFrom :: Kaze
+           , shoutTile :: Tile
+           , shoutTo :: [Tile]
            } deriving (Show, Read, Eq, Ord)
 
 -- | Note: Ord instance is used to determine calling order.
@@ -101,13 +101,13 @@ jantou  = Mentsu Jantou `flip` Nothing
 
 fromShout :: Shout -> Mentsu
 fromShout s@Shout{..} = setShout $ case shoutKind of
-    Pon -> koutsu shoutedTile
-    Kan -> kantsu shoutedTile
-    Chi -> shuntsu (minimumEx $ shoutedTile : shoutedTo)
+    Pon -> koutsu shoutTile
+    Kan -> kantsu shoutTile
+    Chi -> shuntsu (minimumEx $ shoutTile : shoutTo)
     Ron
-        | [_]   <- shoutedTo         -> jantou shoutedTile
-        | [x,y] <- shoutedTo, x == y -> koutsu shoutedTile
-        | Just m <- shuntsuWith (shoutedTile : shoutedTo) -> m
+        | [_]   <- shoutTo         -> jantou shoutTile
+        | [x,y] <- shoutTo, x == y -> koutsu shoutTile
+        | Just m <- shuntsuWith (shoutTile : shoutTo) -> m
         | otherwise -> error "fromShout: malformed shout"
     where
         setShout (Mentsu k t _) = Mentsu k t (Just s)
