@@ -177,6 +177,7 @@ meldTo shout mentsu hand
     | hand^.handConcealed.to (\xs -> length ih + length (xs L.\\ ih) == length xs)
     = return $ handPublic.handOpen %~ (|> mentsu)
              $ handConcealed %~ (L.\\ ih)
+             $ if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
              $ hand
     | otherwise = throwError "meldTo: Tiles not available"
   where
