@@ -84,7 +84,7 @@ advanceWithShout shout sp = do
     if shoutKind shout == Ron
         then do
             win <- toWinner sp
-            Just <$> roundEnds (DealRon [win] [(tp, win^._2.vhValue.vaValue)])
+            Just <$> dealEnds (DealRon [win] [(tp, win^._2.vhValue.vaValue)])
         else startTurn sk >> return Nothing
 
 -- ** Actions
@@ -159,10 +159,11 @@ endDraw = do
     hands <- use sHands
     let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
     if null tenpaiPlayers
-        then 
-    res <- DealDraw <$> mapM kazeToPlayer tenpaiPlayers
-                    <*> mapM (kazeToPlayer >=> return . (, 1000)) nootenPlayers
-    roundEnds res
+        then dealEnds $ DealDraw [] []
+        else do
+            res <- DealDraw <$> mapM kazeToPlayer tenpaiPlayers
+                            <*> mapM (kazeToPlayer >=> return . (, 1000)) nootenPlayers
+            dealEnds res
 
 endTsumo :: DealM m => m DealResults
 endTsumo = do
@@ -171,10 +172,10 @@ endTsumo = do
     tp      <- kazeToPlayer tk
     oja     <- view pOja
     win     <- toWinner tp
-    roundEnds $ DealTsumo [win] (tsumoPayers oja (win^._2.vhValue.vaValue) $ L.delete tp players)
+    dealEnds $ DealTsumo [win] (tsumoPayers oja (win^._2.vhValue.vaValue) $ L.delete tp players)
 
-roundEnds :: DealM m => DealResults -> m DealResults
-roundEnds results = tell [DealEnded results] >> return results
+dealEnds :: DealM m => DealResults -> m DealResults
+dealEnds results = tell [DealEnded results] >> return results
 
 toWinner :: DealM m => Player -> m Winner
 toWinner p = do

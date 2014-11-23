@@ -1,6 +1,7 @@
 [x] (web) in-game actions
    [x] ankan
    [/] minshoukan
+   [ ] (game, elm) riichi
 [/] (web) in-game view
    [x] player in turn -indicator
    [x] mentsu (needs correct from indicator)
@@ -33,8 +34,12 @@
 [ ] (game) renchans
    [ ] honba in scoring
 
+[ ] (game) dora count
+
 [ ] (game) tochuu ryuukoku
    [ ] (game) ask for new round when enough non-related tiles
 
 [ ] (docs) write json channel spec
 [x] (connections) revisit json instances - possibly derive?
+
+[ ] (worker) pause

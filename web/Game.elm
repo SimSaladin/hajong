@@ -148,9 +148,9 @@ dispResults : RoundResult -> Form
 dispResults res =
    let (col, view) = case res of
                DealTsumo {winners, payers} -> (lightBlue,
-                  [ asText "Win: " `beside` asText winners
-                  , asText "Payers: " `beside` asText payers
-                  ])
+                  [ asText "Tsumo! " ]
+                  ++ [flow down <| map dispWinner winners]
+                  ++ [ asText "Payers: " `beside` asText payers ])
                DealRon {winners, payers} -> (lightGreen,
                   [ asText "Win: " `beside` asText winners
                   , asText "Payers: " `beside` asText payers
@@ -163,6 +163,23 @@ dispResults res =
          <| color col
          <| container 700 300 middle
          <| flow down view
+
+dispWinner : Winner -> Element
+dispWinner {player, valuehand} = flow down <|
+   [ asText player, dispValued valuehand ]
+
+dispValued : Valued -> Element
+dispValued {mentsu, tiles, value} = flow right
+   (map dispTile tiles ++ map (dispMentsu Ton) mentsu) -- TODO get player ton
+   `above` dispHandValue value
+
+dispHandValue : HandValue -> Element
+dispHandValue {yaku, fu, han, points, named} = flow right
+   [ asText han, asText " Han, ", asText fu, asText " Fu." ]
+   `above` flow down (map dispYaku yaku)
+
+dispYaku : Yaku -> Element
+dispYaku {han, name} = asText name `beside` asText " " `beside` asText han 
 -- }}}
 
 -- {{{ Hands --------------------------------------------------------------
@@ -171,7 +188,7 @@ dispHand k co hand = flow right
    , spacer 10 10
    , maybe empty (dispTileClickable co >> color lightGreen) hand.pick
    , spacer 10 10
-   , flow right <| map (dispMentsu co k) hand.called
+   , flow right <| map (dispMentsu k) hand.called
    ]
 
 dispHandDiscards co h =
@@ -179,18 +196,18 @@ dispHandDiscards co h =
    <| flow down
    <| map (flow right)
    <| Util.groupInto 6
-   <| map (dispTile co << fst)
+   <| map (dispTile << fst)
    <| filter (snd >> isNothing) h.discards
 
-dispPublicMentsu co k h = flow right <| map (dispMentsu co k) h.called
+dispPublicMentsu co k h = flow right <| map (dispMentsu k) h.called
 
-dispMentsu : Controls -> Kaze -> Mentsu -> Element
-dispMentsu co k m = case m.from of
+dispMentsu : Kaze -> Mentsu -> Element
+dispMentsu k m = case m.from of
    Nothing -> empty -- We display only shouted
    Just s  ->
          -- | TODO: this can be jantou from ron
-      let (a :: b :: xs) = map (dispTile co) s.shoutTo
-          t            = rotate (degrees 90) <| toForm <| dispTile co s.shoutTile
+      let (a :: b :: xs) = map dispTile s.shoutTo
+          t            = rotate (degrees 90) <| toForm <| dispTile s.shoutTile
           shoutTile    = case xs of
              [] -> collage t_h t_w [t]
              _  -> collage t_h (2*t_w) [moveY (t_w / 2) t, moveY (-t_w / 2) t]
@@ -201,18 +218,17 @@ dispMentsu co k m = case m.from of
 -- }}}
 
 -- {{{ Tiles -----------------------------------------------------------------------
-dispTile : Controls -> Tile -> Element
-dispTile co tile = container (t_w + 4) (t_h + 4) middle
+dispTile : Tile -> Element
+dispTile tile = container (t_w + 4) (t_h + 4) middle
    <| hoverable discardHover.handle (\h -> if h then Just tile else Nothing)
-   <| color (if co.hoveredTile == Just tile then blue else lightBlue)
    <| size t_w t_h
    <| tileImage tile
 
 dispWanpai : Controls -> RoundState -> Element
-dispWanpai co = .dora >> map (dispTile co) >> flow right
+dispWanpai co = .dora >> map dispTile >> flow right
 
 dispTileClickable : Controls -> Tile -> Element
-dispTileClickable co tile = dispTile co tile |> clickable discard.handle (Just tile)
+dispTileClickable co tile = dispTile tile |> clickable discard.handle (Just tile)
 
 tileImage tile =
    let (row, col) = case tile of

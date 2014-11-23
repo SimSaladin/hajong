@@ -45,6 +45,7 @@ data AbortiveDraw = Unrelated9
                   | SuuchaRiichi -- ^ All players riichi
                   | SuukanSanra -- ^ Fourth kon declared (or fifth if one player declared all four)
                   | Sanchahou -- ^ Three players ron
+                  deriving (Show, Read, Typeable)
 
 type Winner = (Player, ValuedHand)
 type Payer  = (Player, Points)

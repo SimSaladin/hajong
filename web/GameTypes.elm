@@ -55,7 +55,7 @@ type Winner = { player : Player, valuehand : Valued }
 type Payer  = { player : Player, points : Points }
 
 type Points = Int
-type Yaku = { han : Int, naem : String }
+type Yaku = { han : Int, name : String }
 type Fu = Int
 type Han = Int
 

@@ -355,7 +355,7 @@ waitForShouts = do
 -- | The round ended.
 endDeal :: DealResults -> WCont
 endDeal results = do
-    $logInfo $ "Round ended (" ++ tshow results ++ ")"
+    $logInfo $ "Deal ended (" ++ tshow results ++ ")"
     let secs = 15 -- TODO Configurable
     liftIO $ threadDelay (secs * 1000000)
     g <- rview wGame

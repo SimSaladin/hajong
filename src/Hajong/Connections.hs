@@ -213,6 +213,7 @@ $(deriveToJSON (aesonOptions' 1 4) ''DealResults)
 $(deriveToJSON (aesonOptions 4) ''Yaku)
 $(deriveToJSON (aesonOptions 3) ''Value)
 $(deriveToJSON (aesonOptions 3) ''ValuedHand)
+$(deriveToJSON (aesonOptions 0) ''AbortiveDraw)
 
 -- FromJSON
 
