@@ -26,7 +26,6 @@ module Hajong.Worker
 
 ------------------------------------------------------------------------------
 import           Control.Concurrent
-import           Control.Monad.Trans.Either
 import           Control.Monad.Logger
 import           Control.Concurrent.Async
 import           Data.Maybe (fromJust)
@@ -85,13 +84,13 @@ runWCont st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
     where
         logger loc src level = pushLogStr (st^.wLogger) . defaultLogStr loc src level
 
-roundM :: RoundM' a -> Worker (Either Text (a, Worker ()))
+roundM :: RoundM a -> Worker (Either Text (a, Worker ()))
 roundM ma = liftM (fmap tores . runRoundM ma) $ rview wGame
     where
         tores (res, secret, events) =
             (res, updateState secret events >> sendGameEvents events)
 
-unsafeRoundM :: RoundM' a -> Worker a
+unsafeRoundM :: RoundM a -> Worker a
 unsafeRoundM = roundM >=> either failed go
   where
     failed e = error $ "unsafeRoundM: unexpected Left: " <> unpack e
@@ -106,11 +105,9 @@ multicast :: Event -> Worker ()
 multicast ev = rview wGame >>= (`Con.multicast` ev)
 
 -- | The game state has changed.
-updateState :: RiichiSecret -> [GameEvent] -> Worker ()
-updateState secret events = rmodify wGame $
-    gameRound._Just %~
-        ( (riichiSecret .~ secret)
-        . (riichiPublic %~ applyGameEvents' events) )
+updateState :: Deal -> [GameEvent] -> Worker ()
+updateState deal events = rmodify wGame $
+    gameDeal._Just .~ applyGameEvents' events deal
 
 -- | Hide sensitive info per player
 sendGameEvents :: [GameEvent] -> Worker ()
@@ -119,11 +116,11 @@ sendGameEvents events = do
     public <- filterM (f gs) events
     multicast $ InGameEvents public
   where
-    f gs e@(RoundPrivateChange p _) = sendPrivate gs p e
-    f gs e@(RoundPrivateWaitForShout p _ _) = sendPrivate gs p e
-    f gs e@(RoundPrivateWaitForTurnAction p _) = sendPrivate gs p e
-    f gs e@(RoundPrivateStarts pg)  = sendPrivate gs (_playerPlayer pg) e
-    f _ _                           = return True
+    f gs e@(DealPrivateChange p _)            = sendPrivate gs p e
+    f gs e@(DealPrivateWaitForShout p _ _)    = sendPrivate gs p e
+    f gs e@(DealPrivateWaitForTurnAction p _) = sendPrivate gs p e
+    f gs e@(DealPrivateStarts pg)             = sendPrivate gs (_playerPlayer pg) e
+    f _ _                                     = return True
 
     sendPrivate gs p e = do
         maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
@@ -181,7 +178,7 @@ runOtherAction wi = case wi of
             return gs'
 
         clientEither client e_gs $ \gs -> do
-            when (gs^.gameRound.to isJust) $ do
+            when (gs^.gameDeal.to isJust) $ do
                 let p = fromJust $ clientToPlayer client gs
                 unsafeRoundM $ updatePlayerNick p (getNick client)
                 unsafeRoundM $ tellPlayerState p
@@ -225,7 +222,7 @@ workerProcessTurnAction ta c = do
                         TurnAnkan _         -> turnActionOrTimeout
                         TurnTileDiscard _ _ -> waitForShouts
                         TurnTsumo
-                            | Just roundRes <- rr -> endRound roundRes
+                            | Just roundRes <- rr -> endDeal roundRes
                             | otherwise           -> $logError "TurnTsumo went through but results were Nothing"
 
 -- | "workerRace n ma b" races between "ma" and "threadDelay n" (return b)
@@ -246,13 +243,13 @@ waitPlayersAndBegin :: WCont
 waitPlayersAndBegin = $logInfo "Waiting for players" >> go
   where
     go = rview wGame >>= maybe (takeInput >>= runOtherAction >> go)
-                               (liftIO >=> beginRound) . maybeNextRound
+                               (liftIO >=> beginDeal) . maybeBeginGame
 
-beginRound :: GameState Client -> WCont
-beginRound gs = do
+beginDeal :: GameState Client -> WCont
+beginDeal gs = do
     void $ rswap wGame gs
     $logInfo "Round begins"
-    unsafeRoundM startRound >> unsafeRoundM autoDraw
+    unsafeRoundM startDeal >> unsafeRoundM autoDraw
     turnActionOrTimeout
 
 -- ** Middle game
@@ -276,7 +273,7 @@ turnActionOrTimeout = do
 -- | Advance turn to the next player. After a discard by previous player.
 afterDiscard :: WCont
 afterDiscard = unsafeRoundM advanceAfterDiscard
-    >>= maybe (unsafeRoundM autoDraw >> turnActionOrTimeout) endRound
+    >>= maybe (unsafeRoundM autoDraw >> turnActionOrTimeout) endDeal
 
 afterShout :: Player -> Shout -> WCont
 afterShout pp sh = do
@@ -285,7 +282,7 @@ afterShout pp sh = do
     let noEnd = do when (shoutKind sh == Kan) $ unsafeRoundM autoDrawWanpai
                    turnActionOrTimeout
 
-    unsafeRoundM (advanceWithShout sh pp) >>= maybe noEnd endRound
+    unsafeRoundM (advanceWithShout sh pp) >>= maybe noEnd endDeal
 
 -- | After a discard, there are three possible branchings:
 --
@@ -302,7 +299,7 @@ waitForShouts = do
     win_var   <- liftIO newEmptyTMVarIO -- :: (Player, Kaze, Shout)
     shoutable <- unsafeRoundM getWaitingForShouts
 
-    let tk = gs^?!gameRound._Just.riichiPublic.riichiTurn
+    let tk = gs^?!gameDeal._Just.pTurn
 
     unless (null shoutable) $
         $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")
@@ -321,7 +318,7 @@ waitForShouts = do
         passOn xs c = case c `clientToPlayer` gs of
             Nothing -> unicastError c "You are not playing in this game" >> waitAll xs
             Just p  -> do
-                unicast c (InGamePrivateEvent $ RoundPrivateWaitForShout p 0 [])
+                unicast c (InGamePrivateEvent $ DealPrivateWaitForShout p 0 [])
                 waitAll $ filter (^._1.to (/= p)) xs
 
         shoutHandler xs c s = do
@@ -355,13 +352,15 @@ waitForShouts = do
 -- ** End game
 
 -- | The round ended.
-endRound :: RoundResults -> WCont
-endRound results = do
+endDeal :: DealResults -> WCont
+endDeal results = do
     $logInfo $ "Round ended (" ++ tshow results ++ ")"
-    let secs = 15
+    let secs = 15 -- TODO Configurable
     liftIO $ threadDelay (secs * 1000000)
-    maybe endGame (liftIO >=> beginRound) . maybeNextRound =<< rview wGame
+    g <- rview wGame
+    liftIO (nextDeal (g^?!gameDeal._Just))
+        >>= either endGame (beginDeal . ($ g) . set gameDeal . Just)
 
-endGame :: WCont
-endGame = $logInfo "Game ended, stopping worker."
+endGame :: GameResults -> WCont
+endGame res = $logInfo "Game ended, stopping worker."
     -- TODO: Inform the main server process?

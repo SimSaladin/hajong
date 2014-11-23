@@ -258,7 +258,7 @@ lastDiscard = (>>= riichiLastDiscard) `liftM` rview clientGame
 
 riichiLastDiscard :: GamePlayer -> Maybe (Player, (Tile, UTCTime))
 riichiLastDiscard = do
-    pl <- view $ playerPublic.riichiTurn
+    pl <- view $ playerPublic.pTurn
     mdt <- preview $ playerPublicHands.at pl._Just.handTurnDiscard
     return $ (pl,) <$> join mdt
 

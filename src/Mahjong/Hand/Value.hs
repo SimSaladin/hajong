@@ -14,21 +14,46 @@
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Value where
 
-import Mahjong.Yaku
-import Mahjong.Hand
+import Mahjong.Hand.Yaku
 import Mahjong.Hand.Mentsu
 import Mahjong.Tiles
 
+-- * Hand value
+
+type Fu     = Int
+type Han    = Int
+type Points = Int
+
+-- | Hand value
+data Value = Value
+    { _vaYaku  :: [Yaku]
+    , _vaFu    :: Fu
+    , _vaHan   :: Han
+    , _vaValue :: Int
+    , _vaNamed :: Maybe Text
+    } deriving (Show, Read)
+
+makeLenses ''Value
+
+-- ** Calculating
+
 getValue :: ValueInfo -> Value
-getValue = Value <$> getYaku <*> (*10) . fst . (`divMod` 10) . getFu
+getValue vi = Value yaku fu han val name
+  where
+    yaku        = getYaku vi
+    fu          = getFu yaku vi
+    han         = (each.to yakuHan) `sumOf` yaku
+    (val, name) = han `valued` fu
 
 getYaku :: ValueInfo -> [Yaku]
 getYaku vi = mapMaybe (runYakuCheck vi) allStandard
 
--- | Calculate fu points. Not rounded.
-getFu :: ValueInfo -> Fu
-getFu = (+) <$> sum . map mentsuValue . vMentsu
-            <*> waitValue
+-- | Calculate fu points.
+getFu :: [Yaku] -> ValueInfo -> Fu
+getFu ys
+  | any (\y -> yakuName y == "Chiitoitsu") ys = const 25
+  | otherwise = rounded . liftA2 (+) (sum . map mentsuValue . vMentsu) waitValue
+    where rounded = (* 10) . fst . (`divMod` 10)
 
 waitValue :: ValueInfo -> Fu
 waitValue = go <$> vWinWith <*> map mentsuTiles . filter (not . mentsuShouted) . vMentsu
@@ -58,3 +83,8 @@ mentsuValue (Mentsu mk t ms) = product [gokind mk, gotile, goshout ms]
 
         goshout Nothing  = 2
         goshout (Just _) = 1
+
+-- ** Meta
+
+valued :: Han -> Fu -> (Points, Maybe Text)
+valued yaku fu = undefined

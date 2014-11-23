@@ -31,18 +31,18 @@ library
                      , Hajong.Worker
                      , Hajong.Connections
                      , Mahjong
-                     , Mahjong.Tiles
-                     , Mahjong.Round
-                     , Mahjong.State
-                     , Mahjong.Mechanics
+                     , Mahjong.Deal
                      , Mahjong.Hand
-                     , Mahjong.Hand.Mentsu
-                     , Mahjong.Hand.Value
                      , Mahjong.Hand.Algo
                      , Mahjong.Hand.Algo.WaitTree
-                     , Mahjong.Yaku
-                     , Mahjong.Yaku.Builder
-                     , Mahjong.Yaku.Standard
+                     , Mahjong.Hand.Mentsu
+                     , Mahjong.Hand.Value
+                     , Mahjong.Hand.Yaku
+                     , Mahjong.Hand.Yaku.Builder
+                     , Mahjong.Hand.Yaku.Standard
+                     , Mahjong.Round
+                     , Mahjong.State
+                     , Mahjong.Tiles
                      -- , Hajong.Client.CLI
                      -- , Hajong.Client.PrettyPrint
 

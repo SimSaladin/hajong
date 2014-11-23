@@ -1,335 +1,117 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
--- |
--- Module         : Mahjong.Round
+-- | 
+-- Module         : Hajong.Game.Mechanics
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
+--
+-- This is the next abstraction above "Mahjong.Round".
 ------------------------------------------------------------------------------
 module Mahjong.Round where
 
 ------------------------------------------------------------------------------
-import           Mahjong.Tiles
-import           Mahjong.Hand
-import           Mahjong.Hand.Algo (tenpai)
-import           Mahjong.Hand.Mentsu
+-- import           Mahjong.Deal
 import           Mahjong.State
 
 ------------------------------------------------------------------------------
+import           Control.Monad.RWS
 import qualified Data.Map as Map
-import qualified Data.List as L (delete)
-import           Data.Maybe (fromJust)
+import qualified Text.PrettyPrint.ANSI.Leijen as P
 
-import qualified Debug.Trace as Debug
+------------------------------------------------------------------------------
 
--- | Context of game and deal flow.
+-- * GameState
+
+-- | "GameState" records all information of a single game.
+data GameState playerID = GameState
+                   { _gamePlayers :: Map Player playerID
+                   , _gameName    :: Text
+                   , _gameDeal    :: Maybe Deal -- maybe in running game
+                   } deriving (Show, Read, Functor)
+
+instance P.Pretty p => P.Pretty (GameState p) where
+    pretty GameState{..} = P.pretty (unpack _gameName) P.<$$>
+                           P.prettyList (Map.elems _gamePlayers) P.<$$>
+                           P.pretty _gameDeal
+
+-- | Create a new GameState with the given label.
+newEmptyGS :: p -> Text -> GameState p
+newEmptyGS defPlayer name = GameState (Map.fromList $ zip fourPlayers $ repeat defPlayer) name Nothing
+
+-- ** Lenses
+
 --
--- Note that RiichiSecret is freely modifiable as a state, but
--- @RiichiPublic@ is read-only. Modifications to the public part must
--- be encoded in RoundEvents. This way it is trivial to keep clients'
--- public states in sync with minimum bandwidth.
-type RoundM m =
-    ( MonadReader RiichiPublic m
-    , MonadState RiichiSecret m
-    , MonadWriter [GameEvent] m
-    , MonadError Text m
-    , Functor m
-    , Applicative m
-    , Monad m
-    )
+makeLenses ''GameState
 
-----------------------------------------------------------------------------------------
+------------------------------------------------------------------------------
 
--- * Logic
+-- * RoundM
 
-startRound :: RoundM m => m ()
-startRound = do
-    view riichiPlayers >>= imapM_ (\p v -> buildPlayerState p v >>= tellEvent . RoundPrivateStarts)
-    view riichiTurn >>= startTurn
+-- | Concrete instance of "Mahjong.Round.RoundM".
+type RoundM = RWST Deal [GameEvent] Deal (Either Text)
 
-turnWaiting :: RoundM m => Int -> m ()
-turnWaiting n = do
-    tp <- view riichiTurn >>= kazeToPlayer
-    tellEvent $ RoundPrivateWaitForTurnAction tp n
-
-startTurn :: RoundM m => Kaze -> m ()
-startTurn = tellEvent . RoundTurnBegins
-
-advanceTurn :: RoundM m => m ()
-advanceTurn = startTurn . nextKaze =<< view riichiTurn
-
--- | If win(s) were declared, wall was exhausted or four kans were declared
--- (and TODO declarer is not in the yakuman tenpai): return "RoundResults".
+-- | Execute a round action in the "GameState".
 --
--- Otherwise the turn is passed to next player as if the player in turn
--- discarded previously.
-advanceAfterDiscard :: RoundM m => m (Maybe RoundResults)
-advanceAfterDiscard = do
-    tilesLeft <- view riichiWallTilesLeft
-    dora      <- view riichiDora
-    case () of
-        _ | tilesLeft == 0 || length dora == 5 -> Just <$> endDraw
-          | otherwise                          -> advanceTurn >> return Nothing
+-- Succesfull return value contains the value from the run "RoundM" action,
+-- arbitrarily modified "RiichiSecret" and public changes encoded in
+-- "GameEvents".
+--
+-- RoundM-actions do not explicitly modify the public state (RiichiPublic),
+-- so **it is important you apply the changes implied by the events on the
+-- state!** Haskell clients may use "@applyRoundEvents@".
+runRoundM :: RoundM r -> GameState p -> Either Text (r, Deal, [GameEvent])
+runRoundM m = maybe (Left "No active round!") run . _gameDeal
+    where run rs = runRWST m rs rs
 
--- | @advanceWithShout shout shouter@
-advanceWithShout :: RoundM m => Shout -> Player -> m (Maybe RoundResults)
-advanceWithShout shout sp = do
-    sk <- playerToKaze sp
-    tk <- view riichiTurn
-    tp <- kazeToPlayer tk
-    (m, hand) <- shoutFromHand sk shout =<< handOf' tk
-    updateHand tk hand
-    handOf' sk >>= meldTo shout m >>= updateHand sk
-    tellEvent $ RoundTurnShouted sk shout
-    if shoutKind shout == Ron
-        then Just <$> roundEnds (RoundRon [sp] [tp])
-        else startTurn sk >> return Nothing
+------------------------------------------------------------------------------
 
--- ** Actions
+-- * Players
 
--- *** Run
+class Eq playerID => IsPlayer playerID where
+    isBot        :: playerID -> Bool
+    playerReady  :: playerID -> Bool
+    playerNick   :: playerID -> Text
 
--- | Attempt to run a @TurnAction@ as the given player. Fails if it is not
--- his turn or the action would be invalid.
-runTurn :: RoundM m => Player -> TurnAction -> m (Maybe RoundResults)
-runTurn tp ta = flip runTurn' ta =<< playerToKaze tp
+------------------------------------------------------------------------------
 
--- | Like 'runTurn' but takes a kaze.
-runTurn' :: RoundM m => Kaze -> TurnAction -> m (Maybe RoundResults)
-runTurn' pk ta = do
-    view riichiTurn >>= (`when` throwError "Not your turn") . (/= pk)
-    publishTurnAction pk ta
-    handOf' pk >>= handAction >>= updateHand pk
-    if ta == TurnTsumo then Just <$> endTsumo else return Nothing
+-- * Rounds
+
+-- | If appropriate, begin the game
+maybeBeginGame :: IsPlayer p => GameState p -> Maybe (IO (GameState p))
+maybeBeginGame gs = do
+    guard . isNothing       $ gs^.gameDeal
+    guard . (== 4) . length $ gs^.gamePlayers
+    guard . null            $ gs^.gamePlayers^..each.filtered (not . playerReady)
+    return $ do
+        rs <- newRound fourPlayers (gs^.gamePlayers^..each.to playerNick)
+        return $ gameDeal .~ Just rs $ gs
+
+-- * Modify
+
+-- | Try putting the given client to an empty player seat. Returns Nothing
+-- if the game is already full.
+addClient :: IsPlayer p => p -> GameState p -> Maybe (GameState p)
+addClient client = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) go Nothing
     where
-        handAction h = case ta of
-            TurnTileDiscard True  tile -> discardRiichi tile h <* endTurn tile
-            TurnTileDiscard False tile -> discard tile h <* endTurn tile
-            TurnAnkan tile             -> ankanOn tile h
-            TurnTileDraw False _       -> drawWall h
-            TurnTileDraw True  _       -> drawDeadWall h
-            TurnTsumo                  -> handWin h
-            TurnShouminkan tile        -> shouminkanOn tile h
+        go s c | isNothing s && isBot c = (Just (), client)
+               | otherwise              = (s, c)
 
--- *** Player in turn
+setClient :: IsPlayer p => p -> Player -> GameState p -> GameState p
+setClient client p = gamePlayers.at p .~ Just client
 
-drawWall :: RoundM m => Hand -> m Hand
-drawWall hand = do
-    unless (canDraw hand) (throwError "Cannot draw from wall")
-    wall <- use riichiWall
-    case wall of
-        (x:xs) -> do riichiWall .= xs
-                     return $ handPick .~ Just x $ hand
-        _ -> throwError "No tiles left"
+removeClient :: IsPlayer p => p -> GameState p -> Maybe (GameState p)
+removeClient client gs = do
+    p <- clientToPlayer client gs
+    return $ (gamePlayers.at p .~ Nothing) gs
 
-drawDeadWall :: RoundM m => Hand -> m Hand
-drawDeadWall hand = preuse (riichiWall._Snoc)
-    >>= maybe (throwError "No tiles in wall!") (draw . fst)
-    where
-        draw wall = do
-            unless (hand^.handPublic.handDrawWanpai) (throwError "Cannot draw from wanpai")
-            riichiWall .= wall
-            Just (dt, wanpai) <- preuse (riichiWanpai._Cons)
-            riichiWanpai .= wanpai
-            return $ handPick .~ Just dt $ handPublic.handDrawWanpai .~ False $ hand
+-- * Query
 
--- | Set riichiWaitShoutsFrom to players who could shout the discard.
-endTurn :: RoundM m => Tile -> m ()
-endTurn dt = do
-    shouts <- filterCouldShout dt <$> view riichiTurn <*> use riichiHands
-    riichiWaitShoutsFrom .= shouts
+playerToClient :: GameState p -> Player -> Maybe p
+playerToClient gs p = gs^.gamePlayers.at p
 
--- *** Automatic actions
-
-autoDiscard :: RoundM m => m ()
-autoDiscard = do
-    tk <- view riichiTurn
-    void $ runTurn' tk . TurnTileDiscard False =<< handAutoDiscard =<< handOf' tk
-
-autoDraw, autoDrawWanpai :: RoundM m => m ()
-autoDraw = void . flip runTurn' (TurnTileDraw False Nothing) =<< view riichiTurn
-autoDrawWanpai = void . flip runTurn' (TurnTileDraw True Nothing) =<< view riichiTurn
-
--- ** Results
-
-endDraw :: RoundM m => m RoundResults
-endDraw = do
-    hands <- use riichiHands
-    let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
-    res <- RoundDraw <$> mapM kazeToPlayer tenpaiPlayers <*> mapM kazeToPlayer nootenPlayers
-    roundEnds res
-
-endTsumo :: RoundM m => m RoundResults
-endTsumo = do
-    tk      <- view riichiTurn
-    players <- view riichiPlayers <&> map fst . itoList
-    tp      <- kazeToPlayer tk
-    _hand   <- use (riichiHands.at tk)
-    roundEnds $ RoundTsumo [tp] (L.delete tp players)
-
-roundEnds :: RoundM m => RoundResults -> m RoundResults
-roundEnds results = tell [RoundEnded results] >> return results
-
-----------------------------------------------------------------------------------------
-
--- * Events
-
-tellPlayerState :: RoundM m => Player -> m ()
-tellPlayerState p =
-    view (riichiPlayers.at p)
-    >>= maybe (throwError "tellPlayerState: player not found")
-              (buildPlayerState p >=> tellEvent . RoundPrivateStarts)
-
-updatePlayerNick :: RoundM m => Player -> Text -> m ()
-updatePlayerNick p nick = playerToKaze p >>= \pk -> tellEvent (RoundNick p pk nick)
-
--- | Build the player's "@GamePlayer@" record, or the state of the game as
--- seen by the player (hide "RiichiSecret" but show the player's own hand).
-buildPlayerState :: RoundM m => Player -> (Kaze, Points, Text) -> m GamePlayer
-buildPlayerState p (k, _, name) = GamePlayer k p name
-    <$> view id
-    <*> use (riichiHands.to (map _handPublic))
-    <*> use (riichiHands.at k.to fromJust)
-
--- | Set the hand of player
-updateHand :: RoundM m => Kaze -> Hand -> m ()
-updateHand pk new = do
-    old <- handOf' pk
-    handOf pk ?= new
-
-    when (old /= new) $ do
-        pp <- kazeToPlayer pk
-        tellEvent (RoundPrivateChange pp new)
-
-    when (_handPublic old /= _handPublic new)
-        $ tellEvent (RoundHandChanged pk $ _handPublic new)
-
-tellEvent :: RoundM m => GameEvent -> m ()
-tellEvent ev = tell [ev]
-
--- | Turn a possibly sensitive TurnAction to a non-sensitive (fully public)
--- RoundEvent.
-publishTurnAction :: RoundM m => Kaze -> TurnAction -> m ()
-publishTurnAction pk ra = tellEvent $ case ra of
-    TurnTileDraw b _ -> RoundTurnAction pk (TurnTileDraw b Nothing)
-    _                -> RoundTurnAction pk ra
-
-getWaitingForShouts :: RoundM m => m [(Player, Kaze, Shout)]
-getWaitingForShouts = do
-
-    let secs = 15 -- ^ TODO hard-coded limit
-
-    allWaits <- use riichiWaitShoutsFrom
-    players  <- mapM (kazeToPlayer . fst) allWaits
-
-    let res = zipWith (uncurry . (,,)) players allWaits
-        out = map (RoundPrivateWaitForShout <$> (^?!_head._1) <*> pure secs <*> (^..each._3))
-            $ groupBy ((==) `on` view _1) res
-
-    tell out
-    return res
-
-----------------------------------------------------------------------------------------
-
--- * Query info
-
-kazeToPlayer :: RoundM m => Kaze -> m Player
-kazeToPlayer k = do
-    mp <- view riichiPlayers <&> ifind (\_ x -> x^._1 == k)
-    maybe (throwError "Player not found") (return . fst) mp
-
-playerToKaze :: RoundM m => Player -> m Kaze
-playerToKaze p = do
-    rp <- view riichiPlayers
-    let mk = rp ^. at p
-    maybe (throwError "Player not found") (return . (^._1)) mk
-
-handOf' :: RoundM m => Kaze -> m Hand
-handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
-
-----------------------------------------------------------------------------------------
-
--- * Functions
-
-handOf :: Kaze -> Lens RiichiSecret RiichiSecret (Maybe Hand) (Maybe Hand)
-handOf player = riichiHands.at player
-
-playersNextRound :: [(Kaze, Player, a, b)] -> [(Kaze, Player, a, b)]
-playersNextRound xs = let (ks, ps', as', bs') = unzip4 xs
-                          Just (ps, p) = unsnoc ps'
-                          Just (as, a) = unsnoc as'
-                          Just (bs, b) = unsnoc bs'
-                          in zip4 ks (p : ps) (a : as) (b : bs)
-
--- | Advance the game to next round
-nextRound :: RiichiState -> IO RiichiState
-nextRound rs = over riichiPublic r . logRound . flip setSecret rs <$> newSecret
-  where
-    r = do np <- view riichiPlayers <&> each._1 %~ prevKaze
-           po <- view riichiOja
-        
-           let po_k                    = np^?!ix po._1
-           let Just (oja, (oja_k,_,_)) = np & ifind (\_ (k,_,_) -> k == po_k)
-
-           (riichiPlayers .~ np)
-               . (riichiTurn .~ Ton)
-               . (riichiResults .~ Nothing)
-               . (riichiOja .~ oja)
-               . (riichiRound %~ if' (oja_k == Ton) nextKaze id)
-
-    logRound = do
-        k <- view $ riichiPublic.riichiRound
-        riichiRounds %~ (\case
-                        [] -> [(k, 0)]
-                        xs@((k',n):_) | k == k'   -> (k, n + 1) : xs
-                                      | otherwise -> (k, n) : xs )
-
-filterCouldShout :: Tile -- ^ Tile to shout
-                 -> Kaze -- ^ Whose tile
-                 -> Map Kaze Hand
-                 -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
-filterCouldShout dt np = sortBy (shoutPrecedence np) .
-    concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
-  where flatten (k, xs) = map (k,) xs
-
--- ** Client functions
-
-applyGameEvents :: [GameEvent] -> GamePlayer -> GamePlayer
-applyGameEvents evs gp = foldr applyGameEvent gp evs
-
-applyGameEvent :: GameEvent -> GamePlayer -> GamePlayer
-applyGameEvent ev = case ev of
-    RoundTurnBegins p        -> playerPublic.riichiTurn .~ p
-    RoundTurnAction p ta     -> applyTurnAction p ta
-    RoundTurnShouted p shout ->
-        (playerPublicHands.at p._Just.handOpen %~ (|> fromShout shout)) .
-        (playerPublic.riichiTurn .~ p) .
-        (playerPublicHands.at (shoutedFrom shout)._Just.handDiscards._last._2 .~ Just p)
-    RoundHandChanged p hp    -> playerPublicHands.at p._Just .~ hp
-    RoundEnded how           -> playerPublic.riichiResults .~ Just how
-    RoundPrivateChange _ h   -> playerMyHand .~ h
-    RoundPrivateStarts gp    -> const gp
-    RoundPrivateWaitForShout{} -> id
-    RoundPrivateWaitForTurnAction _ _ -> id
-    RoundNick p _ n -> playerPublic.riichiPlayers.ix p._3 .~ n
-
--- | This always applies the turn action assuming that it is legal.
-applyTurnAction :: Kaze -> TurnAction -> GamePlayer -> GamePlayer
-applyTurnAction p ta = case ta of
-    TurnTileDiscard riichi tile -> playerPublicHands.at p._Just %~
-        (handDiscards %~ (|> (tile, Nothing))) . (handRiichi .~ riichi)
-    TurnTileDraw _ _     -> playerPublic.riichiWallTilesLeft -~ 1
-    TurnAnkan tile       -> playerPublicHands.at p._Just.handOpen %~ (|> kantsu tile)
-    _                    -> id
-
-applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
-applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs
-    $ GamePlayer (error "Not accessed") (error "Not accessed") (error "Not accessed")
-                 rp mempty hand
-    where
-        hand = Hand [] Nothing Nothing (HandPublic [] [(error "N/A", Nothing)] False False)
-
-applyGameEvent' :: GameEvent -> RiichiPublic -> RiichiPublic
-applyGameEvent' ev = applyGameEvents' [ev]
+clientToPlayer :: Eq p => p -> GameState p -> Maybe Player
+clientToPlayer c gs = gs^.gamePlayers & ifind (\_ x -> x == c) <&> view _1

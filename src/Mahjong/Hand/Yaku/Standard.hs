@@ -7,10 +7,9 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Mahjong.Yaku.Standard where
+module Mahjong.Hand.Yaku.Standard where
 
-import Mahjong.Hand (Yaku(..), ValueInfo(..))
-import Mahjong.Yaku.Builder
+import Mahjong.Hand.Yaku.Builder
 import Mahjong.Tiles (Number(..), kaze)
 
 -- * 4 mentsu + 1 jantou

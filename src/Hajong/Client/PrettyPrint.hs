@@ -100,9 +100,9 @@ newtype PosRight a = PosRight { posRight :: a } deriving (Show, Read)
 
 instance Pretty GamePlayer where
     pretty = do
-        dora      <- view $ playerPublic.riichiDora.to pretty
+        dora      <- view $ playerPublic.pDora.to pretty
         concealed <- view $ playerMyHand.to pretty
-        wallCount <- view $ playerPublic.riichiWallTilesLeft.to (\x -> "(" <> tshow x <> ")")
+        wallCount <- view $ playerPublic.sWallTilesLeft.to (\x -> "(" <> tshow x <> ")")
 
         -- rotate players to right positions
         me      <- view playerPlayer

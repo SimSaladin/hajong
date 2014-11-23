@@ -30,5 +30,6 @@
 [ ] (game) BUG shouting multiple: discard player's all other shouts.
 [ ] (game) BUG draw; round changes even if oja is tenpai or no-one is tenpai
 [ ] (game) renchans
+[ ] (game) tochuu ryuukoku
 
 [ ] (docs) write json channel spec

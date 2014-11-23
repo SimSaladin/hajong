@@ -19,6 +19,7 @@ import           Control.Monad.Reader.Class   as X
 import           Control.Monad.State.Class    as X
 import           Control.Monad.Writer.Class   as X
 import           Control.Monad.Trans.Either   as X
+import           Data.Aeson.TH
 
 ------------------------------------------------------------------------------
 import qualified Text.PrettyPrint.ANSI.Leijen as P
@@ -47,3 +48,7 @@ rmodify l f = view l >>= atomically . (`modifyTVar` f)
 
 prettyList' :: P.Pretty a => [a] -> P.Doc
 prettyList' = foldr ((P.<+>) . P.pretty) P.empty
+
+aesonOptions :: Int -> Options
+aesonOptions n = defaultOptions
+    { fieldLabelModifier = unpack . toLower . asText . pack . drop n }

@@ -8,15 +8,30 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Mahjong.Yaku.Builder where
+module Mahjong.Hand.Yaku.Builder where
 
-import Control.Monad.Free
-import Control.Monad.State
+import           Control.Monad.Free
+import           Control.Monad.State
 
-import Mahjong.Hand
-import Mahjong.Hand.Mentsu
-import Mahjong.Tiles (Tile(..), Number(..))
+import           Mahjong.Hand.Mentsu
+import           Mahjong.Tiles (Tile(..), Number(..))
 import qualified Mahjong.Tiles as T
+
+data Yaku = Yaku
+          { yakuHan :: Int
+          , yakuName :: Text
+          } deriving (Show, Read)
+
+-- | Required info to calculate the value from a hand.
+data ValueInfo = ValueInfo
+              { vRound :: T.Kaze
+              , vPlayer :: T.Kaze
+              , vRiichi :: Bool
+              , vConcealed :: Bool
+              , vDiscarded :: [Tile] -- ^ To check furiten
+              , vMentsu :: [Mentsu]
+              , vWinWith :: Tile
+              } deriving (Show, Read)
 
 -- * YakuCheck
 
@@ -46,7 +61,7 @@ runYakuCheck info = fmap fst . (`runStateT` vMentsu info) . iterM f
         f (YakuMentsu  mp s)            = get >>= lift . findMatch mp >>= putRes >>  s
         f (YakuMentsu' mp s)            = get >>= lift . findMatch mp >>= putRes >>= s
         f (YakuStateful s)              = s info
-        f (YakuHandConcealedDegrades s) = if vConcealed info then s else (\x -> x { yaku = yaku x - 1 }) <$> s
+        f (YakuHandConcealedDegrades s) = if vConcealed info then s else (\x -> x { yakuHan = yakuHan x - 1 }) <$> s
         f (YakuHandConcealed s)         = if vConcealed info then s else lift Nothing
         f (YakuHandOpen s)              = if vConcealed info then lift Nothing else s
 

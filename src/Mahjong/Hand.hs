@@ -10,14 +10,21 @@
 -- This module provides the representation type for a mahjong hand
 -- (@Hand@), and functions that operate on a hand.
 ------------------------------------------------------------------------------
-module Mahjong.Hand where
+module Mahjong.Hand
+    ( module Mahjong.Hand
+    , module Mahjong.Hand.Mentsu
+    , module Mahjong.Hand.Value
+    ) where
 
 import qualified Data.List as L
 import Text.PrettyPrint.ANSI.Leijen (Pretty(..), string)
+import Data.Maybe (fromJust)
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 import Mahjong.Hand.Mentsu
+import Mahjong.Hand.Value
 import Mahjong.Hand.Algo
+import Mahjong.Hand.Yaku
 import Mahjong.Tiles
 
 -- * Hand
@@ -27,6 +34,7 @@ data HandPublic = HandPublic
                 , _handDiscards :: [(Tile, Maybe Kaze)]
                 , _handRiichi :: Bool
                 , _handDrawWanpai :: Bool -- ^ Should draw from wanpai
+                , _handAgari :: Maybe Tile
                 } deriving (Show, Read, Eq)
 
 data Hand = Hand
@@ -38,7 +46,7 @@ data Hand = Hand
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False)
+initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False Nothing)
 
 -- ** Lenses
 
@@ -185,25 +193,22 @@ shoutFromHand sk shout hand =
             | otherwise              -> return
                 (fromShout shout, hand & handPublic.handDiscards._last .~ (t, Just sk))
 
--- * Hand value
+-- * Valued hand
 
--- | Required info to calculate the value from a hand.
-data ValueInfo = ValueInfo
-              { vRound :: Kaze
-              , vPlayer :: Kaze
-              , vRiichi :: Bool
-              , vConcealed :: Bool
-              , vDiscarded :: [Tile] -- ^ To check furiten
-              , vMentsu :: [Mentsu]
-              , vWinWith :: Tile
-              } deriving (Show)
+-- | A hand that won.
+data ValuedHand = ValuedHand
+    { _vhMentsu :: [Mentsu]
+    , _vhTiles  :: [Tile]
+    , _vhValue  :: Value
+    } deriving (Show, Read)
 
-data Value = Value [Yaku] Fu
-type Fu    = Int
+makeLenses ''ValuedHand
 
--- ** Yaku Information
-
-data Yaku = Yaku
-          { yaku :: Int
-          , yakuName :: Text
-          }
+valueHand :: Hand -> Kaze -> Kaze -> ValuedHand
+valueHand h r player = ValuedHand (h^.handPublic.handOpen) (h^.handConcealed) (getValue vi)
+  where vi = ValueInfo r player
+            (h^.handPublic.handRiichi)
+            (h^.handPublic.handOpen.to null)
+            (h^.handPublic.handDiscards^..each._1)
+            (h^.handPublic.handOpen)
+            (h^.handPublic.handAgari.to fromJust)

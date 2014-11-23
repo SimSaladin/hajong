@@ -7,15 +7,18 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Mahjong.Yaku
+module Mahjong.Hand.Yaku
     ( Yaku(..)
-    , runYakuCheck
+
+    -- * Check
+    , ValueInfo(..), runYakuCheck
+
+    -- * Available yaku
     , allStandard
     ) where
 
-import Mahjong.Hand
-import Mahjong.Yaku.Builder
-import Mahjong.Yaku.Standard
+import Mahjong.Hand.Yaku.Builder
+import Mahjong.Hand.Yaku.Standard
 
 allStandard :: [YakuCheck Yaku]
 allStandard = 

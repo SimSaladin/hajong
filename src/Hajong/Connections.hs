@@ -15,15 +15,16 @@
 module Hajong.Connections where
 
 ------------------------------------------------------------------------------
-import           Mahjong hiding (Value)
+import           Mahjong
 
 ------------------------------------------------------------------------------
 import           Prelude hiding ((.=))
 import qualified Data.Map as M
-import           Control.Monad.Trans.Either
 import           Control.Monad.Logger
 import qualified Network.WebSockets         as WS
-import           Data.Aeson
+import           Data.Aeson hiding (Value)
+import qualified Data.Aeson as A
+import           Data.Aeson.TH
 import           Data.Aeson.Types (Pair)
 
 ------------------------------------------------------------------------------
@@ -113,7 +114,7 @@ instance WS.WebSocketsData Event where
 
 -- Helpers -------------------------------------------------------------------
 
-atType, atEvent :: Text -> [(Text, Value)] -> Value
+atType, atEvent :: Text -> [(Text, A.Value)] -> A.Value
 atType  t xs = object ("type"  .= t : xs)
 atEvent t xs = object ("event" .= t : xs)
 
@@ -129,7 +130,7 @@ gamePlayerJSON x =
 loungeJSON :: Lounge -> [Pair]
 loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
 
-gamePairs :: (Int, GameSettings) -> Value
+gamePairs :: (Int, GameSettings) -> A.Value
 gamePairs (i,GameSettings t) = object
     [ "ident"   .= i , "topic"   .= t , "players" .= (mempty :: Set Text) ]
         -- TODO players, necessary?
@@ -154,16 +155,16 @@ instance ToJSON Event where
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
-        RoundPrivateStarts gameplayer           -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
-        RoundPrivateWaitForShout player secs shs  -> atEvent "wait-shout"   ["player" .= player, "seconds" .= secs, "shouts" .= shs]
-        RoundPrivateWaitForTurnAction player secs -> atEvent "wait-turn"    ["player" .= player, "seconds" .= secs]
-        RoundPrivateChange player hand            -> atEvent "my-hand"      ["player" .= player, "hand" .= hand]
-        RoundTurnBegins pk                    -> atEvent "turn-changed" ["player-kaze" .= pk]
-        RoundTurnAction pk turnaction         -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
-        RoundTurnShouted pk shout             -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
-        RoundHandChanged pk hand              -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
-        RoundEnded results                      -> atEvent "end"          ["results" .= results]
-        RoundNick p pk nick                  -> atEvent "nick" ["player" .= p, "player-kaze" .= pk, "nick" .= nick]
+        DealPrivateStarts gameplayer           -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
+        DealPrivateWaitForShout player secs shs  -> atEvent "wait-shout"   ["player" .= player, "seconds" .= secs, "shouts" .= shs]
+        DealPrivateWaitForTurnAction player secs -> atEvent "wait-turn"    ["player" .= player, "seconds" .= secs]
+        DealPrivateChange player hand            -> atEvent "my-hand"      ["player" .= player, "hand" .= hand]
+        DealTurnBegins pk                    -> atEvent "turn-changed" ["player-kaze" .= pk]
+        DealTurnAction pk turnaction         -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
+        DealTurnShouted pk shout             -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
+        DealHandChanged pk hand              -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
+        DealEnded results                      -> atEvent "end"          ["results" .= results]
+        DealNick p pk nick                  -> atEvent "nick" ["player" .= p, "player-kaze" .= pk, "nick" .= nick]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard r t) = atType "discard" ["riichi" .= r, "tile" .= t]
@@ -214,23 +215,28 @@ instance ToJSON Honor where
     toJSON (Sangenpai s) = toJSON (tshow s)
     toJSON (Kazehai k) = toJSON k
 
-instance ToJSON RoundResults where
-    toJSON res = atType getType ["winners" .= winners res, "payers" .= payers res]
+instance ToJSON DealResults where
+    toJSON DealDraw{..} = atType "draw" ["winners" .= dTenpais, "payers" .= dNooten]
+    toJSON res = atType getType ["winners" .= dWinners res, "payers" .= dPayers res]
         where
-            getType = case res of RoundTsumo{} -> "tsumo"
-                                  RoundRon{}   -> "ron"
-                                  RoundDraw{}  -> "draw"
+            getType = case res of DealTsumo{} -> "tsumo"
+                                  DealRon{}   -> "ron"
+                                  DealDraw{}  -> "draw"
 
-instance ToJSON RiichiPublic where
+$(deriveJSON (aesonOptions 4) ''Yaku)
+$(deriveJSON (aesonOptions 3) ''Value)
+$(deriveJSON (aesonOptions 3) ''ValuedHand)
+
+instance ToJSON Deal where
     toJSON x = object
-        [ "dora"       .= _riichiDora x
-        , "tiles-left" .= _riichiWallTilesLeft x
-        , "round"      .= _riichiRound x
-        , "oja"        .= _riichiOja x
-        , "first-oja"  .= _riichiFirstOja x
-        , "turn"       .= _riichiTurn x
-        , "players"    .= map (toJSON *** toJSON) (M.toList $ _riichiPlayers x)
-        , "results"    .= _riichiResults x
+        [ "dora"       .= _pDora x
+        , "tiles-left" .= _pWallTilesLeft x
+        , "round"      .= _pRound x
+        , "oja"        .= _pOja x
+        , "first-oja"  .= _pFirstOja x
+        , "turn"       .= _pTurn x
+        , "players"    .= map (toJSON *** toJSON) (M.toList $ _pPlayers x)
+        , "results"    .= _pResults x
         ]
 
 -- FromJSON
@@ -251,7 +257,6 @@ instance FromJSON Event where
             "game-fstart"  -> ForceStart         <$> o .: "ident"
             _              -> pure (Invalid ("Unknown or unsupported type: " <> t))
     parseJSON _ = pure (Invalid "Top-level object expected")
-
 
 instance FromJSON GameAction where
     parseJSON v@(Object o)

@@ -8,19 +8,23 @@
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
 module Mahjong
-    ( module Mahjong.Mechanics
-    , module Mahjong.Round
+    ( module Mahjong.Round
+    , module Mahjong.Deal
     , module Mahjong.State
     , module Mahjong.Hand
-    , module Mahjong.Hand.Mentsu
     , module Mahjong.Hand.Algo
+    , module Mahjong.Hand.Mentsu
+    , module Mahjong.Hand.Value
+    , module Mahjong.Hand.Yaku
     , module Mahjong.Tiles
     ) where
 
-import Mahjong.Mechanics
 import Mahjong.Round
+import Mahjong.Deal
 import Mahjong.State
 import Mahjong.Hand
 import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Algo
+import Mahjong.Hand.Value
+import Mahjong.Hand.Yaku
 import Mahjong.Tiles

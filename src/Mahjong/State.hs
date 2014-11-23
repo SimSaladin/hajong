@@ -17,6 +17,7 @@ import           Mahjong.Hand.Mentsu
 
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
+import qualified Data.List as L
 import           System.Random.Shuffle (shuffleM)
 import           System.Random (randomRIO)
 import qualified Text.PrettyPrint.ANSI.Leijen as P
@@ -33,61 +34,50 @@ newtype Player = Player Int deriving (Show, Read, Eq, Ord)
 
 -- * Points, results
 
-data RoundResults = RoundTsumo { winners :: [Player], payers :: [Player] }
-                  | RoundRon   { winners :: [Player], payers :: [Player] }
-                  | RoundDraw  { winners :: [Player], payers :: [Player] }
+data DealResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
+                 | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
+                 | DealDraw  { dTenpais :: [Player], dNooten :: [Payer] }
                   deriving (Show, Read, Typeable)
 
-type Points = Int
+type Winner = (Player, ValuedHand)
+type Payer  = (Player, Points)
 
 type RiichiPlayers player = Map Kaze (Player, player, Points)
 
--- * Round
+-- * Deal
 
 -- | Game state, including current round state.
-data RiichiState = RiichiState
-                 { _riichiRounds :: [(Kaze, Int)] -- ^ Decreasing in play order, current first
-                 , _riichiSecret :: RiichiSecret
-                 , _riichiPublic :: RiichiPublic
-                 , _riichiEvents :: [GameEvent]
-                 } deriving (Show, Read, Typeable)
+--
+-- Fields starting @_p@ are for public consumption and @_s@ for internal
+-- only.
+data Deal = Deal
+    { _pRound         :: Kaze
+    , _pDeal          :: Int
+    , _pDora          :: [Tile]
+    , _pFirstOja      :: Player
+    , _pHonba         :: Int
+    , _pOja           :: Player
+    , _pPlayers       :: Map Player (Kaze, Points, Text)
+    , _pResults       :: Maybe DealResults
+    , _pTurn          :: Kaze
+    , _pDeals         :: [(Kaze, Int)] -- ^ Previous deals in decreasing order by time
+    , _pWallTilesLeft :: Int
 
--- | Round state, secret half.
-data RiichiSecret = RiichiSecret
-                 { _riichiWall :: [Tile]
-                 , _riichiWanpai :: [Tile]
-                 , _riichiHands :: Map Kaze Hand
-                 , _riichiWaitShoutsFrom :: [(Kaze, Shout)]
-                 } deriving (Show, Read, Typeable)
-
--- | Round state, public half.
-data RiichiPublic = RiichiPublic
-                 { _riichiDora :: [Tile]
-                 , _riichiWallTilesLeft :: Int
-                 , _riichiRound :: Kaze
-                 , _riichiRoundNth :: Int
-                 , _riichiTurn :: Kaze
-                 , _riichiOja :: Player
-                 , _riichiFirstOja :: Player
-                 , _riichiPlayers :: Map Player (Kaze, Points, Text)
-                 , _riichiResults :: Maybe RoundResults
-                 } deriving (Show, Read, Typeable)
+    -- secret
+    , _sEvents        :: [GameEvent]
+    , _sHands         :: Map Kaze Hand
+    , _sWaitingShouts :: [(Kaze, Shout)]
+    , _sWall          :: [Tile]
+    , _sWanpai        :: [Tile]
+    } deriving (Show, Read, Typeable)
 
 -- Pretty instances 
 
-instance P.Pretty RiichiState where
-    pretty RiichiState{..} = P.pretty _riichiRounds P.<$$>
-                             P.pretty _riichiPublic P.<$$>
-                             P.pretty _riichiSecret
-
-instance P.Pretty RiichiSecret where
-    pretty RiichiSecret{..} =
-        P.string "wall:"   P.<+> P.hang 0 (prettyList' _riichiWall) P.<$$>
-        P.string "wanpai:" P.<+> P.hang 0 (prettyList' _riichiWanpai) P.<$$>
-        P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _riichiHands)
-
-instance P.Pretty RiichiPublic where
-    pretty RiichiPublic{..} = P.string "(public)"
+instance P.Pretty Deal where
+    pretty Deal{..} = P.pretty _pDeals P.<$$>
+        P.string "wall:"   P.<+> P.hang 0 (prettyList' _sWall) P.<$$>
+        P.string "wanpai:" P.<+> P.hang 0 (prettyList' _sWanpai) P.<$$>
+        P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)
 
 
 -- | State of single player. Note that there is no RiichiSecret.
@@ -95,26 +85,26 @@ data GamePlayer = GamePlayer
                 { _playerKaze :: Kaze
                 , _playerPlayer :: Player -- ^ Me
                 , _playerName :: Text
-                , _playerPublic :: RiichiPublic
+                , _playerPublic :: Deal
                 , _playerPublicHands :: Map Kaze HandPublic
                 , _playerMyHand :: Hand
                 } deriving (Show, Read, Typeable)
 
 -- * Actions and events
 
-data GameEvent = RoundPrivateStarts GamePlayer -- ^ Only at the start of a round
-               | RoundPrivateWaitForShout Player Int [Shout] -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
-               | RoundPrivateWaitForTurnAction Player Int
-               | RoundPrivateChange Player Hand
-               | RoundTurnBegins Kaze
-               | RoundTurnAction Kaze TurnAction
-               | RoundTurnShouted Kaze Shout -- ^ Who, Shout
-               | RoundHandChanged Kaze HandPublic
+data GameEvent = DealPrivateStarts GamePlayer -- ^ Only at the start of a round
+               | DealPrivateWaitForShout Player Int [Shout] -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
+               | DealPrivateWaitForTurnAction Player Int
+               | DealPrivateChange Player Hand
+               | DealTurnBegins Kaze
+               | DealTurnAction Kaze TurnAction
+               | DealTurnShouted Kaze Shout -- ^ Who, Shout
+               | DealHandChanged Kaze HandPublic
                         -- TODO this is a bit too vague to be exactly
                         -- useful for clients.. perhaps could identify
                         -- between draws, kans, shouts.
-               | RoundEnded RoundResults
-               | RoundNick Player Kaze Text
+               | DealEnded DealResults
+               | DealNick Player Kaze Text
                deriving (Show, Read, Typeable)
 
 -- | Actions you do on your turn.
@@ -134,62 +124,56 @@ data GameAction = GameTurn TurnAction
 -- * Lenses
 
 --
-makeLenses ''RiichiSecret
-makeLenses ''RiichiPublic
-makeLenses ''RiichiState
+makeLenses ''Deal
 makeLenses ''GamePlayer
 
--- * Initialize state
+-- * Game
 
--- | New state with first round ready to start. Convenient composite of
--- newPublic, newSecret and setSecret.
-newRiichiState :: [Text] -> IO RiichiState
-newRiichiState names = do
-    p <- newPublic fourPlayers names . Player <$> randomRIO (0, 3)
-    s <- newSecret
-    let rs = RiichiState [(Ton, 0)] (error "newRiichiState: not used") p []
-    return $ setSecret s rs
+type GameResults = Map Player Points
+
+-- * Initialize state
 
 fourPlayers :: [Player]
 fourPlayers = Player <$> [0 .. 3]
 
--- | Four-player riichi game
-newPublic :: [Player] -- ^ Players, from Ton to Shaa
-          -> [Text]   -- ^ Names
-          -> Player   -- ^ Oja
-          -> RiichiPublic
-newPublic players names oja = RiichiPublic
-    { _riichiDora          = []
-    , _riichiWallTilesLeft = 0
-    , _riichiRound         = Ton
-    , _riichiRoundNth      = 0
-    , _riichiTurn          = Ton
-    , _riichiOja           = oja
-    , _riichiFirstOja      = oja
-    , _riichiPlayers       = mapFromList $ zip players (zip3 [Ton .. Pei] (repeat 25000) names)
-    , _riichiResults       = Nothing
-    }
+-- | A new round with given player names.
+newRound :: [Player] -- ^ Players, from Ton to Shaa
+         -> [Text]   -- ^ Names
+         -> IO Deal
+newRound players names = do
+    oja <- (players L.!!) <$> randomRIO (0, 3)
+    dealTiles $ Deal
+        { _pDeal          = 1
+        , _pDeals         = []
+        , _pDora          = []
+        , _pFirstOja      = oja
+        , _pHonba         = 0
+        , _pOja           = oja
+        , _pPlayers       = mapFromList $ zip players (zip3 [Ton .. Pei] (repeat 25000) names)
+        , _pResults       = Nothing
+        , _pRound         = Ton
+        , _pTurn          = Ton
 
-newSecret :: IO RiichiSecret
-newSecret = liftM dealTiles $ shuffleM riichiTiles
-    where
-        dealTiles tiles = RiichiSecret
-            { _riichiWall           = wall
-            , _riichiWanpai         = wanpai
-            , _riichiHands          = Map.fromList $ zip [Ton .. Pei] (initHand <$> [h1, h2, h3, h4])
-            , _riichiWaitShoutsFrom = []
-            } where
-                (hands, xs)             = splitAt (13 * 4) tiles
-                ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
-                (wanpai, wall)          = splitAt 14 xs
+        , _pWallTilesLeft = 0
+        , _sEvents        = mempty
+        , _sHands         = mempty
+        , _sWaitingShouts = mempty
+        , _sWall          = mempty
+        , _sWanpai        = mempty
+        }
 
-setSecret :: RiichiSecret -> RiichiState -> RiichiState
-setSecret secret =
-    (riichiSecret .~ s secret) .
-    (riichiPublic %~ p) .
-    (riichiEvents .~ [])
+dealTiles :: Deal -> IO Deal
+dealTiles deal = liftM dealTiles $ shuffleM riichiTiles
   where
-    (dora : wanpai') = secret ^. riichiWanpai
-    s = riichiWanpai .~ wanpai'
-    p = (riichiDora .~ [dora]) .
-        (riichiWallTilesLeft .~ (secret ^. riichiWall.to length))
+    dealTiles tiles = deal
+        { _pWallTilesLeft = length wall
+        , _pDora          = [dora]
+        , _sEvents        = []
+        , _sHands         = Map.fromList $ zip [Ton .. Pei] (initHand <$> [h1, h2, h3, h4])
+        , _sWaitingShouts = []
+        , _sWall          = wall
+        , _sWanpai        = wanpai
+        } where
+           (hands, xs)             = splitAt (13 * 4) tiles
+           ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
+           (dora : wanpai, wall)   = splitAt 14 xs
