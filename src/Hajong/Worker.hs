@@ -116,11 +116,11 @@ sendGameEvents events = do
     public <- filterM (f gs) events
     multicast $ InGameEvents public
   where
-    f gs e@(DealPrivateChange p _)            = sendPrivate gs p e
-    f gs e@(DealPrivateWaitForShout p _ _)    = sendPrivate gs p e
-    f gs e@(DealPrivateWaitForTurnAction p _) = sendPrivate gs p e
-    f gs e@(DealPrivateStarts pg)             = sendPrivate gs (_playerPlayer pg) e
-    f _ _                                     = return True
+    f gs e@(DealPrivateChange p _)              = sendPrivate gs p e
+    f gs e@(DealPrivateWaitForShout p _ _)      = sendPrivate gs p e
+    f gs e@(DealPrivateWaitForTurnAction p _ _) = sendPrivate gs p e
+    f gs e@(DealPrivateStarts pg)               = sendPrivate gs (_playerPlayer pg) e
+    f _ _                                       = return True
 
     sendPrivate gs p e = do
         maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)

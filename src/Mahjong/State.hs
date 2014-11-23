@@ -102,7 +102,7 @@ data GamePlayer = GamePlayer
 
 data GameEvent = DealPrivateStarts GamePlayer -- ^ Only at the start of a round
                | DealPrivateWaitForShout Player Int [Shout] -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
-               | DealPrivateWaitForTurnAction Player Int
+               | DealPrivateWaitForTurnAction Player Int [Tile]
                | DealPrivateChange Player Hand
                | DealTurnBegins Kaze
                | DealTurnAction Kaze TurnAction

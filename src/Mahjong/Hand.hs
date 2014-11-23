@@ -137,6 +137,10 @@ canDraw h = not (h^.handPublic.handDrawWanpai)
 handWin :: CanError m => Hand -> m Hand
 handWin h = if complete h then return h else throwError "Cannot tsumo, hand is not complete"
 
+-- | Tiles the hand can discard for a riichi.
+handCanRiichiWith :: Hand -> [Tile]
+handCanRiichiWith h = [] -- TODO
+
 -- * Kan
 
 -- | Do an ankan on the given tile.

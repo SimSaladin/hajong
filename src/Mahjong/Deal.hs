@@ -49,8 +49,10 @@ startDeal = do
 
 turnWaiting :: DealM m => Int -> m ()
 turnWaiting n = do
-    tp <- view pTurn >>= kazeToPlayer
-    tellEvent $ DealPrivateWaitForTurnAction tp n
+    tk <- view pTurn
+    tp <- kazeToPlayer tk
+    rt <- handOf' tk <&> handCanRiichiWith
+    tellEvent $ DealPrivateWaitForTurnAction tp n rt
 
 startTurn :: DealM m => Kaze -> m ()
 startTurn = tellEvent . DealTurnBegins
@@ -340,9 +342,6 @@ finalPoints xs =
 
 -- ** Client functions
 
-applyGameEvents :: [GameEvent] -> GamePlayer -> GamePlayer
-applyGameEvents evs gp = foldr applyGameEvent gp evs
-
 applyGameEvent :: GameEvent -> GamePlayer -> GamePlayer
 applyGameEvent ev = case ev of
     DealTurnBegins p        -> playerPublic.pTurn .~ p
@@ -356,8 +355,11 @@ applyGameEvent ev = case ev of
     DealPrivateChange _ h   -> playerMyHand .~ h
     DealPrivateStarts gp    -> const gp
     DealPrivateWaitForShout{} -> id
-    DealPrivateWaitForTurnAction _ _ -> id
+    DealPrivateWaitForTurnAction{} -> id
     DealNick p _ n -> playerPublic.pPlayers.ix p._3 .~ n
+
+applyGameEvents :: [GameEvent] -> GamePlayer -> GamePlayer
+applyGameEvents evs gp = foldr applyGameEvent gp evs
 
 -- | This always applies the turn action assuming that it is legal.
 applyTurnAction :: Kaze -> TurnAction -> GamePlayer -> GamePlayer

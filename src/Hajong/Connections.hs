@@ -152,7 +152,7 @@ instance ToJSON GameEvent where
     toJSON ge = case ge of
         DealPrivateStarts gameplayer             -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
         DealPrivateWaitForShout player secs shs  -> atEvent "wait-shout"   ["player" .= player, "seconds" .= secs, "shouts" .= shs]
-        DealPrivateWaitForTurnAction player secs -> atEvent "wait-turn"    ["player" .= player, "seconds" .= secs]
+        DealPrivateWaitForTurnAction p sec rs    -> atEvent "wait-turn"    ["player" .= p, "seconds" .= sec, "riichi-with" .= rs]
         DealPrivateChange player hand            -> atEvent "my-hand"      ["player" .= player, "hand" .= hand]
         DealTurnBegins pk                        -> atEvent "turn-changed" ["player-kaze" .= pk]
         DealTurnAction pk turnaction             -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
