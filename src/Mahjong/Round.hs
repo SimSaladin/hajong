@@ -22,6 +22,8 @@ import qualified Data.Map as Map
 import qualified Data.List as L (delete)
 import           Data.Maybe (fromJust)
 
+import qualified Debug.Trace as Debug
+
 -- | Context of game and deal flow.
 --
 -- Note that RiichiSecret is freely modifiable as a state, but
@@ -109,6 +111,7 @@ runTurn' pk ta = do
             TurnTileDraw False _       -> drawWall h
             TurnTileDraw True  _       -> drawDeadWall h
             TurnTsumo                  -> handWin h
+            TurnShouminkan tile        -> shouminkanOn tile h
 
 -- *** Player in turn
 
@@ -312,14 +315,14 @@ applyGameEvent ev = case ev of
     RoundPrivateWaitForTurnAction _ _ -> id
     RoundNick p _ n -> playerPublic.riichiPlayers.ix p._3 .~ n
 
+-- | This always applies the turn action assuming that it is legal.
 applyTurnAction :: Kaze -> TurnAction -> GamePlayer -> GamePlayer
 applyTurnAction p ta = case ta of
-    TurnTileDiscard riichi tile ->
-        over (playerPublicHands.at p._Just.handDiscards) (|> (tile, Nothing))
-        . set (playerPublicHands.at p._Just.handRiichi) riichi
-    TurnTileDraw _ _ -> playerPublic.riichiWallTilesLeft -~ 1
-    TurnAnkan tile   -> over (playerPublicHands.at p._Just.handOpen) (|> kantsu tile)
-    TurnTsumo -> id -- XXX: is this function sensible?
+    TurnTileDiscard riichi tile -> playerPublicHands.at p._Just %~
+        (handDiscards %~ (|> (tile, Nothing))) . (handRiichi .~ riichi)
+    TurnTileDraw _ _     -> playerPublic.riichiWallTilesLeft -~ 1
+    TurnAnkan tile       -> playerPublicHands.at p._Just.handOpen %~ (|> kantsu tile)
+    _                    -> id
 
 applyGameEvents' :: [GameEvent] -> RiichiPublic -> RiichiPublic
 applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs

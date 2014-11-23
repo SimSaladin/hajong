@@ -33,6 +33,9 @@ shout = input Nothing
 ankan : Input (Maybe Tile)
 ankan = input Nothing
 
+shouminkan : Input (Maybe Tile)
+shouminkan = input Nothing
+
 nocare : Input Bool
 nocare = input False
 
@@ -46,6 +49,7 @@ events = merges
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
    , maybe Noop (InGameAction << GameShout) <~ shout.signal
    , maybe Noop (InGameAction << GameTurn << TurnAnkan) <~ ankan.signal
+   , maybe Noop (InGameAction << GameTurn << TurnShouminkan) <~ shouminkan.signal
    , (\x -> if x then InGameAction GameDontCare else Noop) <~ nocare.signal
    ]
 
@@ -66,6 +70,7 @@ display co gs = case gs.roundState of
         , container 1000 40 midTop <| flow right
            <| (
               maybe [] (map shoutButton << snd) (gs.waitShout)
+               ++ shouminkanButtons rs "Shouminkan"
                ++ [ankanButton rs "Ankan", nocareButton gs.waitShout "Pass" ]
                )
         , container 1000 100 midTop <| dispHand rs.mypos co rs.myhand
@@ -222,16 +227,23 @@ shoutButton s =
       , toText (show s.shoutKind) |> centered |> toForm ]
       -- TODO multiple chii identify
 
+shouminkanButtons rs str = findShouminkan rs.myhand
+   |> map (\t -> clickable shouminkan.handle (Just t) (buttonElem' str blue))
+
 ankanButton rs str = case findFourTiles rs of
    Just t  -> clickable ankan.handle (Just t) (buttonElem' str green)
    Nothing -> empty
 
+-- TODO is his turn
 nocareButton w str = case w of
    Just (w, _ :: _) -> clickable nocare.handle True <| buttonElem' str green
    _                -> empty
 
 findFourTiles : RoundState -> Maybe Tile
-findFourTiles rs = counted 4 <| rs.myhand.concealed
+findFourTiles rs = counted 4 <| rs.myhand.concealed ++ maybe [] identity rs.myhand.pick
+
+findShouminkan h = filter (\x -> x.mentsuKind == Koutsu) h.called
+   |> map .tile
 
 counted : Int -> [Tile] -> Maybe Tile
 counted m ts =
@@ -259,7 +271,10 @@ processInGameEvent event gs = case event of
    RoundPrivateWaitForTurnAction {seconds} ->
       { gs | waitTurnAction <- Just <| WaitRecord seconds gs.updated }
    RoundPrivateWaitForShout {seconds, shouts} ->
-      { gs | waitShout      <- Just <| (WaitRecord seconds gs.updated, shouts) }
+      { gs | waitShout      <- Just <|
+         ( WaitRecord seconds gs.updated
+         , maybe shouts (\x -> snd x ++ shouts) gs.waitShout)
+      }
 
    RoundPrivateChange {hand} -> setMyHand hand gs
 

@@ -281,3 +281,4 @@ parseTurnAction (Object o) = case "type" .: o |> parseString of
     "draw"    -> TurnTileDraw    ("wanpai" .: o |> parseBool) ("tile" .: o |> parseTileMaybe)
     "discard" -> TurnTileDiscard ("riichi" .: o |> parseBool) ("tile" .: o |> parseTile)
     "ankan"   -> TurnAnkan       ("tile"   .: o |> parseTile)
+    "shouminkan" -> TurnShouminkan ("tile" .: o |> parseTile)

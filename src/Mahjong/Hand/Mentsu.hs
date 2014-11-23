@@ -14,10 +14,10 @@ module Mahjong.Hand.Mentsu
     -- * Mentsu
     Mentsu(..), MentsuKind(..),
     toMentsu, shuntsu, koutsu, kantsu, jantou,
-    shuntsuWith, fromShout,
+    shuntsuWith, fromShout, promoteToKantsu,
 
     -- * Functions
-    mentsuKind, mentsuTiles, mentsuShout, mentsuShouted,
+    mentsuKind, mentsuIdTile, mentsuTiles, mentsuShout, mentsuShouted,
     isJantou, isShuntsu, isKoutsu, isKantsu,
 
     -- * Shouts
@@ -75,6 +75,9 @@ instance Pretty Shout where
 mentsuKind :: Mentsu -> MentsuKind
 mentsuKind (Mentsu k _ _) = k
 
+mentsuIdTile :: Mentsu -> Tile
+mentsuIdTile (Mentsu _ t _) = t
+
 mentsuTiles :: Mentsu -> [Tile]
 mentsuTiles (Mentsu mk t _) = case mk of
                                   Shuntsu -> t : catMaybes [succMay t, succMay t >>= succMay]
@@ -123,6 +126,11 @@ shuntsuWith [x, y, z] = shuntsu x <$ do
     succMay x >>= guard . (== y)
     succMay y >>= guard . (== z)
 shuntsuWith _ = Nothing
+
+-- | Promote an open koutsu to a shouminkantsu
+promoteToKantsu :: Mentsu -> Mentsu
+promoteToKantsu (Mentsu Koutsu t s) = Mentsu Kantsu t s
+promoteToKantsu _ = error "shouminkan: argument was not a koutsu"
 
 -- Check
 

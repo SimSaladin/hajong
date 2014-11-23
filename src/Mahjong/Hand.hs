@@ -71,23 +71,20 @@ instance Pretty HandPublic where
 --  3. need to draw first
 discard :: CanError m => Tile -> Hand -> m Hand
 discard tile hand
-    | hand ^. handPick == Just tile = return $ hand & set handPick Nothing . setDiscard
-    | hand ^. handPublic.handRiichi = throwError "Cannot change wait in riichi"
-    | otherwise = case ys of
-        [] -> throwError $ "Tile not in hand: " ++ tshow tile
-        _ : ys' | hand^.handPublic.handDrawWanpai || canDraw hand -> throwError "You need to draw first"
-                | Just pick <- hand^.handPick -> return
-                    $ handPick .~ Nothing $ handConcealed .~ (pick : xs ++ ys') $ setDiscard hand
-                | otherwise -> return $ handConcealed .~ (xs ++ ys') $ setDiscard hand
-    where
-        (xs, ys)   = break (== tile) (_handConcealed hand)
-        setDiscard = handPublic.handDiscards %~ (++ [(tile, Nothing)])
+    | hand^.handPublic.handRiichi                     = throwError "Cannot change wait in riichi"
+    | hand^.handPublic.handDrawWanpai || canDraw hand = throwError "You need to draw first"
+    | otherwise                                       = movePick . setDiscard <$> tileFromHand tile hand
+  where
+    setDiscard = handPublic.handDiscards %~ (++ [(tile, Nothing)])
+    movePick h
+        | Just p <- _handPick h = h & (handConcealed %~ (|> p)) . (handPick .~ Nothing)
+        | otherwise             = h
 
 -- | Do riichi if possible and discard.
 discardRiichi :: CanError m => Tile -> Hand -> m Hand
 discardRiichi tile hand
     | hand ^. handPublic.handRiichi = throwError "Already in riichi"
-    | tenpai hand                   = discard tile $ handPublic.handRiichi.~True $ hand
+    | tenpai hand                   = discard tile hand <&> handPublic.handRiichi .~ True
     | otherwise                     = throwError "Not in tenpai"
 
 -- | Automatically execute a discard necessary to advance the game (in case
@@ -132,7 +129,7 @@ canDraw h = not (h^.handPublic.handDrawWanpai)
 handWin :: CanError m => Hand -> m Hand
 handWin h = if complete h then return h else throwError "Cannot tsumo, hand is not complete"
 
--- * Ankan
+-- * Kan
 
 -- | Do an ankan on the given tile.
 ankanOn :: CanError m => Tile -> Hand -> m Hand
@@ -146,6 +143,23 @@ ankanOn tile hand
         hand'         = hand & handConcealed %~ filter (/= tile)
                              & handPublic.handOpen %~ (:) (kantsu tile)
                              & handPublic.handDrawWanpai .~ True
+
+shouminkanOn :: CanError m => Tile -> Hand -> m Hand
+shouminkanOn tile hand = do
+    hand' <- tile `tileFromHand` hand
+    case hand' ^? handPublic.handOpen.each.filtered isk of
+        Just _  -> return $ hand & handPublic.handOpen.each.filtered isk %~ promoteToKantsu
+        Nothing -> throwError "shouminkan not possible: no such open koutsu"
+  where
+    isk m = mentsuKind m == Koutsu && mentsuIdTile m == tile
+    
+
+-- | Take the tile from hand if possible
+tileFromHand :: CanError m => Tile -> Hand -> m Hand
+tileFromHand tile hand
+    | Just tile' <- hand ^. handPick, tile == tile'         = return $ handPick .~ Nothing $ hand
+    | (xs, _ : ys) <- break (== tile) (_handConcealed hand) = return $ handConcealed .~ (xs ++ ys) $ hand
+    | otherwise                                             = throwError "Tile not in hand"
 
 -- * Call
 

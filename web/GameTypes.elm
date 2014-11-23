@@ -86,6 +86,7 @@ data GameEvent = RoundPrivateStarts            RoundState
 data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile
+                | TurnShouminkan Tile
 
 data GameAction = GameTurn TurnAction
                 | GameShout Shout

@@ -25,7 +25,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 ------------------------------------------------------------------------------
 
-type CanError = MonadError Text
+type CanError m = (MonadError Text m, Functor m)
 
 if' :: Bool -> t -> t -> t
 if' cond th el = if cond then th else el

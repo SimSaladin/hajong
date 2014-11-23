@@ -169,6 +169,7 @@ instance ToJSON TurnAction where
     toJSON (TurnTileDiscard r t) = atType "discard" ["riichi" .= r, "tile" .= t]
     toJSON (TurnTileDraw w mt)   = atType "draw" ["wanpai" .= w, "tile" .= mt]
     toJSON (TurnAnkan t)         = atType "ankan" ["tile" .= t]
+    toJSON (TurnShouminkan t)    = atType "shouminkan" ["tile" .= t]
     toJSON TurnTsumo             = atType "tsumo" []
 
 instance ToJSON Player where
