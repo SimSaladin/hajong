@@ -247,7 +247,7 @@ nocareButton w str = case w of
    _                -> empty
 
 findFourTiles : RoundState -> Maybe Tile
-findFourTiles rs = counted 4 <| rs.myhand.concealed ++ maybe [] identity rs.myhand.pick
+findFourTiles rs = counted 4 <| sortTiles <| rs.myhand.concealed ++ maybe [] (\x -> [x]) rs.myhand.pick
 
 findShouminkan h = filter (\x -> x.mentsuKind == Koutsu &&
    (List.any (\t -> t == x.tile) h.concealed || h.pick == Just x.tile)) h.called
