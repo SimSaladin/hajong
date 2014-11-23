@@ -51,4 +51,10 @@ prettyList' = foldr ((P.<+>) . P.pretty) P.empty
 
 aesonOptions :: Int -> Options
 aesonOptions n = defaultOptions
-    { fieldLabelModifier = unpack . toLower . asText . pack . drop n }
+    { fieldLabelModifier = unpack . toLower . asText . pack . drop n
+    , sumEncoding        = TwoElemArray
+    }
+
+aesonOptions' :: Int -> Int -> Options
+aesonOptions' n m = (aesonOptions n)
+    { constructorTagModifier = unpack . toLower . asText . pack . drop m }

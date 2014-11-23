@@ -47,8 +47,25 @@ type RoundState =
         , actions   : [(Kaze, TurnAction)]
         }
 
-type RoundResult = { endKind : EndKind, winners : [Player], payers : [Player] }
-data EndKind     = Tsumo | ByRon | Draw
+data RoundResult = DealTsumo { winners : [Winner], payers : [Payer] }
+                 | DealRon   { winners : [Winner], payers : [Payer] }
+                 | DealDraw  { tenpai  : [Player], nooten : [Payer] }
+
+type Winner = { player : Player, valuehand : Valued }
+type Payer  = { player : Player, points : Points }
+
+type Points = Int
+type Yaku = { han : Int, naem : String }
+type Fu = Int
+type Han = Int
+
+type Valued = { mentsu : [Mentsu], tiles : [Tile], value : HandValue }
+
+type HandValue = { yaku : [Yaku]
+               , fu : Fu
+               , han : Han
+               , points : Points
+               , named : Maybe String }
 -- }}}
 
 -- {{{ Event -----------------------------------------------------------------

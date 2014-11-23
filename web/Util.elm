@@ -31,3 +31,6 @@ listFind k xs = case xs of
    (k', a) :: xs -> if k == k' then a
                                else listFind k xs
    [] -> Debug.crash <| "Key " ++ show k ++ " not found in " ++ show xs
+
+fromJust : Maybe a -> a
+fromJust (Just x) = x

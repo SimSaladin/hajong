@@ -30,7 +30,7 @@ import Mahjong.Tiles
 -- * Hand
 
 data HandPublic = HandPublic
-                { _handOpen :: [Mentsu]
+                { _handCalled :: [Mentsu]
                 , _handDiscards :: [(Tile, Maybe Kaze)]
                 , _handRiichi :: Bool
                 , _handDrawWanpai :: Bool -- ^ Should draw from wanpai
@@ -57,7 +57,7 @@ makeLenses ''Hand
 -- Instances
 
 instance HasGroupings Hand where
-    getGroupings h = getGroupings $ (,) <$> _handOpen . _handPublic <*> _handConcealed $ h
+    getGroupings h = getGroupings $ (,) <$> _handCalled . _handPublic <*> _handConcealed $ h
 
 instance Pretty Hand where
     pretty h =
@@ -67,7 +67,7 @@ instance Pretty Hand where
 instance Pretty HandPublic where
     pretty = do
         -- FIXME
-        tilenum <- view (handOpen.to length) <&> (13 -) . (*3)
+        tilenum <- view (handCalled.to length) <&> (13 -) . (*3)
         return $ string $ unwords $ replicate tilenum "_"
 
 -- * Discard
@@ -124,7 +124,7 @@ shoutsOn np t p hand
                 Shuntsu -> [Chi, Ron]
         guard $ if s == Ron
                 then complete
-                    ( toMentsu mk t xs : (hand^.handPublic.handOpen), _handConcealed hand L.\\ xs )
+                    ( toMentsu mk t xs : (hand^.handPublic.handCalled), _handConcealed hand L.\\ xs )
                 else mk /= Jantou
         return $ Shout s np t xs
 
@@ -132,7 +132,7 @@ shoutsOn np t p hand
 canDraw :: Hand -> Bool
 canDraw h = not (h^.handPublic.handDrawWanpai)
     && isNothing (h^.handPick)
-    && (3 * length (h^.handPublic.handOpen) + length (h^.handConcealed) == 13)
+    && (3 * length (h^.handPublic.handCalled) + length (h^.handConcealed) == 13)
 
 handWin :: CanError m => Hand -> m Hand
 handWin h = if complete h then return h else throwError "Cannot tsumo, hand is not complete"
@@ -149,18 +149,17 @@ ankanOn tile hand
     where
         sameConcealed = hand^.handConcealed^..folded.filtered (== tile)
         hand'         = hand & handConcealed %~ filter (/= tile)
-                             & handPublic.handOpen %~ (:) (kantsu tile)
+                             & handPublic.handCalled %~ (:) (kantsu tile)
                              & handPublic.handDrawWanpai .~ True
 
 shouminkanOn :: CanError m => Tile -> Hand -> m Hand
 shouminkanOn tile hand = do
     hand' <- tile `tileFromHand` hand
-    case hand' ^? handPublic.handOpen.each.filtered isk of
-        Just _  -> return $ hand & handPublic.handOpen.each.filtered isk %~ promoteToKantsu
+    case hand' ^? handPublic.handCalled.each.filtered isk of
+        Just _  -> return $ hand & handPublic.handCalled.each.filtered isk %~ promoteToKantsu
         Nothing -> throwError "shouminkan not possible: no such open koutsu"
   where
-    isk m = mentsuKind m == Koutsu && mentsuIdTile m == tile
-    
+    isk m = mentsuKind m == Koutsu && mentsuTile m == tile
 
 -- | Take the tile from hand if possible
 tileFromHand :: CanError m => Tile -> Hand -> m Hand
@@ -175,7 +174,7 @@ tileFromHand tile hand
 meldTo :: CanError m => Shout -> Mentsu -> Hand -> m Hand
 meldTo shout mentsu hand
     | hand^.handConcealed.to (\xs -> length ih + length (xs L.\\ ih) == length xs)
-    = return $ handPublic.handOpen %~ (|> mentsu)
+    = return $ handPublic.handCalled %~ (|> mentsu)
              $ handConcealed %~ (L.\\ ih)
              $ if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
              $ hand
@@ -206,10 +205,10 @@ data ValuedHand = ValuedHand
 makeLenses ''ValuedHand
 
 valueHand :: Hand -> Kaze -> Kaze -> ValuedHand
-valueHand h r player = ValuedHand (h^.handPublic.handOpen) (h^.handConcealed) (getValue vi)
+valueHand h r player = ValuedHand (h^.handPublic.handCalled) (h^.handConcealed) (getValue vi)
   where vi = ValueInfo r player
             (h^.handPublic.handRiichi)
-            (h^.handPublic.handOpen.to null)
+            (h^.handPublic.handCalled.to null)
             (h^.handPublic.handDiscards^..each._1)
-            (h^.handPublic.handOpen)
+            (h^.handPublic.handCalled)
             (h^.handPublic.handAgari.to fromJust)

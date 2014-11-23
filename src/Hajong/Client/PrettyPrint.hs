@@ -111,8 +111,8 @@ instance Pretty GamePlayer where
 
         let [dmine, dright, dfront, dleft]             = mapPositions (players ^.. each._4.handDiscards)
             [infoMine, infoRight, infoFront, infoLeft] = mapPositions (players ^.. each)
-            [_, handRight, handFront, handLeft]        = mapPositions (players ^.. each._4.handOpen.to (OtherConceal . (\o -> 13 - o * 3) . length))
-            [openMine, openRight, openFront, openLeft] = map pretty    (players ^.. each._4.handOpen)
+            [_, handRight, handFront, handLeft]        = mapPositions (players ^.. each._4.handCalled.to (OtherConceal . (\o -> 13 - o * 3) . length))
+            [openMine, openRight, openFront, openLeft] = map pretty    (players ^.. each._4.handCalled)
 
         return $ string $ unlines $ []
                 & pushToPlace dora      (12, 24) 

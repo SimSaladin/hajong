@@ -342,7 +342,7 @@ applyGameEvent ev = case ev of
     DealTurnBegins p        -> playerPublic.pTurn .~ p
     DealTurnAction p ta     -> applyTurnAction p ta
     DealTurnShouted p shout ->
-        (playerPublicHands.at p._Just.handOpen %~ (|> fromShout shout)) .
+        (playerPublicHands.at p._Just.handCalled %~ (|> fromShout shout)) .
         (playerPublic.pTurn .~ p) .
         (playerPublicHands.at (shoutedFrom shout)._Just.handDiscards._last._2 .~ Just p)
     DealHandChanged p hp    -> playerPublicHands.at p._Just .~ hp
@@ -359,7 +359,7 @@ applyTurnAction p ta = case ta of
     TurnTileDiscard riichi tile -> playerPublicHands.at p._Just %~
         (handDiscards %~ (|> (tile, Nothing))) . (handRiichi .~ riichi)
     TurnTileDraw _ _     -> playerPublic.pWallTilesLeft -~ 1
-    TurnAnkan tile       -> playerPublicHands.at p._Just.handOpen %~ (|> kantsu tile)
+    TurnAnkan tile       -> playerPublicHands.at p._Just.handCalled %~ (|> kantsu tile)
     _                    -> id
 
 applyGameEvents' :: [GameEvent] -> Deal -> Deal

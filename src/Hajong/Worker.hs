@@ -220,6 +220,7 @@ workerProcessTurnAction ta c = do
                     case ta of
                         TurnTileDraw _ _    -> turnActionOrTimeout
                         TurnAnkan _         -> turnActionOrTimeout
+                        TurnShouminkan _    -> turnActionOrTimeout -- TODO with shout
                         TurnTileDiscard _ _ -> waitForShouts
                         TurnTsumo
                             | Just roundRes <- rr -> endDeal roundRes

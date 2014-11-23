@@ -7,16 +7,14 @@ import Set
 import Maybe (maybe)
 import Json (Value(..), toString, fromString)
 import Debug
+import Util (..)
 
 -- FromJSON --------------------------------------------------------------------
 
 fromJSON_Event : String -> Event
 fromJSON_Event str = maybe (Invalid { content = str }) parseEvent <| fromString str
 
-fromJust : Maybe a -> a
-fromJust (Just x) = x
-
--- ToJSON ----------------------------------------------------------------------
+-- {{{ ToJSON ----------------------------------------------------------------------
 
 toJSON_Event : Event -> Value
 toJSON_Event ev = case ev of
@@ -61,10 +59,11 @@ atType t xs = Object (Dict.fromList <| ("type", String t) :: xs)
 
 atAction : String -> [(String, Value)] -> [(String, Value)]
 atAction t xs = ("action", String t) :: xs
+-- }}}
 
 -- Parsers ---------------------------------------------------------------------
 
--- ** Helpers ----------------------------------------------------
+-- ** {{{ Helpers ----------------------------------------------------
 n .: o = Dict.getOrFail n o
 
 parseString x = case x of
@@ -83,11 +82,16 @@ parseBoolMaybe x = case x of
    Boolean b -> Just b
    Null      -> Nothing
 
+parseStringMaybe x = case x of
+   String s -> Just s
+   Null -> Nothing
+
 withArray f (Array xs) = map f xs
 
 parsePlayer = parseInt
+-- }}}
 
--- ** Event ------------------------------------------------------
+-- ** {{{ Event ------------------------------------------------------
 parseEvent : Value -> Event
 parseEvent (Object o) = case "type" .: o |> parseString of
     "identity"     -> Identity     <| hasNick o {}
@@ -100,8 +104,9 @@ parseEvent (Object o) = case "type" .: o |> parseString of
     "game-join"    -> JoinGame     <| hasNick o { ident = parseInt <| "ident" .: o }
     "game-event"   -> InGameEvents <| withArray parseGameEvent <| "events" .: o
     t              -> Invalid { content = "Received unexpected " ++ t }
+    -- }}}
 
--- ** Tiles -----------------------------------------------------
+-- ** {{{ Tiles -----------------------------------------------------
 parseTile : Value -> Tile
 parseTile (Object o) = case "type" .: o |> parseString of
     "ManTile"   -> Suited ManTile ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
@@ -132,8 +137,9 @@ hasHonor o = case "ident" .: o |> parseString of
     "Haku"  -> Sangenpai Haku
     "Hatsu" -> Sangenpai Hatsu
     "Chun"  -> Sangenpai Chun
+-- }}}
 
--- ** General fields ------------------------------------------
+-- ** {{{ General fields ------------------------------------------
 hasNick o s        = { s | nick    = "nick"        .: o |> parseString }
 hasFrom o s        = { s | from    = "from"        .: o |> parseString }
 hasContent o s     = { s | content = "content"     .: o |> parseString }
@@ -141,8 +147,9 @@ hasPlayer o s      = { s | player  = "player"      .: o |> parseInt }
 hasPlayerKaze o s  = { s | player_kaze  = "player-kaze" .: o |> parseKaze }
 hasLounge o s      = { s | lounge  = parseLoungeData o }
 hasGame o s        = { s | game    = parseGame o }
+-- }}}
 
--- ** Lounge --------------------------------------------------
+-- ** {{{ Lounge --------------------------------------------------
 parseLoungeData o =
     { idle  = parseNicks     <| "idle"  .: o
     , games = parseGameInfos <| "games" .: o
@@ -158,37 +165,37 @@ parseGame o = { ident   = parseInt    <| "ident" .: o
               , topic   = parseString <| "topic" .: o
               , players = parseNicks  <| "players" .: o
               }
+-- }}}
 
--- ** GameEvents ------------------------------------------------
+-- ** {{{ GameEvents ------------------------------------------------
 parseGameEvent : Value -> GameEvent
 parseGameEvent (Object o) = case "event" .: o |> parseString of
-    "round-begin"  -> RoundPrivateStarts            <| parseRoundState o
+    "round-begin"  -> RoundPrivateStarts  <| parseRoundState o
     "wait-shout"   -> RoundPrivateWaitForShout      <| { seconds = "seconds" .: o |> parseInt
-                                                       , shouts = "shouts" .: o |> withArray parseShout
-                                                       }
+                                                       , shouts  = "shouts"  .: o |> withArray parseShout }
     "wait-turn"    -> RoundPrivateWaitForTurnAction <| hasPlayer o { seconds = "seconds" .: o |> parseInt }
-    "my-hand"      -> RoundPrivateChange            <| hasPlayer o { hand    = "hand"    .: o |> parseHand }
-    "turn-changed" -> RoundTurnBegins               <| hasPlayerKaze o { }
-    "turn-action"  -> RoundTurnAction               <| hasPlayerKaze o { action  = "action"  .: o |> parseTurnAction }
-    "shout"        -> RoundTurnShouted              <| hasPlayerKaze o { shout   = "shout"   .: o |> parseShout }
-    "hand"         -> RoundHandChanged              <| hasPlayerKaze o { hand    = "hand" .: o |> parsePublicHand }
-    "end"          -> RoundEnded                    <| fromJust <| parseResults <| "results" .: o
-    "nick"         -> RoundNick                     <| hasPlayerKaze o { nick = "nick" .: o |> parseString }
+    "my-hand"      -> RoundPrivateChange  <| hasPlayer     o { hand    = "hand"   .: o |> parseHand }
+    "turn-changed" -> RoundTurnBegins     <| hasPlayerKaze o { }
+    "turn-action"  -> RoundTurnAction     <| hasPlayerKaze o { action  = "action" .: o |> parseTurnAction }
+    "shout"        -> RoundTurnShouted    <| hasPlayerKaze o { shout   = "shout"  .: o |> parseShout }
+    "hand"         -> RoundHandChanged    <| hasPlayerKaze o { hand    = "hand"   .: o |> parsePublicHand }
+    "nick"         -> RoundNick           <| hasPlayerKaze o { nick    = "nick"   .: o |> parseString }
+    "end"          -> RoundEnded          <| fromJust <| parseResults <| "results" .: o
+-- }}}
 
--- * Hand -------------------------------------------------------
+-- * {{{ Hand -------------------------------------------------------
 parseHand : Value -> Hand
 parseHand v =
    let x = parsePublicHand v
-   in
-      case v of
-         Object o ->
-            { concealed   = "concealed" .: o |> withArray parseTile
-            , pick        = "pick"      .: o |> parseTileMaybe
-            , furiten     = "furiten"   .: o |> parseBoolMaybe
-            , called      = x.called
-            , discards    = x.discards
-            , riichi      = x.riichi
-            }
+   in case v of
+      Object o ->
+         { concealed   = "concealed" .: o |> withArray parseTile
+         , pick        = "pick"      .: o |> parseTileMaybe
+         , furiten     = "furiten"   .: o |> parseBoolMaybe
+         , called      = x.called
+         , discards    = x.discards
+         , riichi      = x.riichi
+         }
 
 parsePublicHand : Value -> HandPublic
 parsePublicHand (Object o) = 
@@ -199,34 +206,31 @@ parsePublicHand (Object o) =
 
 parsePlayerHand : Value -> (Kaze, HandPublic)
 parsePlayerHand (Array [a, b]) = (parseKaze a, parsePublicHand b)
+-- }}}
 
--- * Mentsu ------------------------------------------------------
+-- * {{{ Mentsu ------------------------------------------------------
 parseMentsu : Value -> Mentsu
 parseMentsu (Object o) = Mentsu
-   (parseMentsuKind <| "type" .: o)
+   (parseMentsuKind <| "kind" .: o)
    (parseTile       <| "tile" .: o)
-   (parseShoutMaybe <| "shouted" .: o)
+   (parseShoutMaybe <| "shout" .: o)
 
 parseMentsuKind : Value -> MentsuKind
 parseMentsuKind (String s) = case s of
-   "Shuntsu" -> Shuntsu
-   "Koutsu"  -> Koutsu
-   "Kantsu"  -> Kantsu
-   "Jantou"  -> Jantou
+   "shuntsu" -> Shuntsu
+   "koutsu"  -> Koutsu
+   "kantsu"  -> Kantsu
+   "jantou"  -> Jantou
+-- }}}
 
--- * Shout -------------------------------------------------------
+-- * {{{ Shout -------------------------------------------------------
 parseShout : Value -> Shout
 parseShout (Object o) =
-   { shoutKind = "type" .: o |> parseShoutKind
+   { shoutKind = "kind" .: o |> parseShoutKind
    , shoutFrom = "from" .: o |> parseKaze
    , shoutTile = "tile" .: o |> parseTile
    , shoutTo   = "to"   .: o |> withArray parseTile
    }
-
-parseShoutMaybe : Value -> Maybe Shout
-parseShoutMaybe v = case v of
-   Null     -> Nothing
-   Object _ -> Just <| parseShout v
 
 parseShoutKind : Value -> ShoutKind
 parseShoutKind (String s) = case s of
@@ -235,7 +239,13 @@ parseShoutKind (String s) = case s of
    "chi" -> Chi
    "ron" -> Ron
 
--- * RoundState -------------------------------------------------------
+parseShoutMaybe : Value -> Maybe Shout
+parseShoutMaybe v = case v of
+   Null     -> Nothing
+   Object _ -> Just <| parseShout v
+-- }}}
+
+-- * {{{ RoundState -------------------------------------------------------
 parseRoundState : Dict.Dict String Value -> RoundState
 parseRoundState o = case "gamestate" .: o of
     Object game -> 
@@ -259,26 +269,53 @@ parsePoints (Array [a, b]) = (parseKaze a, parseInt b)
 
 parsePlayers : Value -> (Kaze, (Player, Int, String))
 parsePlayers (Array [p, Array [k, ps, n]]) = (parseKaze k, (parseInt p, parseInt ps, parseString n))
+-- }}}
 
--- * RoundResult -------------------------------------------------------
+-- * {{{ Results -------------------------------------------------------
 parseResults : Value -> Maybe RoundResult
-parseResults v = case v of
-   Object o -> Just { endKind = "type"    .: o |> parseEndKind
-                    , winners = "winners" .: o |> withArray parsePlayer
-                    , payers  = "payers"  .: o |> withArray parsePlayer
-                    }
+parseResults val = case val of
+   Array [String t, Object o] -> Just <| case t of
+      "tsumo" -> DealTsumo { winners = ("winners" .: o |> withArray parseWinner)
+                           , payers  = ("payers"  .: o |> withArray parsePayer) }
+      "ron"   -> DealRon   { winners = ("winners" .: o |> withArray parseWinner)
+                           , payers  = ("payers"  .: o |> withArray parsePayer) }
+      "draw"  -> DealDraw  { tenpai  = ("tenpais" .: o |> withArray parsePlayer)
+                           , nooten  = ("nooten"  .: o |> withArray parsePayer) }
    Null     -> Nothing
 
-parseEndKind : Value -> EndKind
-parseEndKind (String s) = case s of
-   "tsumo" -> Tsumo
-   "ron"   -> ByRon
-   "draw"  -> Draw
+parseWinner : Value -> Winner
+parseWinner (Array [p, h]) = Winner (parsePlayer p) (parseValuedHand h)
 
--- * TurnAction -------------------------------------------------------
+parsePayer : Value -> Payer
+parsePayer (Array [p, v]) = Payer (parsePlayer p) (parseInt v)
+-- }}}
+
+-- {{{ * Value
+parseHandValue : Value -> HandValue
+parseHandValue (Object o) = HandValue
+   ("yaku" .: o |> withArray parseYaku)
+   ("fu"   .: o |> parseInt)
+   ("han"  .: o |> parseInt)
+   ("value" .: o |> parseInt)
+   ("named" .: o |> parseStringMaybe)
+
+parseValuedHand : Value -> Valued
+parseValuedHand (Object o) = Valued
+   ("mentsu" .: o |> withArray parseMentsu)
+   ("tiles" .: o |> withArray parseTile)
+   ("value" .: o |> parseHandValue)
+
+parseYaku : Value -> Yaku
+parseYaku (Object o) = Yaku
+   ("han" .: o |> parseInt)
+   ("name" .: o |> parseString)
+-- }}}
+
+-- * {{{ TurnAction -------------------------------------------------------
 parseTurnAction : Value -> TurnAction
 parseTurnAction (Object o) = case "type" .: o |> parseString of
     "draw"    -> TurnTileDraw    ("wanpai" .: o |> parseBool) ("tile" .: o |> parseTileMaybe)
     "discard" -> TurnTileDiscard ("riichi" .: o |> parseBool) ("tile" .: o |> parseTile)
     "ankan"   -> TurnAnkan       ("tile"   .: o |> parseTile)
     "shouminkan" -> TurnShouminkan ("tile" .: o |> parseTile)
+-- }}}

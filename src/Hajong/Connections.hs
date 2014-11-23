@@ -137,9 +137,6 @@ gamePairs (i,GameSettings t) = object
 
 -- Instances -----------------------------------------------------------------
 
--- I hate this boilerplate; why was it better idea than deriving with aeson
--- that some day...
-
 instance ToJSON Event where
     toJSON (ClientIdentity nick)   = atType "identity"     ["nick" .= nick]
     toJSON (JoinServer nick)       = atType "join"         ["nick" .= nick]
@@ -155,30 +152,28 @@ instance ToJSON Event where
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
-        DealPrivateStarts gameplayer           -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
+        DealPrivateStarts gameplayer             -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
         DealPrivateWaitForShout player secs shs  -> atEvent "wait-shout"   ["player" .= player, "seconds" .= secs, "shouts" .= shs]
         DealPrivateWaitForTurnAction player secs -> atEvent "wait-turn"    ["player" .= player, "seconds" .= secs]
         DealPrivateChange player hand            -> atEvent "my-hand"      ["player" .= player, "hand" .= hand]
-        DealTurnBegins pk                    -> atEvent "turn-changed" ["player-kaze" .= pk]
-        DealTurnAction pk turnaction         -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
-        DealTurnShouted pk shout             -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
-        DealHandChanged pk hand              -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
-        DealEnded results                      -> atEvent "end"          ["results" .= results]
-        DealNick p pk nick                  -> atEvent "nick" ["player" .= p, "player-kaze" .= pk, "nick" .= nick]
+        DealTurnBegins pk                        -> atEvent "turn-changed" ["player-kaze" .= pk]
+        DealTurnAction pk turnaction             -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
+        DealTurnShouted pk shout                 -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
+        DealHandChanged pk hand                  -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
+        DealEnded results                        -> atEvent "end"          ["results" .= results]
+        DealNick p pk nick                       -> atEvent "nick"         ["player" .= p, "player-kaze" .= pk, "nick" .= nick]
 
 instance ToJSON TurnAction where
-    toJSON (TurnTileDiscard r t) = atType "discard" ["riichi" .= r, "tile" .= t]
-    toJSON (TurnTileDraw w mt)   = atType "draw" ["wanpai" .= w, "tile" .= mt]
-    toJSON (TurnAnkan t)         = atType "ankan" ["tile" .= t]
+    toJSON (TurnTileDiscard r t) = atType "discard"    ["riichi" .= r, "tile" .= t]
+    toJSON (TurnTileDraw w mt)   = atType "draw"       ["wanpai" .= w, "tile" .= mt]
+    toJSON (TurnAnkan t)         = atType "ankan"      ["tile" .= t]
     toJSON (TurnShouminkan t)    = atType "shouminkan" ["tile" .= t]
-    toJSON TurnTsumo             = atType "tsumo" []
+    toJSON TurnTsumo             = atType "tsumo"      []
 
-instance ToJSON Player where
-    toJSON (Player k) = toJSON k
-
-instance ToJSON Kaze where
-    toJSON = toJSON . tshow
-
+instance ToJSON Player where toJSON (Player k) = toJSON k
+instance ToJSON Kaze where toJSON = toJSON . tshow
+instance ToJSON Number where toJSON = toJSON . (1 +) . fromEnum
+instance ToJSON TileKind where toJSON = toJSON . tshow
 instance ToJSON Hand where
     toJSON h = Object $
         (\(Object o) -> o) (object
@@ -188,44 +183,13 @@ instance ToJSON Hand where
             ])
         <> (\(Object o) -> o) (toJSON (_handPublic h))
 
-instance ToJSON HandPublic where
-    toJSON p = object
-        [ "called"       .= _handOpen p
-        , "discards"     .= _handDiscards p
-        , "riichi"       .= _handRiichi p
-        ]
-
-instance ToJSON Mentsu where
-    toJSON (Mentsu mk t ms) = object [ "type" .= mk, "tile" .= t, "shouted" .= ms ]
-
-instance ToJSON MentsuKind where toJSON = toJSON . tshow
-
-instance ToJSON Shout where
-    toJSON Shout{..} = atType (toLower $ tshow shoutKind)
-        ["from" .= shoutedFrom, "tile" .= shoutedTile, "to" .= shoutedTo]
-
 instance ToJSON Tile where
     toJSON (Suited tk n a) = object [ "type" .= tk, "number" .= n, "aka" .= a ]
     toJSON (Honor h) = object [ "type" .= HonorTile, "ident" .= h]
 
-instance ToJSON Number where toJSON = toJSON . (1 +) . fromEnum
-instance ToJSON TileKind where toJSON = toJSON . tshow
-
 instance ToJSON Honor where
     toJSON (Sangenpai s) = toJSON (tshow s)
     toJSON (Kazehai k) = toJSON k
-
-instance ToJSON DealResults where
-    toJSON DealDraw{..} = atType "draw" ["winners" .= dTenpais, "payers" .= dNooten]
-    toJSON res = atType getType ["winners" .= dWinners res, "payers" .= dPayers res]
-        where
-            getType = case res of DealTsumo{} -> "tsumo"
-                                  DealRon{}   -> "ron"
-                                  DealDraw{}  -> "draw"
-
-$(deriveJSON (aesonOptions 4) ''Yaku)
-$(deriveJSON (aesonOptions 3) ''Value)
-$(deriveJSON (aesonOptions 3) ''ValuedHand)
 
 instance ToJSON Deal where
     toJSON x = object
@@ -238,6 +202,19 @@ instance ToJSON Deal where
         , "players"    .= map (toJSON *** toJSON) (M.toList $ _pPlayers x)
         , "results"    .= _pResults x
         ]
+
+-- derived
+
+--
+$(deriveToJSON (aesonOptions 5) ''HandPublic)
+$(deriveToJSON (aesonOptions 6) ''Mentsu)
+$(deriveToJSON (aesonOptions 0) ''MentsuKind)
+$(deriveToJSON (aesonOptions 0) ''ShoutKind)
+$(deriveToJSON (aesonOptions 7) ''Shout)
+$(deriveToJSON (aesonOptions' 1 4) ''DealResults)
+$(deriveToJSON (aesonOptions 4) ''Yaku)
+$(deriveToJSON (aesonOptions 3) ''Value)
+$(deriveToJSON (aesonOptions 3) ''ValuedHand)
 
 -- FromJSON
 

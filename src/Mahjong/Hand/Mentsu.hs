@@ -17,7 +17,7 @@ module Mahjong.Hand.Mentsu
     shuntsuWith, fromShout, promoteToKantsu,
 
     -- * Functions
-    mentsuKind, mentsuIdTile, mentsuTiles, mentsuShout, mentsuShouted,
+    mentsuTiles, mentsuShouted,
     isJantou, isShuntsu, isKoutsu, isKantsu,
 
     -- * Shouts
@@ -32,8 +32,11 @@ import Text.PrettyPrint.ANSI.Leijen (Pretty(..))
 -- Types
 
 -- | For Shuntsu, the tile is the /first/ tile in chronological order.
-data Mentsu = Mentsu MentsuKind Tile (Maybe Shout)
-            deriving (Show, Read, Eq, Ord)
+data Mentsu = Mentsu
+    { mentsuKind :: MentsuKind
+    , mentsuTile :: Tile
+    , mentsuShout :: Maybe Shout
+    } deriving (Show, Read, Eq, Ord)
 
 data MentsuKind = Shuntsu -- ^ 3 Tile straight
                 | Koutsu -- ^ Triplet
@@ -71,22 +74,12 @@ instance Pretty Shout where
 
 -- Helpers
 
--- | Get the mentsu kind
-mentsuKind :: Mentsu -> MentsuKind
-mentsuKind (Mentsu k _ _) = k
-
-mentsuIdTile :: Mentsu -> Tile
-mentsuIdTile (Mentsu _ t _) = t
-
 mentsuTiles :: Mentsu -> [Tile]
-mentsuTiles (Mentsu mk t _) = case mk of
-                                  Shuntsu -> t : catMaybes [succMay t, succMay t >>= succMay]
-                                  Koutsu  -> replicate 3 t
-                                  Kantsu  -> replicate 4 t
-                                  Jantou  -> replicate 2 t
-
-mentsuShout :: Mentsu -> Maybe Shout
-mentsuShout (Mentsu _ _ x) = x
+mentsuTiles Mentsu{..} = case mentsuKind of
+    Shuntsu -> mentsuTile : catMaybes [succMay mentsuTile, succMay mentsuTile >>= succMay]
+    Koutsu  -> replicate 3 mentsuTile
+    Kantsu  -> replicate 4 mentsuTile
+    Jantou  -> replicate 2 mentsuTile
 
 mentsuShouted :: Mentsu -> Bool
 mentsuShouted = isJust . mentsuShout
