@@ -43,3 +43,11 @@
 [x] (connections) revisit json instances - possibly derive?
 
 [ ] (worker) pause
+[ ] (game) ryanhan-shibari
+
+[ ] game conf
+   [ ] (opt) start and goal scores
+   [ ] (opt) wareme
+   [ ] (opt) chombo
+   [ ] (opt) aotenjou
+   [ ] (opt) basengo
