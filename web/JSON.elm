@@ -174,7 +174,9 @@ parseGameEvent (Object o) = case "event" .: o |> parseString of
     "round-begin"  -> RoundPrivateStarts  <| parseRoundState o
     "wait-shout"   -> RoundPrivateWaitForShout      <| { seconds = "seconds" .: o |> parseInt
                                                        , shouts  = "shouts"  .: o |> withArray parseShout }
-    "wait-turn"    -> RoundPrivateWaitForTurnAction <| hasPlayer o { seconds = "seconds" .: o |> parseInt }
+    "wait-turn"    -> RoundPrivateWaitForTurnAction <| hasPlayer o { seconds    = "seconds"     .: o |> parseInt
+                                                                   , riichiWith = "riichi-with" .: o |> withArray parseTile
+                                                                   }
     "my-hand"      -> RoundPrivateChange  <| hasPlayer     o { hand    = "hand"   .: o |> parseHand }
     "turn-changed" -> RoundTurnBegins     <| hasPlayerKaze o { }
     "turn-action"  -> RoundTurnAction     <| hasPlayerKaze o { action  = "action" .: o |> parseTurnAction }

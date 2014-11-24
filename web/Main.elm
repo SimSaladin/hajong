@@ -68,6 +68,7 @@ newState = { status     = InLounge
            , waitTurnAction = Nothing
            , waitShout = Nothing
            , turnBegan  = 0
+           , riichiWith = []
 
            , eventlog   = []
            , debuglog   = []

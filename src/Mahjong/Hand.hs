@@ -92,7 +92,7 @@ discard tile hand
 discardRiichi :: CanError m => Tile -> Hand -> m Hand
 discardRiichi tile hand
     | hand ^. handPublic.handRiichi = throwError "Already in riichi"
-    | tenpai hand                   = discard tile hand <&> handPublic.handRiichi .~ True
+    | canRiichiWith tile hand       = discard tile hand <&> handPublic.handRiichi .~ True
     | otherwise                     = throwError "Not in tenpai"
 
 -- | Automatically execute a discard necessary to advance the game (in case
@@ -139,7 +139,11 @@ handWin h = if complete h then return h else throwError "Cannot tsumo, hand is n
 
 -- | Tiles the hand can discard for a riichi.
 handCanRiichiWith :: Hand -> [Tile]
-handCanRiichiWith h = [] -- TODO
+handCanRiichiWith h = mapMaybe (\t -> return t <* guard (canRiichiWith t h)) (h^.handConcealed)
+
+canRiichiWith :: Tile -> Hand -> Bool
+canRiichiWith t h = tenpai
+    (h^.handPublic.handCalled, L.delete t $ h^.handConcealed ++ maybe [] return (h^.handPick))
 
 -- * Kan
 

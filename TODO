@@ -1,7 +1,7 @@
 [x] (web) in-game actions
    [x] ankan
    [/] minshoukan
-   [ ] (game, elm) riichi
+   [/] (game, elm) riichi
 [/] (web) in-game view
    [x] player in turn -indicator
    [x] mentsu (needs correct from indicator)
@@ -25,7 +25,7 @@
 
 [ ] (game) yaku checks
 
-[ ] (game) final scoring and possible next rounds
+[/] (game) final scoring and possible next rounds
 [ ] (game, elm, server) tsumo
 [X] (game) BUG shoutedFrom cannot draw anymore "Cannot draw from wall"
 [x] (game) BUG shouting multiple: discard player's all other shouts.
@@ -44,6 +44,8 @@
 
 [ ] (worker) pause
 [ ] (game) ryanhan-shibari
+[ ] (game) tenhou
+[ ] (game) ankan in riichi
 
 [ ] game conf
    [ ] (opt) start and goal scores

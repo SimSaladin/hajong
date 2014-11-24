@@ -16,6 +16,8 @@ type GameState = { status     : Status
                  , waitTurnAction : Maybe WaitRecord
                  , waitShout      : Maybe (WaitRecord, [Shout])
                  , turnBegan      : Time
+                 , riichiWith     : [Tile]
+                 , canTsumo       : Bool
 
                  -- Debug
                  , eventlog   : [Event]
@@ -89,7 +91,7 @@ data Event = JoinServer  { nick : String } -- ^ Nick
 
 data GameEvent = RoundPrivateStarts            RoundState
                | RoundPrivateWaitForShout      { seconds : Int, shouts : [Shout] }
-               | RoundPrivateWaitForTurnAction { player : Player, seconds : Int }
+               | RoundPrivateWaitForTurnAction { player : Player, seconds : Int, riichiWith : [Tile]}
                | RoundPrivateChange            { player : Player, hand : Hand }
                | RoundTurnBegins               { player_kaze : Kaze }
                | RoundTurnAction               { player_kaze : Kaze, action : TurnAction }

@@ -24,6 +24,7 @@ controls = Controls <~ dropRepeats discardHover.signal
 -- Maybe a tile to discard from my hand
 discard : Input (Maybe Tile)
 discard = input Nothing
+riichi = input Nothing
 
 discardHover : Input (Maybe Tile)
 discardHover = input Nothing
@@ -48,6 +49,7 @@ shoutChooseTile = input Nothing
 events : Signal Event
 events = merges
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
+   , maybe Noop (InGameAction << GameTurn << TurnTileDiscard True) <~ riichi.signal
    , maybe Noop (InGameAction << GameShout) <~ shout.signal
    , maybe Noop (InGameAction << GameTurn << TurnAnkan) <~ ankan.signal
    , maybe Noop (InGameAction << GameTurn << TurnShouminkan) <~ shouminkan.signal
@@ -72,7 +74,10 @@ display co gs = case gs.roundState of
            <| (
               maybe [] (map shoutButton << snd) (gs.waitShout)
                ++ shouminkanButtons rs "Shouminkan"
-               ++ [ankanButton rs "Ankan", nocareButton gs.waitShout "Pass" ]
+               ++ [ ankanButton rs "Ankan"
+                  , nocareButton gs.waitShout "Pass" ]
+               ++ riichiButtons gs.riichiWith
+               ++ [ tsumoButton gs.canTsumo ]
                )
         , container 1000 100 midTop <| dispHand rs.mypos co rs.myhand
         ]
@@ -253,6 +258,8 @@ shoutButton s =
 shouminkanButtons rs str = findShouminkan rs.myhand
    |> map (\t -> clickable shouminkan.handle (Just t) (buttonElem' str blue))
 
+riichiButtons = map (\t -> clickable riichi.handle (Just t) (buttonElem' "Riichi" red))
+
 ankanButton rs str = case findFourTiles rs of
    Just t  -> clickable ankan.handle (Just t) (buttonElem' str green)
    Nothing -> empty
@@ -292,8 +299,11 @@ processInGameEvent event gs = case event of
              , gameWait <- Nothing
              , roundState <- Just rs }
 
-   RoundPrivateWaitForTurnAction {seconds} ->
-      { gs | waitTurnAction <- Just <| WaitRecord seconds gs.updated }
+   RoundPrivateWaitForTurnAction {seconds, riichiWith, canTsumo} ->
+      { gs | waitTurnAction <- Just <| WaitRecord seconds gs.updated
+           , riichiWith     <- riichiWith
+           , canTsumo       <- canTsumo
+        }
    RoundPrivateWaitForShout {seconds, shouts} ->
       { gs | waitShout      <- Just <|
          ( WaitRecord seconds gs.updated
@@ -308,6 +318,8 @@ processInGameEvent event gs = case event of
       |> \gs -> { gs | turnBegan <- gs.updated
                      , waitTurnAction <- Nothing
                      , waitShout <- Nothing
+                     , riichiWith <- []
+                     , canTsuom  <- False
                 }
 
    RoundTurnAction {player_kaze, action} ->
