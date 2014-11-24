@@ -79,9 +79,11 @@ instance Pretty HandPublic where
 --  3. need to draw first
 discard :: CanError m => Tile -> Hand -> m Hand
 discard tile hand
-    | hand^.handPublic.handRiichi                     = throwError "Cannot change wait in riichi"
-    | hand^.handPublic.handDrawWanpai || canDraw hand = throwError "You need to draw first"
-    | otherwise                                       = movePick . setDiscard <$> tileFromHand tile hand
+    | hand^.handPublic.handDrawWanpai || canDraw hand
+      = throwError "You need to draw first"
+    | hand^.handPick == Just tile || not (hand^.handPublic.handRiichi)
+      = movePick . setDiscard <$> tileFromHand tile hand
+    | otherwise = throwError "Cannot change wait in riichi"
   where
     setDiscard = handPublic.handDiscards %~ (++ [(tile, Nothing)])
     movePick h
