@@ -30,7 +30,7 @@ import           Data.Maybe (fromJust)
 -- public states in sync with minimum bandwidth.
 type DealM m =
     ( MonadReader Deal m
-    , MonadState Deal m
+    , MonadState Deal m -- TODO this is kind of maybe too much. instead encode changes in GameEvents
     , MonadWriter [GameEvent] m
     , MonadError Text m
     , Functor m
@@ -107,7 +107,7 @@ runTurn' pk ta = do
     if ta == TurnTsumo then Just <$> endTsumo else return Nothing
     where
         handAction h = case ta of
-            TurnTileDiscard True  tile -> discardRiichi tile h <* endTurn tile
+            TurnTileDiscard True  tile -> discardRiichi tile h <* takeRiichiPoints pk <* endTurn tile
             TurnTileDiscard False tile -> discard tile h <* endTurn tile
             TurnAnkan tile             -> ankanOn tile h
             TurnTileDraw False _       -> drawWall h
@@ -122,8 +122,9 @@ drawWall hand = do
     unless (canDraw hand) (throwError "Cannot draw from wall")
     wall <- use sWall
     case wall of
-        (x:xs) -> do sWall .= xs
-                     return $ handPick .~ Just x $ hand
+        (t:ts) -> do
+            sWall .= ts
+            t `toHand` hand
         _ -> throwError "No tiles left"
 
 drawDeadWall :: DealM m => Hand -> m Hand
@@ -131,11 +132,17 @@ drawDeadWall hand = preuse (sWall._Snoc)
     >>= maybe (throwError "No tiles in wall!") (draw . fst)
     where
         draw wall = do
-            unless (hand^.handPublic.handDrawWanpai) (throwError "Cannot draw from wanpai")
             sWall .= wall
-            Just (dt, wanpai) <- preuse (sWanpai._Cons)
-            sWanpai .= wanpai
-            return $ handPick .~ Just dt $ handPublic.handDrawWanpai .~ False $ hand
+            Just (t, ts) <- preuse (sWanpai._Cons)
+            sWanpai .= ts
+            t `toHandWanpai` hand
+
+takeRiichiPoints :: DealM m => Kaze -> m ()
+takeRiichiPoints pk = do
+    p <- kazeToPlayer pk
+    np <- view $ pPlayers.at p.singular _Just._2.to (\a -> a - 1000)
+    when (np < 0) $ throwError "Cannot riichi: not enough points"
+    tell [DealRiichi p, GamePoints p np]
 
 -- | Set sWaitingShouts to players who could shout the discard.
 endTurn :: DealM m => Tile -> m ()
@@ -376,6 +383,7 @@ applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs
                  rp mempty hand
     where
         hand = Hand [] Nothing Nothing (HandPublic [] [(error "N/A", Nothing)] False False Nothing)
+               False
 
 applyGameEvent' :: GameEvent -> Deal -> Deal
 applyGameEvent' ev = applyGameEvents' [ev]

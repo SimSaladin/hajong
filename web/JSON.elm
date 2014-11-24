@@ -195,6 +195,7 @@ parseHand v =
          { concealed   = "concealed" .: o |> withArray parseTile
          , pick        = "pick"      .: o |> parseTileMaybe
          , furiten     = "furiten"   .: o |> parseBoolMaybe
+         , canTsumo    = "can-tsumo" .: o |> parseBool
          , called      = x.called
          , discards    = x.discards
          , riichi      = x.riichi

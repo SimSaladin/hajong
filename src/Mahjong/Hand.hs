@@ -42,11 +42,12 @@ data Hand = Hand
           , _handPick :: Maybe Tile
           , _handFuriten :: Maybe Bool -- ^ Just (temporary?)
           , _handPublic :: HandPublic
+          , _hCanTsumo :: Bool
           } deriving (Show, Read, Eq)
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False Nothing)
+initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False Nothing) False
 
 -- ** Lenses
 
@@ -69,6 +70,18 @@ instance Pretty HandPublic where
         -- FIXME
         tilenum <- view (handCalled.to length) <&> (13 -) . (*3)
         return $ string $ unwords $ replicate tilenum "_"
+
+-- * Draw
+
+toHand :: CanError m => Tile -> Hand -> m Hand
+toHand t = do
+    h <- handPick .~ Just t
+    return $ return $ if' (complete h) (hCanTsumo .~ True) id $ h
+
+toHandWanpai :: CanError m => Tile -> Hand -> m Hand
+toHandWanpai t h = do
+    unless (h^.handPublic.handDrawWanpai) (throwError "Cannot draw from wanpai")
+    toHand t h <&> handPublic.handDrawWanpai .~ False
 
 -- * Discard
 

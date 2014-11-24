@@ -178,6 +178,7 @@ instance ToJSON Hand where
             [ "concealed" .= _handConcealed h
             , "pick"      .= _handPick h
             , "furiten"   .= _handFuriten h
+            , "can-tsumo" .= _hCanTsumo h
             ])
         <> (\(Object o) -> o) (toJSON (_handPublic h))
 

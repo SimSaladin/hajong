@@ -13,6 +13,7 @@ t_w = 62
 t_h = 82
 discards_off = 330
 called_off   = 650
+riichi_off   = 130
 
 -- {{{ Controls ------------------------------------------------------
 type Controls = { hoveredTile : Maybe Tile
@@ -25,6 +26,7 @@ controls = Controls <~ dropRepeats discardHover.signal
 discard : Input (Maybe Tile)
 discard = input Nothing
 riichi = input Nothing
+tsumo  = input Nothing
 
 discardHover : Input (Maybe Tile)
 discardHover = input Nothing
@@ -53,6 +55,7 @@ events = merges
    , maybe Noop (InGameAction << GameShout) <~ shout.signal
    , maybe Noop (InGameAction << GameTurn << TurnAnkan) <~ ankan.signal
    , maybe Noop (InGameAction << GameTurn << TurnShouminkan) <~ shouminkan.signal
+   , maybe Noop (\_ -> InGameAction <| GameTurn TurnTsumo) <~ tsumo.signal
    , (\x -> if x then InGameAction GameDontCare else Noop) <~ nocare.signal
    ]
 
@@ -68,6 +71,8 @@ display co gs = case gs.roundState of
             [ dispInfoBlock co gs rs
             , dispDiscards co gs rs |> scale 0.7
             , dispCalled co gs rs |> scale 0.6
+            , group <| map (fst >> \k -> moveRotateKaze riichi_off rs.mypos k playerRiichi)
+                    <| filter (snd >> .riichi) rs.hands
             , maybe (toForm empty) dispResults rs.results
             ]
         , container 1000 40 midTop <| flow right
@@ -77,7 +82,7 @@ display co gs = case gs.roundState of
                ++ [ ankanButton rs "Ankan"
                   , nocareButton gs.waitShout "Pass" ]
                ++ riichiButtons gs.riichiWith
-               ++ [ tsumoButton gs.canTsumo ]
+               ++ [ tsumoButton rs.myhand.canTsumo ]
                )
         , container 1000 100 midTop <| dispHand rs.mypos co rs.myhand
         ]
@@ -110,6 +115,10 @@ moveRotateKaze off mypos pos =
       1 -> moveX off    << rotate (degrees 90) 
       2 -> moveY off    << rotate (degrees 180)
       3 -> moveX (-off) << rotate (degrees 270)
+
+playerRiichi : Form
+playerRiichi = toForm <| image 200 20 "images/point1000.svg"
+
 -- }}}
 
 -- {{{ Info block ----------------------------------------------------
@@ -264,6 +273,8 @@ ankanButton rs str = case findFourTiles rs of
    Just t  -> clickable ankan.handle (Just t) (buttonElem' str green)
    Nothing -> empty
 
+tsumoButton b = if b then clickable tsumo.handle (Just ()) (buttonElem' "Tsumo" orange) else empty
+
 -- TODO is his turn
 nocareButton w str = case w of
    Just (w, _ :: _) -> clickable nocare.handle True <| buttonElem' str green
@@ -299,10 +310,9 @@ processInGameEvent event gs = case event of
              , gameWait <- Nothing
              , roundState <- Just rs }
 
-   RoundPrivateWaitForTurnAction {seconds, riichiWith, canTsumo} ->
+   RoundPrivateWaitForTurnAction {seconds, riichiWith} ->
       { gs | waitTurnAction <- Just <| WaitRecord seconds gs.updated
            , riichiWith     <- riichiWith
-           , canTsumo       <- canTsumo
         }
    RoundPrivateWaitForShout {seconds, shouts} ->
       { gs | waitShout      <- Just <|
@@ -315,11 +325,10 @@ processInGameEvent event gs = case event of
    RoundTurnBegins {player_kaze} ->
       Util.log ("Turn of " ++ show player_kaze) gs
       |> setTurnPlayer player_kaze
-      |> \gs -> { gs | turnBegan <- gs.updated
+      |> \gs -> { gs | turnBegan      <- gs.updated
                      , waitTurnAction <- Nothing
-                     , waitShout <- Nothing
-                     , riichiWith <- []
-                     , canTsuom  <- False
+                     , waitShout      <- Nothing
+                     , riichiWith     <- []
                 }
 
    RoundTurnAction {player_kaze, action} ->
@@ -331,11 +340,9 @@ processInGameEvent event gs = case event of
 
    RoundHandChanged {player_kaze, hand} -> setPlayerHand player_kaze hand gs
 
-   RoundEnded res ->
-      setResults res gs
+   RoundEnded res -> setResults res gs
 
-   RoundNick {player_kaze, nick} ->
-      setNick player_kaze nick gs
+   RoundNick {player_kaze, nick} -> setNick player_kaze nick gs
 
 -- {{{ Field modify boilerplate ----------------------------------------------
 setMyHand hand gs = case gs.roundState of
@@ -361,6 +368,8 @@ setNick pk nick gs = case gs.roundState of
 setResults res gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | results <- Just res } }
    Nothing -> gs
+
+updateHand player hand = Util.listModify player (\_ -> hand)
 -- }}}
 
 -- {{{ Turns ------------------------------------------------------------------
@@ -387,8 +396,5 @@ processTurnAction player action gs =
 kantsu : Tile -> Mentsu
 kantsu t = Mentsu Kantsu t Nothing
 
-addDiscard disc h = { h | discards <- h.discards ++ [disc] }
-setRiichi riichi h = { h | riichi <- riichi }
-updateHand player hand = Util.listModify player (\_ -> hand)
 -- }}}
 -- }}}

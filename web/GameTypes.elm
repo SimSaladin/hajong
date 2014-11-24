@@ -17,7 +17,6 @@ type GameState = { status     : Status
                  , waitShout      : Maybe (WaitRecord, [Shout])
                  , turnBegan      : Time
                  , riichiWith     : [Tile]
-                 , canTsumo       : Bool
 
                  -- Debug
                  , eventlog   : [Event]
@@ -106,6 +105,7 @@ data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
                 | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile
                 | TurnShouminkan Tile
+                | TurnTsumo
 
 data GameAction = GameTurn TurnAction
                 | GameShout Shout
@@ -174,6 +174,7 @@ sortTiles = sortWith tileOrder
 type Hand = HandPublic' { concealed : [Tile]
                         , pick      : Maybe Tile
                         , furiten   : Maybe Bool
+                        , canTsumo  : Bool
                         }
 
 type HandPublic = HandPublic' {}

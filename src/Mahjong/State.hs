@@ -50,8 +50,6 @@ data AbortiveDraw = Unrelated9
 type Winner = (Player, ValuedHand)
 type Payer  = (Player, Points)
 
-type RiichiPlayers player = Map Kaze (Player, player, Points)
-
 -- * Deal
 
 -- | Game state, including current round state.
@@ -64,6 +62,7 @@ data Deal = Deal
     , _pDora          :: [Tile]
     , _pFirstOja      :: Player
     , _pHonba         :: Int
+    , _pRiichi        :: Int -- ^ Points in table for riichi
     , _pOja           :: Player
     , _pPlayers       :: Map Player (Kaze, Points, Text)
     , _pResults       :: Maybe DealResults
@@ -113,6 +112,8 @@ data GameEvent = DealPrivateStarts GamePlayer -- ^ Only at the start of a round
                         -- between draws, kans, shouts.
                | DealEnded DealResults
                | DealNick Player Kaze Text
+               | DealRiichi Player
+               | GamePoints Player Int -- ^ New points
                deriving (Show, Read, Typeable)
 
 -- | Actions you do on your turn.
@@ -156,6 +157,7 @@ newRound players names = do
         , _pDora          = []
         , _pFirstOja      = oja
         , _pHonba         = 0
+        , _pRiichi        = 0
         , _pOja           = oja
         , _pPlayers       = mapFromList $ zip players (zip3 [Ton .. Pei] (repeat 25000) names)
         , _pResults       = Nothing
