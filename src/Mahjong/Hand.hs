@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
 -- |
 -- Module         : Mahjong.Hand
@@ -31,7 +32,7 @@ import Mahjong.Tiles
 
 data HandPublic = HandPublic
                 { _handCalled :: [Mentsu]
-                , _handDiscards :: [(Tile, Maybe Kaze)]
+                , _handDiscards :: [Discard]
                 , _handRiichi :: Bool
                 , _handDrawWanpai :: Bool -- ^ Should draw from wanpai
                 , _handAgari :: Maybe Tile
@@ -45,6 +46,9 @@ data Hand = Hand
           , _hCanTsumo :: Bool
           } deriving (Show, Read, Eq)
 
+data Discard = Discard { _dcTile :: Tile, _dcTo :: Maybe Kaze, _dcRiichi :: Bool }
+             deriving (Show, Read, Eq)
+
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> Hand
 initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False Nothing) False
@@ -52,6 +56,7 @@ initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False Nothin
 -- ** Lenses
 
 --
+makeLenses ''Discard
 makeLenses ''HandPublic
 makeLenses ''Hand
 
@@ -76,7 +81,7 @@ instance Pretty HandPublic where
 toHand :: CanError m => Tile -> Hand -> m Hand
 toHand t = do
     h <- handPick .~ Just t
-    return $ return $ if' (complete h) (hCanTsumo .~ True) id $ h
+    return $ return $ if' (complete h) (hCanTsumo .~ True) id h
 
 toHandWanpai :: CanError m => Tile -> Hand -> m Hand
 toHandWanpai t h = do
@@ -90,32 +95,28 @@ toHandWanpai t h = do
 --  1. tile not in the hand
 --  2. riichi restriction
 --  3. need to draw first
-discard :: CanError m => Tile -> Hand -> m Hand
-discard tile hand
-    | hand^.handPublic.handDrawWanpai || canDraw hand
-      = throwError "You need to draw first"
-    | hand^.handPick == Just tile || not (hand^.handPublic.handRiichi)
-      = movePick . setDiscard <$> tileFromHand tile hand
-    | otherwise = throwError "Cannot change wait in riichi"
+discard :: CanError m => Discard -> Hand -> m Hand
+discard d@Discard{..} hand
+    | _dcRiichi && hand ^. handPublic.handRiichi      = throwError "Already in riichi"
+    | hand^.handPublic.handDrawWanpai || canDraw hand = throwError "You need to draw first"
+    | _dcRiichi && not (canRiichiWith _dcTile hand)   = throwError "Cannot riichi: not tenpai"
+    | hand^.handPick /                                = Just _dcTile && hand^.handPublic.handRiichi = throwError "Cannot change wait in riichi"
+    | otherwise                                       = setRiichi . movePick . setDiscard <$> tileFromHand _dcTile hand
   where
-    setDiscard = handPublic.handDiscards %~ (++ [(tile, Nothing)])
     movePick h
-        | Just p <- _handPick h = h & (handConcealed %~ (|> p)) . (handPick .~ Nothing)
+        | Just p <- _handPick h = h & (handConcealed %~ (`snoc` p)) . (handPick .~ Nothing)
         | otherwise             = h
-
--- | Do riichi if possible and discard.
-discardRiichi :: CanError m => Tile -> Hand -> m Hand
-discardRiichi tile hand
-    | hand ^. handPublic.handRiichi = throwError "Already in riichi"
-    | canRiichiWith tile hand       = discard tile hand <&> handPublic.handRiichi .~ True
-    | otherwise                     = throwError "Not in tenpai"
+    setDiscard = handPublic.handDiscards %~ (|> d)
+    setRiichi
+        | _dcRiichi = handPublic.handRiichi .~ True
+        | otherwise = id
 
 -- | Automatically execute a discard necessary to advance the game (in case
 -- of inactive players).
-handAutoDiscard :: CanError m => Hand -> m Tile
+handAutoDiscard :: CanError m => Hand -> m Discard
 handAutoDiscard hand
-    | Just tile <- _handPick hand = return tile
-    | otherwise                   = return $ hand ^?! handConcealed._last
+    | Just tile <- _handPick hand = return $ Discard tile Nothing False
+    | otherwise                   = return $ Discard (hand ^?! handConcealed._last) Nothing False
 
 -- * Checks
 
@@ -200,7 +201,7 @@ meldTo shout mentsu hand
     = return $ handPublic.handCalled %~ (|> mentsu)
              $ handConcealed %~ (L.\\ ih)
              $ if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
-             $ hand
+             hand
     | otherwise = throwError "meldTo: Tiles not available"
   where
     ih = shoutTo shout
@@ -210,11 +211,11 @@ shoutFromHand :: CanError m => Kaze -> Shout -> Hand -> m (Mentsu, Hand)
 shoutFromHand sk shout hand =
     case hand ^? handPublic.handDiscards._last of
         Nothing          -> throwError "Player hasn't discarded anything"
-        Just (_, Just _) -> throwError "The discard has already been claimed"
-        Just (t, _)
-            | shoutTile shout /= t -> throwError "The discard is not the shouted tile"
-            | otherwise              -> return
-                (fromShout shout, hand & handPublic.handDiscards._last .~ (t, Just sk))
+        Just Discard{..} -> do
+            isJust _dcTo `when` throwError "The discard has already been claimed"
+            (shoutTile shout /= _dcTile) `when` throwError "The discard is not the shouted tile"
+            return (fromShout shout,
+                   hand & handPublic.handDiscards._last.dcTo .~ Just sk)
 
 -- * Valued hand
 
@@ -232,6 +233,6 @@ valueHand h r player = ValuedHand (h^.handPublic.handCalled) (h^.handConcealed) 
   where vi = ValueInfo r player
             (h^.handPublic.handRiichi)
             (h^.handPublic.handCalled.to null)
-            (h^.handPublic.handDiscards^..each._1)
+            (h^.handPublic.handDiscards^..each.dcTile)
             (h^.handPublic.handCalled)
             (h^.handPublic.handAgari.to fromJust)

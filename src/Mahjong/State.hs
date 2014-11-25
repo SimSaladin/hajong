@@ -117,7 +117,7 @@ data GameEvent = DealPrivateStarts GamePlayer -- ^ Only at the start of a round
                deriving (Show, Read, Typeable)
 
 -- | Actions you do on your turn.
-data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
+data TurnAction = TurnTileDiscard Discard
                 | TurnTileDraw Bool (Maybe Tile) -- ^ wanpai?, tile
                 | TurnAnkan Tile
                 | TurnShouminkan Tile

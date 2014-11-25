@@ -162,11 +162,11 @@ instance ToJSON GameEvent where
         DealNick p pk nick                       -> atEvent "nick"         ["player" .= p, "player-kaze" .= pk, "nick" .= nick]
 
 instance ToJSON TurnAction where
-    toJSON (TurnTileDiscard r t) = atType "discard"    ["riichi" .= r, "tile" .= t]
-    toJSON (TurnTileDraw w mt)   = atType "draw"       ["wanpai" .= w, "tile" .= mt]
-    toJSON (TurnAnkan t)         = atType "ankan"      ["tile" .= t]
-    toJSON (TurnShouminkan t)    = atType "shouminkan" ["tile" .= t]
-    toJSON TurnTsumo             = atType "tsumo"      []
+    toJSON (TurnTileDiscard d) = atType "discard"    ["riichi" .= _dcRiichi d, "tile" .= _dcTile d, "to" .= _dcTo d]
+    toJSON (TurnTileDraw w mt) = atType "draw"       ["wanpai" .= w, "tile" .= mt]
+    toJSON (TurnAnkan t)       = atType "ankan"      ["tile" .= t]
+    toJSON (TurnShouminkan t)  = atType "shouminkan" ["tile" .= t]
+    toJSON TurnTsumo           = atType "tsumo"      []
 
 instance ToJSON Player where toJSON (Player k) = toJSON k
 instance ToJSON Kaze where toJSON = toJSON . tshow
@@ -206,6 +206,7 @@ instance ToJSON Deal where
 
 --
 $(deriveToJSON (aesonOptions 5) ''HandPublic)
+$(deriveJSON (aesonOptions 3) ''Discard)
 $(deriveToJSON (aesonOptions 6) ''Mentsu)
 $(deriveToJSON (aesonOptions 0) ''MentsuKind)
 $(deriveToJSON (aesonOptions 0) ''ShoutKind)
@@ -263,11 +264,11 @@ instance FromJSON ShoutKind where
     parseJSON _ = fail "Expected a string"
 
 instance FromJSON TurnAction where
-    parseJSON (Object o) = do
+    parseJSON v@(Object o) = do
         t <- o .: "action"
         case t :: Text of
-            "discard" -> TurnTileDiscard <$> o .: "riichi" <*> o .: "tile"
-            "draw"    -> TurnTileDraw    <$> o .: "dead"   <*> pure Nothing
+            "discard" -> TurnTileDiscard <$> parseJSON v
+            "draw"    -> TurnTileDraw    <$> o .: "dead" <*> pure Nothing
             "ankan"   -> TurnAnkan       <$> o .: "tile"
             _         -> fail "TurnAction type not recognized"
     parseJSON _ = fail "Expected an object"

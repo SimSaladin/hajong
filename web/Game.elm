@@ -23,7 +23,7 @@ controls : Signal Controls
 controls = Controls <~ dropRepeats discardHover.signal
 
 -- Maybe a tile to discard from my hand
-discard : Input (Maybe Tile)
+discard : Input (Maybe Discard)
 discard = input Nothing
 riichi = input Nothing
 tsumo  = input Nothing
@@ -50,8 +50,8 @@ shoutChooseTile = input Nothing
 -- {{{ Upstream events ----------------------------------------------------
 events : Signal Event
 events = merges
-   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard False) <~ discard.signal
-   , maybe Noop (InGameAction << GameTurn << TurnTileDiscard True) <~ riichi.signal
+   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard) <~ discard.signal
+   , maybe Noop (InGameAction << GameTurn << TurnTileDiscard) <~ riichi.signal
    , maybe Noop (InGameAction << GameShout) <~ shout.signal
    , maybe Noop (InGameAction << GameTurn << TurnAnkan) <~ ankan.signal
    , maybe Noop (InGameAction << GameTurn << TurnShouminkan) <~ shouminkan.signal
@@ -205,13 +205,17 @@ dispHand k co hand = flow right
    , flow right <| map (dispMentsu k) hand.called
    ]
 
-dispHandDiscards co h =
-   container (6*(t_w+4)+2) (3*(t_h+4)) topLeft
-   <| flow down
-   <| map (flow right)
-   <| Util.groupInto 6
-   <| map (dispTile << fst)
-   <| filter (snd >> isNothing) h.discards
+dispHandDiscards co h = h.discards
+   |> filter (.to >> isNothing)
+   |> Util.groupInto 6
+   |> map (map dispDiscard >> flow right)
+   |> flow down
+   |> container (6*(t_w+4)+2) (3*(t_h+4)) topLeft
+
+dispDiscard : Discard -> Element
+dispDiscard d = if d.riichi
+   then collage (t_h+4) (t_w+4) [ rotate (degrees 90) <| toForm <| dispTile d.tile ]
+   else dispTile d.tile
 
 dispPublicMentsu co k h = flow right <| map (dispMentsu k) h.called
 
@@ -242,7 +246,7 @@ dispWanpai : Controls -> RoundState -> Element
 dispWanpai co = .dora >> map dispTile >> flow right
 
 dispTileClickable : Controls -> Tile -> Element
-dispTileClickable co tile = dispTile tile |> clickable discard.handle (Just tile)
+dispTileClickable co tile = dispTile tile |> clickable discard.handle (Just <| Discard tile Nothing False)
 
 tileImage tile =
    let (row, col) = case tile of
@@ -267,7 +271,7 @@ shoutButton s =
 shouminkanButtons rs str = findShouminkan rs.myhand
    |> map (\t -> clickable shouminkan.handle (Just t) (buttonElem' str blue))
 
-riichiButtons = map (\t -> clickable riichi.handle (Just t) (buttonElem' "Riichi" red))
+riichiButtons = map (\t -> clickable riichi.handle (Just <| Discard t Nothing True) (buttonElem' "Riichi" red))
 
 ankanButton rs str = case findFourTiles rs of
    Just t  -> clickable ankan.handle (Just t) (buttonElem' str green)
@@ -377,11 +381,12 @@ processTurnAction : Kaze -> TurnAction -> GameState -> GameState
 processTurnAction player action gs =
    case gs.roundState of
       Just rs -> case action of
-         TurnTileDiscard riichi tile ->
+         TurnTileDiscard discard ->
             { gs | roundState <-
                   Just { rs | hands  <- Util.listModify player
-                                          (\h -> { h | discards <- h.discards ++ [(tile, Nothing)]
-                                                     , riichi <- riichi }) rs.hands
+                                          (\h -> { h | discards <- h.discards ++ [discard]
+                                                     , riichi <- h.riichi || discard.riichi
+                                          }) rs.hands
                        }
                  , waitShout <- Just (WaitRecord 10 gs.updated, [])
             }

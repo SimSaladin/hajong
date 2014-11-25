@@ -107,13 +107,14 @@ runTurn' pk ta = do
     if ta == TurnTsumo then Just <$> endTsumo else return Nothing
     where
         handAction h = case ta of
-            TurnTileDiscard True  tile -> discardRiichi tile h <* takeRiichiPoints pk <* endTurn tile
-            TurnTileDiscard False tile -> discard tile h <* endTurn tile
-            TurnAnkan tile             -> ankanOn tile h
-            TurnTileDraw False _       -> drawWall h
-            TurnTileDraw True  _       -> drawDeadWall h
-            TurnTsumo                  -> handWin h
-            TurnShouminkan tile        -> shouminkanOn tile h
+            TurnTileDiscard d    -> do
+                when (d^.dcTo.to isJust) $ throwError "You cannot specify who shouted your discard when discarding it"
+                discard d h <* endTurn (d^.dcTile)
+            TurnAnkan tile       -> ankanOn tile h
+            TurnTileDraw False _ -> drawWall h
+            TurnTileDraw True  _ -> drawDeadWall h
+            TurnTsumo            -> handWin h
+            TurnShouminkan tile  -> shouminkanOn tile h
 
 -- *** Player in turn
 
@@ -155,7 +156,7 @@ endTurn dt = do
 autoDiscard :: DealM m => m ()
 autoDiscard = do
     tk <- view pTurn
-    void $ runTurn' tk . TurnTileDiscard False =<< handAutoDiscard =<< handOf' tk
+    void $ runTurn' tk . TurnTileDiscard =<< handAutoDiscard =<< handOf' tk
 
 autoDraw, autoDrawWanpai :: DealM m => m ()
 autoDraw = void . flip runTurn' (TurnTileDraw False Nothing) =<< view pTurn
@@ -356,7 +357,7 @@ applyGameEvent ev = case ev of
     DealTurnShouted p shout ->
         (playerPublicHands.at p._Just.handCalled %~ (|> fromShout shout)) .
         (playerPublic.pTurn .~ p) .
-        (playerPublicHands.at (shoutFrom shout)._Just.handDiscards._last._2 .~ Just p)
+        (playerPublicHands.at (shoutFrom shout)._Just.handDiscards._last.dcTo .~ Just p)
     DealHandChanged p hp    -> playerPublicHands.at p._Just .~ hp
     DealEnded how           -> playerPublic.pResults .~ Just how
     DealPrivateChange _ h   -> playerMyHand .~ h
@@ -371,8 +372,9 @@ applyGameEvents evs gp = foldr applyGameEvent gp evs
 -- | This always applies the turn action assuming that it is legal.
 applyTurnAction :: Kaze -> TurnAction -> GamePlayer -> GamePlayer
 applyTurnAction p ta = case ta of
-    TurnTileDiscard riichi tile -> playerPublicHands.at p._Just %~
-        (handDiscards %~ (|> (tile, Nothing))) . (handRiichi .~ riichi)
+    TurnTileDiscard discard -> playerPublicHands.at p._Just %~
+        (handDiscards %~ (|> discard))
+        . if' (discard^.dcRiichi) (handRiichi .~ True) id
     TurnTileDraw _ _     -> playerPublic.pWallTilesLeft -~ 1
     TurnAnkan tile       -> playerPublicHands.at p._Just.handCalled %~ (|> kantsu tile)
     _                    -> id
@@ -382,7 +384,7 @@ applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs
     $ GamePlayer (error "Not accessed") (error "Not accessed") (error "Not accessed")
                  rp mempty hand
     where
-        hand = Hand [] Nothing Nothing (HandPublic [] [(error "N/A", Nothing)] False False Nothing)
+        hand = Hand [] Nothing Nothing (HandPublic [] [Discard (error "N/A") Nothing False] False False Nothing)
                False
 
 applyGameEvent' :: GameEvent -> Deal -> Deal

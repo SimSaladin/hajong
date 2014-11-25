@@ -218,10 +218,10 @@ workerProcessTurnAction ta c = do
                 Right (rr, ma) -> return . Just $ do
                     ma
                     case ta of
-                        TurnTileDraw _ _    -> turnActionOrTimeout
-                        TurnAnkan _         -> turnActionOrTimeout
-                        TurnShouminkan _    -> turnActionOrTimeout -- TODO with shout
-                        TurnTileDiscard _ _ -> waitForShouts
+                        TurnTileDraw _ _  -> turnActionOrTimeout
+                        TurnAnkan _       -> turnActionOrTimeout
+                        TurnShouminkan _  -> turnActionOrTimeout -- TODO with shout
+                        TurnTileDiscard{} -> waitForShouts
                         TurnTsumo
                             | Just roundRes <- rr -> endDeal roundRes
                             | otherwise           -> $logError "TurnTsumo went through but results were Nothing"

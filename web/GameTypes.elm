@@ -101,7 +101,7 @@ data GameEvent = RoundPrivateStarts            RoundState
 -- }}}
 
 -- {{{ Actions ---------------------------------------------------------------
-data TurnAction = TurnTileDiscard Bool Tile -- ^ Riichi?
+data TurnAction = TurnTileDiscard Discard
                 | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile
                 | TurnShouminkan Tile
@@ -182,9 +182,11 @@ type HandPublic = HandPublic' {}
 type HandPublic' a =
    { a
    | called      : [Mentsu]
-   , discards    : [(Tile, Maybe Kaze)]
+   , discards    : [Discard]
    , riichi      : Bool
    }
+
+type Discard = { tile : Tile, to : Maybe Kaze, riichi : Bool }
 -- }}}
 
 -- {{{ Mentsu ----------------------------------------------------------------

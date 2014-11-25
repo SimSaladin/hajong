@@ -31,7 +31,7 @@ toJSON_Event ev = case ev of
 
 toJSON_GameAction : GameAction -> [(String, Value)]
 toJSON_GameAction a = case a of
-   GameTurn (TurnTileDiscard riichi tile) -> atAction "discard" [("tile", toJSON_Tile tile), ("riichi", Boolean riichi)]
+   GameTurn (TurnTileDiscard discard)     -> atAction "discard" [("tile", toJSON_Tile discard.tile), ("riichi", Boolean discard.riichi)]
    GameTurn (TurnTileDraw dead _)         -> atAction "draw" [("dead", Boolean dead)]
    GameTurn (TurnAnkan tile)              -> atAction "ankan" [("tile", toJSON_Tile tile)]
    GameTurn (TurnShouminkan tile)         -> atAction "shouminkan" [("tile", toJSON_Tile tile)]
@@ -120,13 +120,6 @@ parseTileMaybe x = case x of
    Object _  -> Just <| parseTile x
    Null      -> Nothing
 
-parseDiscardTile : Value -> (Tile, Maybe Kaze)
-parseDiscardTile (Array [a, b]) =
-   let player = case b of
-         Null -> Nothing
-         String s -> readKaze s |> Just
-      in (parseTile a, player)
-
 parseKaze : Value -> Kaze
 parseKaze = readKaze << parseString
 
@@ -204,12 +197,19 @@ parseHand v =
 parsePublicHand : Value -> HandPublic
 parsePublicHand (Object o) = 
    { called      = "called"       .: o |> withArray parseMentsu
-   , discards    = "discards"     .: o |> withArray parseDiscardTile
+   , discards    = "discards"     .: o |> withArray parseDiscard
    , riichi      = "riichi"       .: o |> parseBool
    }
 
 parsePlayerHand : Value -> (Kaze, HandPublic)
 parsePlayerHand (Array [a, b]) = (parseKaze a, parsePublicHand b)
+
+parseDiscard : Value -> Discard
+parseDiscard (Object o) =
+   let player = case "to" .: o of
+         Null -> Nothing
+         String s -> readKaze s |> Just
+      in Discard ("tile" .: o |> parseTile) player ("riichi" .: o |> parseBool)
 -- }}}
 
 -- * {{{ Mentsu ------------------------------------------------------
@@ -319,7 +319,7 @@ parseYaku (Object o) = Yaku
 parseTurnAction : Value -> TurnAction
 parseTurnAction (Object o) = case "type" .: o |> parseString of
     "draw"    -> TurnTileDraw    ("wanpai" .: o |> parseBool) ("tile" .: o |> parseTileMaybe)
-    "discard" -> TurnTileDiscard ("riichi" .: o |> parseBool) ("tile" .: o |> parseTile)
+    "discard" -> TurnTileDiscard <| parseDiscard (Object o)
     "ankan"   -> TurnAnkan       ("tile"   .: o |> parseTile)
     "shouminkan" -> TurnShouminkan ("tile" .: o |> parseTile)
 -- }}}

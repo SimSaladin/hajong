@@ -1,55 +1,48 @@
-[x] (web) in-game actions
-   [x] ankan
-   [/] minshoukan
-   [/] (game, elm) riichi
-[/] (web) in-game view
-   [x] player in turn -indicator
-   [x] mentsu (needs correct from indicator)
-   [/] real tiles
-   [ ] chat/dialog
-[x] (web) retain nick on refresh
-[/] (web) allow nick..
-   [/] set
-   [ ] change in-game
-[x] (web) re-enter game on refresh
+x = done, / = half done, ! = needs testing
+
+
+[ ] point sticks (1000 done)
+[/] real tiles
+[ ] chat/dialog
 [ ] (web) BUG game ended and back in lobby -> cannot join games
+[/] (server) worker logging in file
+[ ] (game) chankan
+[ ] (game) harder yaku checks
+[!] (game) final scoring and possible next rounds
+[ ] (game, elm) renchans
+[ ] (game) honba in scoring
+[ ] (game) ryanhan-shibari
+[ ] (elm) limit log lengths
+[ ] (game) tenhou
+[ ] (game) ankan in riichi
+[ ] (game) count uradora
+[ ] (game, elm) new dora when kan
+[ ] (game) dora, ura dora count in hans
+[ ] (game) tochuu ryuukoku
+   [ ] (game) ask for new round when enough non-related tiles
+[ ] (game) yaku tests
+[ ] (site) games/worker status query
+   [ ] nick set
+[ ] (worker) pause
+[ ] (docs) write json channel spec
 
-[x] (server) worker logging
-[ ] (server) games/worker status query
-   * website?
+[!] (game, elm, server) tsumo
+[!] minshoukan
+[!] ankan
 
-[ ] (game) nonstandard hands
-   [/] (game) kokushi musou
-   [/] (game) chiitoi
-   [ ] (game) chankan
-
-[ ] (game) yaku checks
-
-[/] (game) final scoring and possible next rounds
-[ ] (game, elm, server) tsumo
+[x] (game, elm) riichi
+[x] (game) kokushi musou
+[x] (game) chiitoi
+[/] (connections) revisit json instances - possibly derive?
+[x] (elm) riichi rotate tile
+[x] (elm) riichi stick
 [X] (game) BUG shoutedFrom cannot draw anymore "Cannot draw from wall"
 [x] (game) BUG shouting multiple: discard player's all other shouts.
 [X] (game) BUG draw; round changes even if oja is tenpai or no-one is tenpai
-
-[ ] (game) renchans
-   [ ] honba in scoring
-
-[ ] (game) dora, ura dora count in hans
-
-[ ] (game) tochuu ryuukoku
-   [ ] (game) ask for new round when enough non-related tiles
-
-[ ] (docs) write json channel spec
-[x] (connections) revisit json instances - possibly derive?
-
-[ ] (worker) pause
-[ ] (game) ryanhan-shibari
-[ ] (game) tenhou
-[ ] (game) ankan in riichi
-[ ] (game) uratora
-[ ] (game, elm) new dora
-
-[ ] (elm) riichi rotate tile, points
+[x] (web) re-enter game on refresh
+[x] (web) retain nick on refresh
+[x] player in turn -indicator
+[x] mentsu (needs correct from indicator)
 
 [ ] game conf
    [ ] (opt) start and goal scores
@@ -57,3 +50,4 @@
    [ ] (opt) chombo
    [ ] (opt) aotenjou
    [ ] (opt) basengo
+   [ ] (opt) chombo
