@@ -107,7 +107,7 @@ multicast ev = rview wGame >>= (`Con.multicast` ev)
 -- | The game state has changed.
 updateState :: Deal -> [GameEvent] -> Worker ()
 updateState deal events = rmodify wGame $
-    gameDeal._Just .~ applyGameEvents' events deal
+    gameDeal._Just .~ foldl' (flip dealGameEvent) deal events
 
 -- | Hide sensitive info per player
 sendGameEvents :: [GameEvent] -> Worker ()
@@ -116,11 +116,11 @@ sendGameEvents events = do
     public <- filterM (f gs) events
     multicast $ InGameEvents public
   where
-    f gs e@(DealPrivateChange p _)              = sendPrivate gs p e
-    f gs e@(DealPrivateWaitForShout p _ _)      = sendPrivate gs p e
-    f gs e@(DealPrivateWaitForTurnAction p _ _) = sendPrivate gs p e
-    f gs e@(DealPrivateStarts pg)               = sendPrivate gs (_playerPlayer pg) e
-    f _ _                                       = return True
+    f gs e@(DealStarts p _ _)                = sendPrivate gs p e
+    f gs e@(DealWaitForShout (p,_,_,_))      = sendPrivate gs p e
+    f gs e@(DealWaitForTurnAction (p,_,_,_)) = sendPrivate gs p e
+    f gs e@(DealPrivateHandChanged p _ _)    = sendPrivate gs p e
+    f _ _                                    = return True
 
     sendPrivate gs p e = do
         maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
@@ -298,57 +298,63 @@ waitForShouts = do
 
     gs        <- rview wGame
     win_var   <- liftIO newEmptyTMVarIO -- :: (Player, Kaze, Shout)
-    shoutable <- unsafeRoundM getWaitingForShouts
 
     let tk = gs^?!gameDeal._Just.pTurn
 
-    unless (null shoutable) $
-        $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")
+    case gs^?gameDeal._Just.sWaiting._Just._Right :: Maybe [WaitShout] of
+        Nothing -> afterDiscard
+        Just shoutable -> do
+            $logDebug ("Waiting for shouts " <> tshow shoutable <> " after the discard")
 
-    -- Important invariant of waitAll's first argument: Shout priorities
-    -- must be in /decreasing/ order.
-    --
-    -- Also, shoutHandler below is rather wrong and ambiguous due to rule
-    -- set differences in cases of multiple ron "at the same time". There
-    -- should be a configurable threshold to others call overriding call or
-    -- another ron. -- TODO
+            -- Important invariant of waitAll's first argument: Shout priorities
+            -- must be in /decreasing/ order.
+            --
+            -- Also, shoutHandler below is rather wrong and ambiguous due to rule
+            -- set differences in cases of multiple ron "at the same time". There
+            -- should be a configurable threshold to others call overriding call or
+            -- another ron. -- TODO
 
-    let waitAll [] = return afterDiscard
-        waitAll xs = withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
+            let waitAll [] = return afterDiscard
+                waitAll xs = withEvent (\_ _ -> waitAll xs) (shoutHandler xs) (passOn xs) (waitAll xs)
 
-        withPlayer c xs f = case c `clientToPlayer` gs of
-            Nothing -> unicastError c "You are not playing in this game" >> waitAll xs
-            Just p -> f p
+                withPlayer c xs f = case c `clientToPlayer` gs of
+                    Nothing -> unicastError c "You are not playing in this game" >> waitAll xs
+                    Just p -> f p
 
-        passOn xs c = withPlayer c xs $ \p -> do
-            unicast c (InGamePrivateEvent $ DealPrivateWaitForShout p 0 [])
-            waitAll $ filter (^._1.to (/= p)) xs
+                passOn xs c = withPlayer c xs $ \p -> do
+                    unicast c (InGamePrivateEvent $ DealWaitForShout (p,Ton,0,[]))
+                    waitAll $ filter (^._1.to (/= p)) xs
 
-        shoutHandler xs c s = withPlayer c xs $ \p -> do
-            mv <- atomically $ tryReadTMVar win_var
-            case L.findIndex (\(p',_,s') -> (p',s') == (p,s)) xs of
-                Nothing -> unicastError c "Incorrect shout" >> waitAll xs
-                Just i  -> do
-                    let shout@(_,k,_) = xs L.!! i
-                    case mv of
-                        Nothing
-                            | i == 0    -> return $ p `afterShout` s
-                            | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
-                        Just (_,k',s')  -> case shoutPrecedence tk (k, s) (k', s') of
-                            LT             -> waitAll xs
-                            GT | i == 0    -> return $ p `afterShout` s
-                               | otherwise -> atomically (putTMVar win_var shout) >> waitAll (take i xs)
-                            EQ             -> $logError "Multiple shouts (ron) not yet implemented" >> waitAll xs
+                shoutHandler xs c s = withPlayer c xs $ \p -> do
+                    mv <- atomically $ tryReadTMVar win_var
+                    case L.findIndex (\(p',_,_,_) -> p' == p) xs of
+                        Nothing -> unicastError c "You cannot call" >> waitAll xs
+                        Just i
+                            | (_,k,sec,shouts) <- xs L.!! i, Just _ <- L.find (== s) shouts
+                            -> case mv of
+                                Nothing
+                                    | i == 0    -> return $ p `afterShout` s
+                                    | otherwise -> atomically (putTMVar win_var (p,k,sec,s)) >> waitAll (take i xs)
 
-    -- TODO Configurable timeout
+                                Just (_,k',_,s') -> case shoutPrecedence tk (k, s) (k', s') of
+                                    LT             -> waitAll xs
+                                    GT | i == 0    -> return $ p `afterShout` s
+                                       | otherwise -> atomically (putTMVar win_var (p,k,sec,s) ) >> waitAll (take i xs)
+                                    EQ             -> $logError "Multiple shouts (ron) not yet implemented" >> waitAll xs
 
-    let secs = 8
-    join $ workerRace secs (waitAll shoutable)
-         $ atomically (tryTakeTMVar win_var) >>= \case
-            Nothing      -> do $logDebug "Continue without shouts after timeout"
-                               afterDiscard
-            Just (p,_,s) -> do $logDebug "Continue with non-top priority shout after timeout"
-                               afterShout p s
+                            | otherwise -> unicastError c "Incorrect call" >> waitAll xs
+
+            -- TODO Configurable timeout
+
+            let secs = 8
+            join $ workerRace secs (waitAll shoutable)
+                 $ atomically (tryTakeTMVar win_var) >>= \case
+                    Nothing -> do
+                        $logDebug "Continue without shouts after timeout"
+                        afterDiscard
+                    Just (p,_,_,s) -> do
+                        $logDebug "Continue with non-top priority shout after timeout"
+                        afterShout p s
 
 -- ** End game
 

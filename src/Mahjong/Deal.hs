@@ -19,18 +19,16 @@ import           Mahjong.State
 
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
+import           Data.Monoid (Endo(..))
 import qualified Data.List as L (delete)
-import           Data.Maybe (fromJust)
 
 -- | Context of game and deal flow.
 --
--- Note that Deal is freely modifiable as a state, but
--- @Deal@ is read-only. Modifications to the public part must
--- be encoded in DealEvents. This way it is trivial to keep clients'
--- public states in sync with minimum bandwidth.
+-- @Deal@ data type is read-only. Modifications must be encoded in
+-- 'GameEvent's. This way it is trivial to keep clients' public states in
+-- sync.
 type DealM m =
     ( MonadReader Deal m
-    , MonadState Deal m -- TODO this is kind of maybe too much. instead encode changes in GameEvents
     , MonadWriter [GameEvent] m
     , MonadError Text m
     , Functor m
@@ -44,15 +42,18 @@ type DealM m =
 
 startDeal :: DealM m => m ()
 startDeal = do
-    view pPlayers >>= imapM_ (\p v -> buildPlayerState p v >>= tellEvent . DealPrivateStarts)
+    deal <- ask
+    imapM_ (\p (pk,_,_) -> tellEvent . DealStarts p pk $ buildPlayerState deal pk)
+          (deal^.pPlayers)
     view pTurn >>= startTurn
 
+-- | n seconds
 turnWaiting :: DealM m => Int -> m ()
 turnWaiting n = do
     tk <- view pTurn
     tp <- kazeToPlayer tk
     rt <- handOf' tk <&> handCanRiichiWith
-    tellEvent $ DealPrivateWaitForTurnAction tp n rt
+    tellEvent $ DealWaitForTurnAction (tp, tk, n, rt)
 
 startTurn :: DealM m => Kaze -> m ()
 startTurn = tellEvent . DealTurnBegins
@@ -103,39 +104,38 @@ runTurn' :: DealM m => Kaze -> TurnAction -> m (Maybe DealResults)
 runTurn' pk ta = do
     view pTurn >>= (`when` throwError "Not your turn") . (/= pk)
     publishTurnAction pk ta
-    handOf' pk >>= handAction >>= updateHand pk
-    if ta == TurnTsumo then Just <$> endTsumo else return Nothing
-    where
-        handAction h = case ta of
-            TurnTileDiscard d    -> do
-                when (d^.dcTo.to isJust) $ throwError "You cannot specify who shouted your discard when discarding it"
-                discard d h <* endTurn (d^.dcTile)
-            TurnAnkan tile       -> ankanOn tile h
-            TurnTileDraw False _ -> drawWall h
-            TurnTileDraw True  _ -> drawDeadWall h
-            TurnTsumo            -> handWin h
-            TurnShouminkan tile  -> shouminkanOn tile h
+    h <- handOf' pk
+    case ta of
+        -- TODO no updateHands
+        TurnTileDiscard d    -> do
+            when (d^.dcTo.to isJust) $ throwError "You cannot specify who shouted your discard when discarding it"
+            h' <- discard d h <* endTurn (d^.dcTile)
+            updateHand pk h'
+        TurnAnkan tile       -> ankanOn tile h >>= updateHand pk
+        TurnTileDraw False _ -> drawWall h >>= updateHand pk
+        TurnTileDraw True  _ -> drawDeadWall h >>= updateHand pk
+        TurnTsumo            -> handWin h >>= updateHand pk
+        TurnShouminkan tile  -> shouminkanOn tile h
+
+    if ta == TurnTsumo then Just <$> endTsumo
+                       else return Nothing
 
 -- *** Player in turn
 
 drawWall :: DealM m => Hand -> m Hand
 drawWall hand = do
     unless (canDraw hand) (throwError "Cannot draw from wall")
-    wall <- use sWall
-    case wall of
-        (t:ts) -> do
-            sWall .= ts
-            t `toHand` hand
-        _ -> throwError "No tiles left"
+    mt <- preview (sWall._head)
+    maybe (throwError "No tiles left in wall") (`toHand` hand) mt
 
 drawDeadWall :: DealM m => Hand -> m Hand
-drawDeadWall hand = preuse (sWall._Snoc)
-    >>= maybe (throwError "No tiles in wall!") (draw . fst)
-    where
-        draw wall = do
-            sWall .= wall
-            Just (t, ts) <- preuse (sWanpai._Cons)
-            sWanpai .= ts
+drawDeadWall hand = do
+    mw <- preview (sWall._last)
+    case mw of
+        Nothing -> throwError "No tiles in wall!"
+        Just tow -> do
+            t <- view (sWanpai.singular _head)
+            tellEvent $ DealFlipDora t (Just tow)
             t `toHandWanpai` hand
 
 takeRiichiPoints :: DealM m => Kaze -> m ()
@@ -143,13 +143,11 @@ takeRiichiPoints pk = do
     p <- kazeToPlayer pk
     np <- view $ pPlayers.at p.singular _Just._2.to (\a -> a - 1000)
     when (np < 0) $ throwError "Cannot riichi: not enough points"
-    tell [DealRiichi p, GamePoints p np]
+    tell [DealRiichi pk, GamePoints p np]
 
 -- | Set sWaitingShouts to players who could shout the discard.
 endTurn :: DealM m => Tile -> m ()
-endTurn dt = do
-    shouts <- filterCouldShout dt <$> view pTurn <*> use sHands
-    sWaitingShouts .= shouts
+endTurn dt = waitingShouts dt >>= tell . map DealWaitForShout
 
 -- *** Automatic actions
 
@@ -166,7 +164,7 @@ autoDrawWanpai = void . flip runTurn' (TurnTileDraw True Nothing) =<< view pTurn
 
 endDraw :: DealM m => m DealResults
 endDraw = do
-    hands <- use sHands
+    hands <- view sHands
     let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
     if null tenpaiPlayers
         then dealEnds $ DealDraw [] []
@@ -204,34 +202,41 @@ tsumoPayers oja basic payers
 -- * Events
 
 tellPlayerState :: DealM m => Player -> m ()
-tellPlayerState p =
-    view (pPlayers.at p)
-    >>= maybe (throwError "tellPlayerState: player not found")
-              (buildPlayerState p >=> tellEvent . DealPrivateStarts)
+tellPlayerState p = do
+    pk <- playerToKaze p
+    deal <- ask
+    tellEvent . DealStarts p pk $ buildPlayerState deal pk
 
 updatePlayerNick :: DealM m => Player -> Text -> m ()
 updatePlayerNick p nick = playerToKaze p >>= \pk -> tellEvent (DealNick p pk nick)
 
 -- | Build the player's "@GamePlayer@" record, or the state of the game as
 -- seen by the player (hide "Deal" but show the player's own hand).
-buildPlayerState :: DealM m => Player -> (Kaze, Points, Text) -> m GamePlayer
-buildPlayerState p (k, _, name) = GamePlayer k p name
-    <$> view id
-    <*> use (sHands.to (map _handPublic))
-    <*> use (sHands.at k.to fromJust)
+buildPlayerState :: Deal -> Kaze -> AsPlayer
+buildPlayerState deal pk = flip appEndo deal $ mconcat
+    [ Endo $ sEvents .~ []
+    , Endo $ sHands %~ imap (\k -> if' (k == pk) id maskPublicHand)
+    , Endo $ sWall .~ []
+    , Endo $ sWanpai .~ []
+    , Endo $ sWaiting %~ mwaiting
+    ] where
+        mwaiting :: Maybe Waiting -> Maybe Waiting
+        mwaiting x
+            | x ^? _Just._Left._2 == Just pk = x
+            | otherwise = case x ^.. _Just._Right.folded.filtered (^._2.to(==pk)) of
+                        [] -> Nothing
+                        xs -> Just (Right xs)
 
 -- | Set the hand of player
 updateHand :: DealM m => Kaze -> Hand -> m ()
 updateHand pk new = do
+    p <- kazeToPlayer pk
     old <- handOf' pk
-    handOf pk ?= new
 
-    when (old /= new) $ do
-        pp <- kazeToPlayer pk
-        tellEvent (DealPrivateChange pp new)
+    when (old /= new) $ tellEvent (DealPrivateHandChanged p pk new)
 
     when (_handPublic old /= _handPublic new)
-        $ tellEvent (DealHandChanged pk $ _handPublic new)
+        $ tellEvent (DealPublicHandChanged pk $ _handPublic new)
 
 tellEvent :: DealM m => GameEvent -> m ()
 tellEvent ev = tell [ev]
@@ -242,21 +247,6 @@ publishTurnAction :: DealM m => Kaze -> TurnAction -> m ()
 publishTurnAction pk ra = tellEvent $ case ra of
     TurnTileDraw b _ -> DealTurnAction pk (TurnTileDraw b Nothing)
     _                -> DealTurnAction pk ra
-
-getWaitingForShouts :: DealM m => m [(Player, Kaze, Shout)]
-getWaitingForShouts = do
-
-    let secs = 15 -- ^ TODO hard-coded limit
-
-    allWaits <- use sWaitingShouts
-    players  <- mapM (kazeToPlayer . fst) allWaits
-
-    let res = zipWith (uncurry . (,,)) players allWaits
-        out = map (DealPrivateWaitForShout <$> (^?!_head._1) <*> pure secs <*> (^..each._3))
-            $ groupBy ((==) `on` view _1) res
-
-    tell out
-    return res
 
 ----------------------------------------------------------------------------------------
 
@@ -274,14 +264,14 @@ playerToKaze p = do
     maybe (throwError "Player not found") (return . (^._1)) mk
 
 handOf' :: DealM m => Kaze -> m Hand
-handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
+handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") return
 
 ----------------------------------------------------------------------------------------
 
 -- * Functions
 
 handOf :: Kaze -> Lens Deal Deal (Maybe Hand) (Maybe Hand)
-handOf player = sHands.at player
+handOf pk = sHands.at pk
 
 -- | Advance the game to next deal, or end it.
 nextDeal :: Deal -> IO (Either GameResults Deal)
@@ -318,7 +308,7 @@ nextDeal deal = case maybeGameResults deal of
 -- | Results are returned if west or higher round has just ended and
 -- someone is winning (over 30000 points).
 maybeGameResults :: Deal -> Maybe GameResults
-maybeGameResults d@Deal{..}
+maybeGameResults Deal{..}
     | minimumOf (traversed._2) _pPlayers < Just 0 = score
     | otherwise = do
         guard (_pRound >= Nan)
@@ -328,6 +318,8 @@ maybeGameResults d@Deal{..}
   where
     score = return . finalPoints $ view _2 <$> _pPlayers
 
+-- ** Waiting
+
 filterCouldShout :: Tile -- ^ Tile to shout
                  -> Kaze -- ^ Whose tile
                  -> Map Kaze Hand
@@ -335,6 +327,19 @@ filterCouldShout :: Tile -- ^ Tile to shout
 filterCouldShout dt np = sortBy (shoutPrecedence np) .
     concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
   where flatten (k, xs) = map (k,) xs
+
+waitingShouts :: DealM m => Tile -> m [WaitShout]
+waitingShouts dt = do
+    let secs = 15 -- ^ TODO hard-coded limit
+
+    shouts' <- filterCouldShout dt <$> view pTurn <*> view sHands
+
+    let shouts = map (liftA2 (,) (^?!_head._1) (^..each._2)) $
+                 groupBy ((==) `on` view _1) shouts'
+
+    players <- mapM (kazeToPlayer . fst) shouts
+
+    return $ zipWith (\p (k, xs) -> (p, k, secs, xs)) players shouts
 
 finalPoints :: Map Player Points -> GameResults
 finalPoints xs =
@@ -350,42 +355,60 @@ finalPoints xs =
 
 -- ** Client functions
 
-applyGameEvent :: GameEvent -> GamePlayer -> GamePlayer
-applyGameEvent ev = case ev of
-    DealTurnBegins p        -> playerPublic.pTurn .~ p
-    DealTurnAction p ta     -> applyTurnAction p ta
-    DealTurnShouted p shout ->
-        (playerPublicHands.at p._Just.handCalled %~ (|> fromShout shout)) .
-        (playerPublic.pTurn .~ p) .
-        (playerPublicHands.at (shoutFrom shout)._Just.handDiscards._last.dcTo .~ Just p)
-    DealHandChanged p hp    -> playerPublicHands.at p._Just .~ hp
-    DealEnded how           -> playerPublic.pResults .~ Just how
-    DealPrivateChange _ h   -> playerMyHand .~ h
-    DealPrivateStarts gp    -> const gp
-    DealPrivateWaitForShout{} -> id
-    DealPrivateWaitForTurnAction{} -> id
-    DealNick p _ n -> playerPublic.pPlayers.ix p._3 .~ n
+dealGameEvent :: GameEvent -> Deal -> Deal
+dealGameEvent ev = appEndo . mconcat $ case ev of
+    DealTurnBegins p
+            -> [ Endo $ pTurn .~ p ]
+    DealTurnAction p ta
+            -> [ Endo $ dealTurnAction p ta ]
+    DealTurnShouted p shout
+            -> [ Endo $ sHands.ix p
+                      . handPublic.handCalled %~ (|> fromShout shout)
+               , Endo $ pTurn .~ p
+               , Endo $ sHands.ix (shoutFrom shout)
+                      . handPublic.handDiscards._last.dcTo .~ Just p ]
 
-applyGameEvents :: [GameEvent] -> GamePlayer -> GamePlayer
-applyGameEvents evs gp = foldr applyGameEvent gp evs
+    -- TODO finer control?
+    -- now public hand is changed twice on server side
+    DealPublicHandChanged pk hp -> [ Endo $ sHands.ix pk.handPublic .~ hp ]
+    DealPrivateHandChanged p pk h -> [ Endo $ sHands.ix pk .~ h ]
 
--- | This always applies the turn action assuming that it is legal.
-applyTurnAction :: Kaze -> TurnAction -> GamePlayer -> GamePlayer
-applyTurnAction p ta = case ta of
-    TurnTileDiscard discard -> playerPublicHands.at p._Just %~
-        (handDiscards %~ (|> discard))
-        . if' (discard^.dcRiichi) (handRiichi .~ True) id
-    TurnTileDraw _ _     -> playerPublic.pWallTilesLeft -~ 1
-    TurnAnkan tile       -> playerPublicHands.at p._Just.handCalled %~ (|> kantsu tile)
-    _                    -> id
+    DealEnded how
+            -> [ Endo $ pResults .~ Just how ]
+    DealNick p _ nick
+            -> [ Endo $ pPlayers.ix p._3 .~ nick ]
 
-applyGameEvents' :: [GameEvent] -> Deal -> Deal
-applyGameEvents' evs rp = _playerPublic $ applyGameEvents evs
-    $ GamePlayer (error "Not accessed") (error "Not accessed") (error "Not accessed")
-                 rp mempty hand
-    where
-        hand = Hand [] Nothing Nothing (HandPublic [] [Discard (error "N/A") Nothing False] False False Nothing)
-               False
+    -- player-private
+    DealStarts _ _ new
+        | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
+        | otherwise           -> [ Endo $ const new ]
+    DealWaitForShout ws
+            -> [ Endo $ sWaiting._Just._Right %~ (|> ws) ]
+    DealWaitForTurnAction wt
+            -> [ Endo $ sWaiting._Just._Left .~ wt ]
+    DealRiichi pk
+            -> [ Endo $ sHands.ix pk.handPublic.handRiichi .~ True ]
+    DealFlipDora td mtw
+            -> [ Endo $ pDora %~ (|> td)
+               , Endo $ maybe id (over sWanpai . flip snoc) mtw ]
+    GamePoints p ps
+            -> [ Endo $ pPlayers.ix p._2 .~ ps ]
 
-applyGameEvent' :: GameEvent -> Deal -> Deal
-applyGameEvent' ev = applyGameEvents' [ev]
+dealTurnAction :: Kaze -> TurnAction -> Deal -> Deal
+dealTurnAction p ta = appEndo . mconcat $ case ta of 
+    TurnTileDiscard dc
+            -> [ Endo $ sHands.ix p.handPublic.handDiscards %~ (|> dc)
+               , if' (dc^.dcRiichi) (Endo $ sHands.ix p.handPublic.handRiichi .~ True) mempty ]
+    TurnTileDraw w mt
+            -> [ Endo $ pWallTilesLeft -~ 1
+               , Endo $ sWall %~ if' w initEx tailEx
+               , Endo $ sHands.ix p.handPick .~ mt
+               ]
+    TurnAnkan tile
+            -> [ Endo $ sHands.ix p.handPublic.handCalled %~ (|> kantsu tile) ]
+    TurnShouminkan t
+            -> [ let isShoum m = mentsuKind m == Koutsu && mentsuTile m == t
+                 in Endo $ sHands.ix p.handPublic.handCalled.each
+                         . filtered isShoum %~ promoteToKantsu ]
+    TurnTsumo
+            -> [] -- XXX: should something happen?

@@ -45,7 +45,10 @@ type RoundState =
         , players   : [(Kaze, (Player, Int, String))]
         , myhand    : Hand
         , results   : Maybe RoundResult
-        , actions   : [(Kaze, TurnAction)]
+        , deal      : Int
+        , honba : Int
+        , inTable : Int
+        , prevDeals : [(Kaze, Int)]
         }
 
 data RoundResult = DealTsumo { winners : [Winner], payers : [Payer] }
@@ -91,13 +94,17 @@ data Event = JoinServer  { nick : String } -- ^ Nick
 data GameEvent = RoundPrivateStarts            RoundState
                | RoundPrivateWaitForShout      { seconds : Int, shouts : [Shout] }
                | RoundPrivateWaitForTurnAction { player : Player, seconds : Int, riichiWith : [Tile]}
-               | RoundPrivateChange            { player : Player, hand : Hand }
+               | RoundPrivateChange            { hand : Hand }
                | RoundTurnBegins               { player_kaze : Kaze }
                | RoundTurnAction               { player_kaze : Kaze, action : TurnAction }
                | RoundTurnShouted              { player_kaze : Kaze, shout : Shout }
                | RoundHandChanged              { player_kaze : Kaze, hand : HandPublic }
                | RoundEnded                    RoundResult
                | RoundNick                     { player_kaze : Kaze, nick : String }
+
+               | RoundFlippedDora              { tile : Tile }
+               | RoundRiichi                   { player_kaze : Kaze }
+               | RoundGamePoints               { player : Player, points : Points }
 -- }}}
 
 -- {{{ Actions ---------------------------------------------------------------

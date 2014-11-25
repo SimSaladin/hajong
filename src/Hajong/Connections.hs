@@ -116,14 +116,21 @@ atType, atEvent :: Text -> [(Text, A.Value)] -> A.Value
 atType  t xs = object ("type"  .= t : xs)
 atEvent t xs = object ("event" .= t : xs)
 
-gamePlayerJSON :: GamePlayer -> [Pair]
-gamePlayerJSON x =
-    [ "kaze"      .= _playerKaze x
-    , "player"    .= _playerPlayer x
-    , "hands"     .= map (toJSON *** toJSON) (M.toList $ _playerPublicHands x)
-    , "myhand"    .= _playerMyHand x
-    , "gamestate" .= _playerPublic x
-    ]
+-- Deal as a player
+
+-- Adds "mypos", "player", "hands", "myhand", "event".
+dealAsPlayer :: Text -> Deal -> Kaze -> Player -> A.Value
+dealAsPlayer ev deal pk p =
+    let Object d = toJSON deal
+        Object o = object
+            [ "mypos"     .= pk
+            , "player"    .= p
+            , "hands"     .= map (toJSON *** toJSON)
+                                 (M.toList $ deal^.sHands <&> _handPublic)
+            , "myhand"    .= (deal^?sHands.at pk)
+            , "event"     .= ev
+            ]
+    in Object (d `mappend` o)
 
 loungeJSON :: Lounge -> [Pair]
 loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
@@ -150,16 +157,19 @@ instance ToJSON Event where
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
-        DealPrivateStarts gameplayer             -> atEvent "round-begin"  (gamePlayerJSON gameplayer)
-        DealPrivateWaitForShout player secs shs  -> atEvent "wait-shout"   ["player" .= player, "seconds" .= secs, "shouts" .= shs]
-        DealPrivateWaitForTurnAction p sec rs    -> atEvent "wait-turn"    ["player" .= p, "seconds" .= sec, "riichi-with" .= rs]
-        DealPrivateChange player hand            -> atEvent "my-hand"      ["player" .= player, "hand" .= hand]
+        DealStarts p pk deal                     -> dealAsPlayer "round-begin" deal pk p
+        DealWaitForShout (player, _, secs, xs)   -> atEvent "wait-shout"   ["player"      .= player, "seconds" .= secs, "shouts" .= xs]
+        DealWaitForTurnAction (p,_,sec,rs)       -> atEvent "wait-turn"    ["player"      .= p, "seconds" .= sec, "riichi-with" .= rs]
         DealTurnBegins pk                        -> atEvent "turn-changed" ["player-kaze" .= pk]
         DealTurnAction pk turnaction             -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
         DealTurnShouted pk shout                 -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
-        DealHandChanged pk hand                  -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
-        DealEnded results                        -> atEvent "end"          ["results" .= results]
-        DealNick p pk nick                       -> atEvent "nick"         ["player" .= p, "player-kaze" .= pk, "nick" .= nick]
+        DealPublicHandChanged pk hand            -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
+        DealPrivateHandChanged _ _ hand          -> atEvent "my-hand"      ["hand"        .= hand]
+        DealFlipDora dora _                      -> atEvent "flipped-dora" ["tile"        .= dora]
+        DealNick p pk nick                       -> atEvent "nick"         ["player"      .= p, "player-kaze" .= pk, "nick" .= nick]
+        DealRiichi pk                            -> atEvent "riichi"       ["player-kaze" .= pk]
+        DealEnded results                        -> atEvent "end"          ["results"     .= results]
+        GamePoints p n                           -> atEvent "set-points"   ["player"      .= p, "points" .= n]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard d) = atType "discard"    ["riichi" .= _dcRiichi d, "tile" .= _dcTile d, "to" .= _dcTo d]
@@ -192,14 +202,18 @@ instance ToJSON Honor where
 
 instance ToJSON Deal where
     toJSON x = object
-        [ "dora"       .= _pDora x
-        , "tiles-left" .= _pWallTilesLeft x
-        , "round"      .= _pRound x
+        [ "round"      .= _pRound x
+        , "deal"       .= _pDeal x
+        , "turn"       .= _pTurn x
         , "oja"        .= _pOja x
         , "first-oja"  .= _pFirstOja x
-        , "turn"       .= _pTurn x
+        , "tiles-left" .= _pWallTilesLeft x
+        , "dora"       .= _pDora x
         , "players"    .= map (toJSON *** toJSON) (M.toList $ _pPlayers x)
+        , "honba"      .= _pHonba x
+        , "in-table"   .= _pRiichi x
         , "results"    .= _pResults x
+        , "prev-deals" .= _pDeals x
         ]
 
 -- derived

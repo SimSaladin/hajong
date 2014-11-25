@@ -336,8 +336,7 @@ processInGameEvent event gs = case event of
                 }
 
    RoundTurnAction {player_kaze, action} ->
-      addTurnAction player_kaze action gs
-         |> processTurnAction player_kaze action
+       processTurnAction player_kaze action gs
 
    RoundTurnShouted {player_kaze, shout} ->
       Util.log (show player_kaze ++ " shouted: " ++ show shout) gs
@@ -347,6 +346,9 @@ processInGameEvent event gs = case event of
    RoundEnded res -> setResults res gs
 
    RoundNick {player_kaze, nick} -> setNick player_kaze nick gs
+   RoundRiichi {player_kaze} -> setRiichi player_kaze gs
+   RoundGamePoints {player,points} -> setPoints player points gs
+   RoundFlippedDora {tile} -> flipDora tile gs
 
 -- {{{ Field modify boilerplate ----------------------------------------------
 setMyHand hand gs = case gs.roundState of
@@ -355,10 +357,6 @@ setMyHand hand gs = case gs.roundState of
 
 setTurnPlayer player gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | turn <- player } }
-   Nothing -> gs
-
-addTurnAction player action gs = case gs.roundState of
-   Just rs -> { gs | roundState <- Just { rs | actions <- (player, action) :: rs.actions } }
    Nothing -> gs
 
 setPlayerHand player hand gs = case gs.roundState of
@@ -371,6 +369,19 @@ setNick pk nick gs = case gs.roundState of
 
 setResults res gs = case gs.roundState of
    Just rs -> { gs | roundState <- Just { rs | results <- Just res } }
+   Nothing -> gs
+
+flipDora tile gs = case gs.roundState of
+   Just rs -> { gs | roundState <- Just { rs | dora <- tile :: rs.dora
+                                        , tilesleft <- rs.tilesleft - 1 } }
+   Nothing -> gs
+
+setRiichi pk gs = case gs.roundState of
+   Just rs -> { gs | roundState <- Just { rs | hands <- Util.listModify pk (\h -> { h | riichi <- True }) rs.hands } }
+   Nothing -> gs
+
+setPoints p n gs = case gs.roundState of
+   Just rs -> gs -- TODO { gs | roundState <- Just { rs | players <- Util.listModify p (\h -> { h | riichi <- True }) rs.hands } }
    Nothing -> gs
 
 updateHand player hand = Util.listModify player (\_ -> hand)

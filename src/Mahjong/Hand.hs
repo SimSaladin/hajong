@@ -49,10 +49,6 @@ data Hand = Hand
 data Discard = Discard { _dcTile :: Tile, _dcTo :: Maybe Kaze, _dcRiichi :: Bool }
              deriving (Show, Read, Eq)
 
--- | A hand that contains provided tiles in starting position
-initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False Nothing) False
-
 -- ** Lenses
 
 --
@@ -75,6 +71,16 @@ instance Pretty HandPublic where
         -- FIXME
         tilenum <- view (handCalled.to length) <&> (13 -) . (*3)
         return $ string $ unwords $ replicate tilenum "_"
+
+-- * Create
+
+-- | A hand that contains provided tiles in starting position
+initHand :: [Tile] -> Hand
+initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False Nothing) False
+
+maskPublicHand :: Hand -> Hand
+maskPublicHand = (handConcealed .~ []) . (handPick .~ Nothing)
+               . (handFuriten .~ Nothing)  . (hCanTsumo .~ False)
 
 -- * Draw
 
@@ -100,7 +106,8 @@ discard d@Discard{..} hand
     | _dcRiichi && hand ^. handPublic.handRiichi      = throwError "Already in riichi"
     | hand^.handPublic.handDrawWanpai || canDraw hand = throwError "You need to draw first"
     | _dcRiichi && not (canRiichiWith _dcTile hand)   = throwError "Cannot riichi: not tenpai"
-    | hand^.handPick /                                = Just _dcTile && hand^.handPublic.handRiichi = throwError "Cannot change wait in riichi"
+    | hand^.handPick /= Just _dcTile && hand^.handPublic.handRiichi
+                                                      = throwError "Cannot change wait in riichi"
     | otherwise                                       = setRiichi . movePick . setDiscard <$> tileFromHand _dcTile hand
   where
     movePick h
@@ -176,14 +183,12 @@ ankanOn tile hand
                              & handPublic.handCalled %~ (:) (kantsu tile)
                              & handPublic.handDrawWanpai .~ True
 
-shouminkanOn :: CanError m => Tile -> Hand -> m Hand
+shouminkanOn :: CanError m => Tile -> Hand -> m ()
 shouminkanOn tile hand = do
     hand' <- tile `tileFromHand` hand
-    case hand' ^? handPublic.handCalled.each.filtered isk of
-        Just _  -> return $ hand & handPublic.handCalled.each.filtered isk %~ promoteToKantsu
-        Nothing -> throwError "shouminkan not possible: no such open koutsu"
-  where
-    isk m = mentsuKind m == Koutsu && mentsuTile m == tile
+    let isShoum m = mentsuKind m == Koutsu && mentsuTile m == tile
+    when (isNothing $ hand' ^? handPublic.handCalled.each.filtered isShoum)
+        $ throwError "shouminkan not possible: no such open koutsu"
 
 -- | Take the tile from hand if possible
 tileFromHand :: CanError m => Tile -> Hand -> m Hand

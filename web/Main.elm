@@ -19,12 +19,14 @@ logView game = (
    container 500 200 topLeft
       <| titled "Log"
       <| flow down
-      <| map (eventView >> leftAligned) game.eventlog
+      <| map (eventView >> leftAligned)
+      <| take 6 game.eventlog
    ) `beside` (
    container 200 200 topLeft
       <| titled "Debug log"
       <| flow down
-      <| map (toText >> Text.color red >> leftAligned) game.debuglog)
+      <| map (toText >> Text.color red >> leftAligned)
+      <| take 6 game.debuglog)
 
 titled : String -> Element -> Element
 titled str = above (leftAligned <| Text.color charcoal <| toText str)

@@ -57,26 +57,36 @@ type Payer  = (Player, Points)
 -- Fields starting @_p@ are for public consumption and @_s@ for internal
 -- only.
 data Deal = Deal
+    -- always public
     { _pRound         :: Kaze
     , _pDeal          :: Int
-    , _pDora          :: [Tile]
+    , _pTurn          :: Kaze
+    , _pOja           :: Player
     , _pFirstOja      :: Player
+    , _pWallTilesLeft :: Int
+    , _pDora          :: [Tile]
+    , _pPlayers       :: Map Player (Kaze, Points, Text)
     , _pHonba         :: Int
     , _pRiichi        :: Int -- ^ Points in table for riichi
-    , _pOja           :: Player
-    , _pPlayers       :: Map Player (Kaze, Points, Text)
     , _pResults       :: Maybe DealResults
-    , _pTurn          :: Kaze
     , _pDeals         :: [(Kaze, Int)] -- ^ Previous deals in decreasing order by time
-    , _pWallTilesLeft :: Int
 
     -- secret
     , _sEvents        :: [GameEvent]
     , _sHands         :: Map Kaze Hand
-    , _sWaitingShouts :: [(Kaze, Shout)]
     , _sWall          :: [Tile]
     , _sWanpai        :: [Tile]
+    , _sWaiting       :: Maybe Waiting -- ^ Waiting turn action or shout(s)
     } deriving (Show, Read, Typeable)
+
+-- | Deal from a player's perspective
+type AsPlayer = Deal 
+
+-- | Left for turn, right for shout(s)
+type Waiting = Either WaitTurnAction [WaitShout]
+
+type WaitShout = (Player, Kaze, Int, [Shout])
+type WaitTurnAction = (Player, Kaze, Int, [Tile])
 
 -- Pretty instances 
 
@@ -86,33 +96,20 @@ instance P.Pretty Deal where
         P.string "wanpai:" P.<+> P.hang 0 (prettyList' _sWanpai) P.<$$>
         P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)
 
-
--- | State of single player. Note that there is no RiichiSecret.
-data GamePlayer = GamePlayer
-                { _playerKaze :: Kaze
-                , _playerPlayer :: Player -- ^ Me
-                , _playerName :: Text
-                , _playerPublic :: Deal
-                , _playerPublicHands :: Map Kaze HandPublic
-                , _playerMyHand :: Hand
-                } deriving (Show, Read, Typeable)
-
 -- * Actions and events
 
-data GameEvent = DealPrivateStarts GamePlayer -- ^ Only at the start of a round
-               | DealPrivateWaitForShout Player Int [Shout] -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
-               | DealPrivateWaitForTurnAction Player Int [Tile]
-               | DealPrivateChange Player Hand
+data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a round
+               | DealWaitForShout WaitShout -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
+               | DealWaitForTurnAction WaitTurnAction
                | DealTurnBegins Kaze
                | DealTurnAction Kaze TurnAction
                | DealTurnShouted Kaze Shout -- ^ Who, Shout
-               | DealHandChanged Kaze HandPublic
-                        -- TODO this is a bit too vague to be exactly
-                        -- useful for clients.. perhaps could identify
-                        -- between draws, kans, shouts.
-               | DealEnded DealResults
+               | DealPublicHandChanged Kaze HandPublic
+               | DealPrivateHandChanged Player Kaze Hand -- ^ Wholly private
+               | DealFlipDora Tile (Maybe Tile) -- ^ New dora, tile from wall to wanpai
                | DealNick Player Kaze Text
-               | DealRiichi Player
+               | DealRiichi Kaze
+               | DealEnded DealResults
                | GamePoints Player Int -- ^ New points
                deriving (Show, Read, Typeable)
 
@@ -134,7 +131,6 @@ data GameAction = GameTurn TurnAction
 
 --
 makeLenses ''Deal
-makeLenses ''GamePlayer
 
 -- * Game
 
@@ -167,9 +163,9 @@ newRound players names = do
         , _pWallTilesLeft = 0
         , _sEvents        = mempty
         , _sHands         = mempty
-        , _sWaitingShouts = mempty
         , _sWall          = mempty
         , _sWanpai        = mempty
+        , _sWaiting       = Nothing
         }
 
 dealTiles :: Deal -> IO Deal
@@ -180,7 +176,6 @@ dealTiles deal = liftM dealTiles $ shuffleM riichiTiles
         , _pDora          = [dora]
         , _sEvents        = []
         , _sHands         = Map.fromList $ zip [Ton .. Pei] (initHand <$> [h1, h2, h3, h4])
-        , _sWaitingShouts = []
         , _sWall          = wall
         , _sWanpai        = wanpai
         } where

@@ -1,34 +1,47 @@
 x = done, / = half done, ! = needs testing
 
-
-[ ] point sticks (1000 done)
-[/] real tiles
-[ ] chat/dialog
-[ ] (web) BUG game ended and back in lobby -> cannot join games
-[/] (server) worker logging in file
+# mechanics
+[ ] (game, elm) new dora when kan
 [ ] (game) chankan
-[ ] (game) harder yaku checks
+[ ] (game) "harder yaku" checks
 [!] (game) final scoring and possible next rounds
-[ ] (game, elm) renchans
 [ ] (game) honba in scoring
 [ ] (game) ryanhan-shibari
-[ ] (elm) limit log lengths
 [ ] (game) tenhou
 [ ] (game) ankan in riichi
-[ ] (game) count uradora
-[ ] (game, elm) new dora when kan
 [ ] (game) dora, ura dora count in hans
+[ ] (game) refactor everything behind GameEvents
+            [ ] (worker) available shouts when refreshing game
 [ ] (game) tochuu ryuukoku
-   [ ] (game) ask for new round when enough non-related tiles
+            [ ] ask for new round when enough non-related tiles
+            [ ] other
 [ ] (game) yaku tests
-[ ] (site) games/worker status query
-   [ ] nick set
+[ ] (game) no riichi if hand open
+
+# elm
+[ ] (elm) chat/dialog
+[ ] (elm) show honba
+[ ] (elm) point sticks (1000 done)
+[ ] (elm) ankan mentsu view
+[/] (elm) real tiles
+[x] (elm) limit log lengths
+[ ] (web) BUG game ended and back in lobby -> cannot join games
+
+# worker
 [ ] (worker) pause
-[ ] (docs) write json channel spec
+
+# site
+[ ] nick set
+[ ] (site) gravatar
+[/] (server) worker logging in file
+[ ] (site) webrtc
+[ ] (site) games/worker status query
 
 [!] (game, elm, server) tsumo
 [!] minshoukan
 [!] ankan
+
+[ ] (docs) write json channel spec
 
 [x] (game, elm) riichi
 [x] (game) kokushi musou
