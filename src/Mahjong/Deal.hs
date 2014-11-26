@@ -111,7 +111,9 @@ runTurn' pk ta = do
         -- TODO no updateHands
         TurnTileDiscard d    -> do
             when (d^.dcTo.to isJust) $ throwError "You cannot specify who shouted your discard when discarding it"
-            h' <- discard d h <* endTurn (d^.dcTile)
+            when (d^.dcRiichi) $ doRiichi pk
+            h' <- discard d h
+            endTurn (d^.dcTile)
             updateHand pk h'
         TurnAnkan tile       -> ankanOn tile h >>= updateHand pk
         TurnTileDraw False _ -> drawWall h >>= updateHand pk
@@ -140,8 +142,8 @@ drawDeadWall hand = do
             tellEvent $ DealFlipDora t (Just tow)
             t `toHandWanpai` hand
 
-takeRiichiPoints :: DealM m => Kaze -> m ()
-takeRiichiPoints pk = do
+doRiichi :: DealM m => Kaze -> m ()
+doRiichi pk = do
     p <- kazeToPlayer pk
     np <- view $ pPlayers.at p.singular _Just._2.to (\a -> a - 1000)
     when (np < 0) $ throwError "Cannot riichi: not enough points"
@@ -326,18 +328,21 @@ filterCouldShout :: Tile -- ^ Tile to shout
                  -> Kaze -- ^ Whose tile
                  -> Map Kaze Hand
                  -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
-filterCouldShout dt np = sortBy (shoutPrecedence np) .
-    concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
+filterCouldShout dt np =
+    sortBy (shoutPrecedence np)
+    . concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
   where flatten (k, xs) = map (k,) xs
 
 waitingShouts :: DealM m => Tile -> m [WaitShout]
 waitingShouts dt = do
     let secs = 15 -- ^ TODO hard-coded limit
 
-    shouts' <- filterCouldShout dt <$> view pTurn <*> view sHands
+    lastTile <- view pWallTilesLeft <&> (== 0)
+    shouts'  <- filterCouldShout dt <$> view pTurn <*> view sHands
 
-    let shouts = map (liftA2 (,) (^?!_head._1) (^..each._2)) $
-                 groupBy ((==) `on` view _1) shouts'
+    let shouts = map (liftA2 (,) (^?!_head._1) (^..each._2))
+                $ groupBy ((==) `on` view _1)
+                $ if' lastTile (filter ((`elem` [Ron, Chankan]) . shoutKind . snd)) id shouts'
 
     players <- mapM (kazeToPlayer . fst) shouts
 
@@ -364,7 +369,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
                , Endo $ sWaiting .~ Nothing ]
     DealTurnAction p ta
             -> [ Endo $ dealTurnAction p ta ]
-    DealTurnShouted p shout
+    DealTurnShouted p _shout
             -> [ Endo $ pTurn .~ p
                 {-, Endo $ sHands.ix p %~
                       ( handPublic.handCalled %~ (|> fromShout shout)
@@ -399,12 +404,13 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
                     db <- liftA2 (&&) (^?!sHands.at pk._Just.handPublic.handDiscards.to null)
                                       (view sEvents <&> not . any isShout)
                     sHands.ix pk.handPublic %~ (handRiichi .~ True) . (hDoubleRiichi .~ db)
+               , Endo $ pRiichi +~ 1000
                ]
     DealFlipDora td mtw
             -> [ Endo $ pDora %~ (|> td)
                , Endo $ maybe id (over sWanpai . flip snoc) mtw ]
-    GamePoints p ps
-            -> [ Endo $ pPlayers.ix p._2 .~ ps ]
+    GamePoints pk ps
+            -> [ Endo $ pPlayers.ix pk._2 .~ ps ]
 
 dealTurnAction :: Kaze -> TurnAction -> Deal -> Deal
 dealTurnAction p ta = appEndo . mconcat $ case ta of 

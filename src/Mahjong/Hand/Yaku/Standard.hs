@@ -203,7 +203,7 @@ chankan = do
         _ -> yakuFail
 
 nagashiMangan :: YakuCheck Yaku
-nagashiMangan = undefined
+nagashiMangan = yakuFail -- TODO
 
 doubleRiichi :: YakuCheck Yaku
 doubleRiichi = do

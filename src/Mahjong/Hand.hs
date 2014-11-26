@@ -86,16 +86,17 @@ shoutsOn :: Kaze -- ^ Shout from (player in turn)
          -> [Shout]
 shoutsOn np t p hand
     | np == p   = [] -- You're not shouting the thing you just discarded from yourself, right?
-    | otherwise = concatMap toShout $ filter (\xs -> snd xs `isInfixOf` ih) $ possibleShouts (nextKaze np == p) t
+    | otherwise = concatMap toShout $ possibleShouts (nextKaze np == p) t
   where
-    ih = sort (_handConcealed hand) -- NOTE: sort
-    toShout (mk, xs) = do
+    ih                = sort (_handConcealed hand) -- NOTE: sort
+    toShout (mk, xs)  = do
         guard $ xs `isInfixOf` ih
         s <- case mk of
                 Jantou  -> [Ron]
                 Kantsu  -> [Kan]
                 Koutsu  -> [Pon, Ron]
                 Shuntsu -> [Chi, Ron]
+        when (hand^.handPublic.handRiichi) $ guard (s == Ron)
         guard $ if s == Ron
                 then complete
                     ( toMentsu mk t xs : (hand^.handPublic.handCalled), _handConcealed hand L.\\ xs )
@@ -114,7 +115,9 @@ handWin h = if complete h then return h
 
 -- | Tiles the hand can discard for a riichi.
 handCanRiichiWith :: Hand -> [Tile]
-handCanRiichiWith h = h^.handConcealed.to (mapMaybe f)
+handCanRiichiWith h
+    | h^.handPublic.handRiichi = []
+    | otherwise                = h^.handConcealed.to (mapMaybe f)
     where f t = guard (canRiichiWith t h) >> return t
 
 canRiichiWith :: Tile -> Hand -> Bool

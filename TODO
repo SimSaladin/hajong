@@ -2,6 +2,7 @@ x = done, / = half done, ! = needs testing
 
 # mechanics
 [!] (game) "harder yaku" checks
+[ ] (game) nagashi mangan check
 [ ] (game) furiten
 [/] (game) chankan
 [!] (game) final scoring and possible next rounds
@@ -16,7 +17,12 @@ x = done, / = half done, ! = needs testing
    [ ] ask for new round when enough non-related tiles
    [ ] other
 [ ] (game) yaku tests
+[!] (game) shout only ron on last tile from wall
+[!] (game) no wait-shout other than ron if riichi
 [!] (game) BUG: riichi even if hand open
+[!] (game, elm, server) tsumo
+[!] minshoukan
+[!] ankan
 
 # elm
 [ ] (elm) chat/dialog
@@ -24,6 +30,7 @@ x = done, / = half done, ! = needs testing
 [ ] (elm) point sticks (1000 done)
 [ ] (elm) auto wait-for-shouts status after discard; indicator color?
 [ ] (elm) ankan mentsu view
+[ ] (elm) error prompts
 [/] (elm) real tiles
 [ ] (web) BUG game ended and back in lobby -> cannot join games
 
@@ -37,12 +44,9 @@ x = done, / = half done, ! = needs testing
 [ ] (site) webrtc
 [ ] (site) games/worker status query
 
-[!] (game, elm, server) tsumo
-[!] minshoukan
-[!] ankan
-
+# other
 [ ] (docs) write json channel spec
-
+[/] (connections) revisit json instances - possibly derive?
 [ ] game conf
    [ ] (opt) start and goal scores
    [ ] (opt) wareme
@@ -51,10 +55,10 @@ x = done, / = half done, ! = needs testing
    [ ] (opt) basengo
    [ ] (opt) chombo
 
+# done
 [x] (game, elm) riichi
 [x] (game) kokushi musou
 [x] (game) chiitoi
-[/] (connections) revisit json instances - possibly derive?
 [x] (elm) riichi rotate tile
 [x] (elm) riichi stick
 [X] (game) BUG shoutedFrom cannot draw anymore "Cannot draw from wall"

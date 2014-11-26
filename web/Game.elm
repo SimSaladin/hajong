@@ -126,15 +126,13 @@ dispInfoBlock co gs rs =
    toForm
    <| color black <| container 234 234 middle
    <| color white <| size 230 230
-   <| collage 230 230 (
-      [ turnIndicator gs |> moveRotateKaze 90 rs.mypos rs.turn
-      , toForm <| centered <| bold <| toText <| show rs.round
+   <| collage 230 230
+   <| [ turnIndicator gs |> moveRotateKaze 90 rs.mypos rs.turn
+      , toForm <| (centered <| bold <| toText <| show rs.round) `beside` plainText (" " ++ show rs.deal)
       , move (-60, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
       , moveY (-30) <| toForm <| centered <| toText <| show rs.tilesleft
       ]
-      ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 100 rs.mypos k)
-             [Ton, Nan, Shaa, Pei]
-      )
+      ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 95 rs.mypos k) [Ton, Nan, Shaa, Pei]
 
 turnIndicator : GameState -> Form
 turnIndicator gs =

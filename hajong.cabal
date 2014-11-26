@@ -82,7 +82,7 @@ library
                      , LambdaCase
                      , DeriveDataTypeable
   default-language:    Haskell2010
-  ghc-options:         -threaded
+  ghc-options:         -threaded -Wall
 
 test-suite test
   type:                exitcode-stdio-1.0

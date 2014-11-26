@@ -21,7 +21,7 @@ import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
 import qualified Data.Aeson                 as A
 import           System.Log.FastLogger (LoggerSet)
-import           Text.PrettyPrint.ANSI.Leijen (putDoc, pretty)
+import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 
 ------------------------------------------------------------------------------
 
