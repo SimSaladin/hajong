@@ -109,15 +109,17 @@ canDraw h = not (h^.handPublic.handDrawWanpai)
     && (3 * length (h^.handPublic.handCalled) + length (h^.handConcealed) == 13)
 
 handWin :: CanError m => Hand -> m Hand
-handWin h = if complete h then return h else throwError "Cannot tsumo, hand is not complete"
+handWin h = if complete h then return h
+                          else throwError "Cannot tsumo, hand is not complete"
 
 -- | Tiles the hand can discard for a riichi.
 handCanRiichiWith :: Hand -> [Tile]
-handCanRiichiWith h = mapMaybe (\t -> return t <* guard (canRiichiWith t h)) (h^.handConcealed)
+handCanRiichiWith h = h^.handConcealed.to (mapMaybe f)
+    where f t = guard (canRiichiWith t h) >> return t
 
 canRiichiWith :: Tile -> Hand -> Bool
-canRiichiWith t h = tenpai
-    (h^.handPublic.handCalled, L.delete t $ h^.handConcealed ++ maybe [] return (h^.handPick))
+canRiichiWith t h = null (h^.handPublic.handCalled) && tenpai (L.delete t tiles)
+    where tiles = h^.handConcealed ++ maybe [] return (h^.handPick)
 
 -- * Kan
 

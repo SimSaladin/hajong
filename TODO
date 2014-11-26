@@ -1,31 +1,30 @@
 x = done, / = half done, ! = needs testing
 
 # mechanics
-[x] (game, elm) new dora when kan
-[ ] (game) "harder yaku" checks
+[!] (game) "harder yaku" checks
 [ ] (game) furiten
-[ ] (game) chankan
+[/] (game) chankan
 [!] (game) final scoring and possible next rounds
 [ ] (game) honba in scoring
 [ ] (game) ryanhan-shibari
 [ ] (game) tenhou
 [ ] (game) ankan in riichi
 [ ] (game) dora, ura dora count in hans
-[ ] (game) refactor everything behind GameEvents
-            [ ] (worker) available shouts when refreshing game
+[/] (game) refactor everything behind GameEvents
+[ ] (worker/game) available shouts when refreshing game
 [ ] (game) tochuu ryuukoku
-            [ ] ask for new round when enough non-related tiles
-            [ ] other
+   [ ] ask for new round when enough non-related tiles
+   [ ] other
 [ ] (game) yaku tests
-[ ] (game) no riichi if hand open
+[!] (game) BUG: riichi even if hand open
 
 # elm
 [ ] (elm) chat/dialog
 [ ] (elm) show honba
 [ ] (elm) point sticks (1000 done)
+[ ] (elm) auto wait-for-shouts status after discard; indicator color?
 [ ] (elm) ankan mentsu view
 [/] (elm) real tiles
-[x] (elm) limit log lengths
 [ ] (web) BUG game ended and back in lobby -> cannot join games
 
 # worker
@@ -44,6 +43,14 @@ x = done, / = half done, ! = needs testing
 
 [ ] (docs) write json channel spec
 
+[ ] game conf
+   [ ] (opt) start and goal scores
+   [ ] (opt) wareme
+   [ ] (opt) chombo
+   [ ] (opt) aotenjou
+   [ ] (opt) basengo
+   [ ] (opt) chombo
+
 [x] (game, elm) riichi
 [x] (game) kokushi musou
 [x] (game) chiitoi
@@ -57,11 +64,5 @@ x = done, / = half done, ! = needs testing
 [x] (web) retain nick on refresh
 [x] player in turn -indicator
 [x] mentsu (needs correct from indicator)
-
-[ ] game conf
-   [ ] (opt) start and goal scores
-   [ ] (opt) wareme
-   [ ] (opt) chombo
-   [ ] (opt) aotenjou
-   [ ] (opt) basengo
-   [ ] (opt) chombo
+[x] (game, elm) new dora when kan
+[x] (elm) limit log lengths
