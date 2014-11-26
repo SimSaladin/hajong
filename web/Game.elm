@@ -399,7 +399,6 @@ processTurnAction player action gs =
                                                      , riichi <- h.riichi || discard.riichi
                                           }) rs.hands
                        }
-                 , waitShout <- Just (WaitRecord 10 gs.updated, [])
             }
          TurnTileDraw _ _ ->
             { gs | roundState <- Just { rs | tilesleft <- rs.tilesleft - 1 }

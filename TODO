@@ -1,9 +1,9 @@
 x = done, / = half done, ! = needs testing
 
 # mechanics
-[ ] (game, elm) new dora when kan
-[ ] (game) chankan
+[x] (game, elm) new dora when kan
 [ ] (game) "harder yaku" checks
+[ ] (game) chankan
 [!] (game) final scoring and possible next rounds
 [ ] (game) honba in scoring
 [ ] (game) ryanhan-shibari

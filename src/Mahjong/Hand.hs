@@ -59,7 +59,9 @@ makeLenses ''Hand
 -- Instances
 
 instance HasGroupings Hand where
-    getGroupings h = getGroupings $ (,) <$> _handCalled . _handPublic <*> _handConcealed $ h
+    getGroupings h = getGroupings $ (,)
+        <$> _handCalled . _handPublic
+        <*> (liftA2 (\mp c -> maybe c (: c) mp) _handPick _handConcealed) $ h
 
 instance Pretty Hand where
     pretty h =
@@ -208,8 +210,7 @@ meldTo shout mentsu hand
              $ if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
              hand
     | otherwise = throwError "meldTo: Tiles not available"
-  where
-    ih = shoutTo shout
+  where ih = shoutTo shout
 
 -- | Transfer the discard from the hand to a mentsu specified by the shout.
 shoutFromHand :: CanError m => Kaze -> Shout -> Hand -> m (Mentsu, Hand)

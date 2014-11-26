@@ -80,9 +80,11 @@ advanceWithShout shout sp = do
     sk <- playerToKaze sp
     tk <- view pTurn
     tp <- kazeToPlayer tk
-    (m, hand) <- shoutFromHand sk shout =<< handOf' tk
-    updateHand tk hand
-    handOf' sk >>= meldTo shout m >>= updateHand sk
+    sh <- handOf' sk
+    th <- handOf' tk
+    (m, th') <- shoutFromHand sk shout th
+    sh' <- meldTo shout m sh
+    updateHand sk sh' >> updateHand tk th'
     tellEvent $ DealTurnShouted sk shout
     if shoutKind shout == Ron
         then do
@@ -358,18 +360,22 @@ finalPoints xs =
 dealGameEvent :: GameEvent -> Deal -> Deal
 dealGameEvent ev = appEndo . mconcat $ case ev of
     DealTurnBegins p
-            -> [ Endo $ pTurn .~ p ]
+            -> [ Endo $ pTurn .~ p
+               , Endo $ sWaiting .~ Nothing ]
     DealTurnAction p ta
             -> [ Endo $ dealTurnAction p ta ]
     DealTurnShouted p shout
-            -> [ Endo $ sHands.ix p
-                      . handPublic.handCalled %~ (|> fromShout shout)
-               , Endo $ pTurn .~ p
+            -> [ Endo $ pTurn .~ p
+                {-, Endo $ sHands.ix p %~
+                      ( handPublic.handCalled %~ (|> fromShout shout)
+                      . handConcealed %~ (L.\\ shoutTo shout)
+                      . if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
+                      )
                , Endo $ sHands.ix (shoutFrom shout)
-                      . handPublic.handDiscards._last.dcTo .~ Just p ]
+                      . handPublic.handDiscards._last.dcTo .~ Just p -}
+               ]
 
-    -- TODO finer control?
-    -- now public hand is changed twice on server side
+    -- TODO get rid these in favor of finer control
     DealPublicHandChanged pk hp -> [ Endo $ sHands.ix pk.handPublic .~ hp ]
     DealPrivateHandChanged p pk h -> [ Endo $ sHands.ix pk .~ h ]
 
@@ -383,9 +389,9 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
         | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
         | otherwise           -> [ Endo $ const new ]
     DealWaitForShout ws
-            -> [ Endo $ sWaiting._Just._Right %~ (|> ws) ]
+            -> [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
     DealWaitForTurnAction wt
-            -> [ Endo $ sWaiting._Just._Left .~ wt ]
+            -> [ Endo $ sWaiting .~ Just (Left wt) ]
     DealRiichi pk
             -> [ Endo $ sHands.ix pk.handPublic.handRiichi .~ True ]
     DealFlipDora td mtw
