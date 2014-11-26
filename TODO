@@ -3,6 +3,7 @@ x = done, / = half done, ! = needs testing
 # mechanics
 [x] (game, elm) new dora when kan
 [ ] (game) "harder yaku" checks
+[ ] (game) furiten
 [ ] (game) chankan
 [!] (game) final scoring and possible next rounds
 [ ] (game) honba in scoring

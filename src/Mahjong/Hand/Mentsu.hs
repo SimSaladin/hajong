@@ -62,7 +62,7 @@ data Shout = Shout
            } deriving (Show, Read, Eq, Ord)
 
 -- | Note: Ord instance is used to determine calling order.
-data ShoutKind = Ron | Kan | Pon | Chi
+data ShoutKind = Ron | Kan | Pon | Chi | Chankan
                deriving (Show, Read, Eq, Ord)
 
 instance Pretty Shout where

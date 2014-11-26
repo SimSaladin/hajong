@@ -24,14 +24,21 @@ data Yaku = Yaku
 
 -- | Required info to calculate the value from a hand.
 data ValueInfo = ValueInfo
-              { vRound :: T.Kaze
-              , vPlayer :: T.Kaze
-              , vRiichi :: Bool
-              , vConcealed :: Bool
-              , vDiscarded :: [Tile] -- ^ To check furiten
-              , vMentsu :: [Mentsu]
-              , vWinWith :: Tile
-              } deriving (Show, Read)
+               { vRound :: T.Kaze
+               , vPlayer :: T.Kaze
+               , vRiichi :: Bool
+               , vConcealed :: Bool
+               , vDiscarded :: [Tile] -- ^ To check furiten
+               , vMentsu :: [Mentsu]
+               , vWinWith :: Tile
+
+               , vWinCalled :: Maybe Shout -- ^ Called
+               , vTiles :: [Tile] -- ^ Concealed tiles, including agari
+               , vIppatsu :: Bool
+               , vDoubleRiichi :: Bool
+               , vTilesLeft :: Int
+               , vFromWanpai :: Bool
+               } deriving (Show, Read)
 
 -- * YakuCheck
 
@@ -52,6 +59,7 @@ data Check next = YakuMentsu MentsuProp next
                 | YakuHandConcealedDegrades next
                 | YakuHandConcealed next
                 | YakuHandOpen next
+                | YakuFailed
                 deriving (Functor)
 
 runYakuCheck :: ValueInfo -> YakuCheck Yaku -> Maybe Yaku
@@ -64,6 +72,7 @@ runYakuCheck info = fmap fst . (`runStateT` vMentsu info) . iterM f
         f (YakuHandConcealedDegrades s) = if vConcealed info then s else (\x -> x { yakuHan = yakuHan x - 1 }) <$> s
         f (YakuHandConcealed s)         = if vConcealed info then s else lift Nothing
         f (YakuHandOpen s)              = if vConcealed info then lift Nothing else s
+        f YakuFailed                    = lift Nothing
 
         putRes (xs, t) = put xs >> return t
 
@@ -120,6 +129,10 @@ allMentsuOfKind :: MentsuProp -> YakuCheck ()
 allMentsuOfKind tkind = do
     replicateM_ 4 $ anyMentsu tkind
     anyJantou tkind
+
+-- | Fail the hand
+yakuFail :: YakuCheck a
+yakuFail = liftF YakuFailed -- (error "Not used"))
 
 -- | Require any mentsu with a property.
 anyKoutsu, anyKantsu, anyShuntsu, anyJantou, anyMentsu, anyKoutsuKantsu, anyMentsuJantou :: MentsuProp -> YakuCheck ()

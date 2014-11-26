@@ -23,6 +23,7 @@ import           Data.Aeson.TH
 
 ------------------------------------------------------------------------------
 import qualified Text.PrettyPrint.ANSI.Leijen as P
+import           Text.PrettyPrint.ANSI.Leijen as X (Pretty(..))
 
 ------------------------------------------------------------------------------
 

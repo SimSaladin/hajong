@@ -190,9 +190,9 @@ dealEnds results = tell [DealEnded results] >> return results
 toWinner :: DealM m => Player -> m Winner
 toWinner p = do
     pk <- playerToKaze p
-    rk <- view pRound
     h  <- handOf' pk
-    return (p, valueHand h rk pk)
+    d  <- ask
+    return (p, valueHand pk h d)
 
 tsumoPayers :: Player -> Points -> [Player] -> [Payer]
 tsumoPayers oja basic payers
@@ -393,7 +393,13 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
     DealWaitForTurnAction wt
             -> [ Endo $ sWaiting .~ Just (Left wt) ]
     DealRiichi pk
-            -> [ Endo $ sHands.ix pk.handPublic.handRiichi .~ True ]
+            -> [ Endo $ do
+                    let isShout DealTurnShouted{} = True
+                        isShout _ = False
+                    db <- liftA2 (&&) (^?!sHands.at pk._Just.handPublic.handDiscards.to null)
+                                      (view sEvents <&> not . any isShout)
+                    sHands.ix pk.handPublic %~ (handRiichi .~ True) . (hDoubleRiichi .~ db)
+               ]
     DealFlipDora td mtw
             -> [ Endo $ pDora %~ (|> td)
                , Endo $ maybe id (over sWanpai . flip snoc) mtw ]

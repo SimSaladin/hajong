@@ -12,8 +12,9 @@ module Mahjong.State where
 
 ------------------------------------------------------------------------------
 import           Mahjong.Tiles
-import           Mahjong.Hand
 import           Mahjong.Hand.Mentsu
+import           Mahjong.Hand.Algo
+import           Mahjong.Hand.Value
 
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
@@ -23,6 +24,38 @@ import           System.Random (randomRIO)
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 ------------------------------------------------------------------------------
+
+-- * Hand
+
+data HandPublic = HandPublic
+                { _handCalled :: [Mentsu]
+                , _handDiscards :: [Discard]
+                , _handRiichi :: Bool
+                , _handDrawWanpai :: Bool -- ^ Should draw from wanpai
+                , _hLastFromWanpai :: Bool
+                , _handAgari :: Maybe Tile
+                , _hIppatsu :: Bool
+                , _handAgariCall :: Maybe Shout
+                , _hDoubleRiichi :: Bool
+                } deriving (Show, Read, Eq)
+
+data Hand = Hand
+          { _handConcealed :: [Tile]
+          , _handPick :: Maybe Tile
+          , _handFuriten :: Maybe Bool -- ^ Just (temporary?)
+          , _handPublic :: HandPublic
+          , _hCanTsumo :: Bool
+          } deriving (Show, Read, Eq)
+
+data Discard = Discard { _dcTile :: Tile, _dcTo :: Maybe Kaze, _dcRiichi :: Bool }
+             deriving (Show, Read, Eq)
+
+-- | A hand that won.
+data ValuedHand = ValuedHand
+    { _vhMentsu :: [Mentsu]
+    , _vhTiles  :: [Tile]
+    , _vhValue  :: Value
+    } deriving (Show, Read)
 
 -- * Players
 
@@ -96,6 +129,24 @@ instance P.Pretty Deal where
         P.string "wanpai:" P.<+> P.hang 0 (prettyList' _sWanpai) P.<$$>
         P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)
 
+instance Pretty Hand where
+    pretty h =
+        prettyList' (_handConcealed h) P.<+>
+        maybe "" (("|-" P.<+>) . pretty) (_handPick h)
+
+instance Pretty HandPublic where
+    pretty = do
+        -- FIXME
+        tilenum <- (length . _handCalled) <&> (13 -) . (*3)
+        return $ P.string $ unwords $ replicate tilenum "_"
+
+-- Other instances
+
+instance HasGroupings Hand where
+    getGroupings h = getGroupings $ (,)
+        <$> _handCalled . _handPublic
+        <*> (liftA2 (\mp c -> maybe c (: c) mp) _handPick _handConcealed) $ h
+
 -- * Actions and events
 
 data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a round
@@ -130,6 +181,10 @@ data GameAction = GameTurn TurnAction
 -- * Lenses
 
 --
+makeLenses ''Discard
+makeLenses ''HandPublic
+makeLenses ''Hand
+makeLenses ''ValuedHand
 makeLenses ''Deal
 
 -- * Game
@@ -182,3 +237,9 @@ dealTiles deal = liftM dealTiles $ shuffleM riichiTiles
            (hands, xs)             = splitAt (13 * 4) tiles
            ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
            (dora : wanpai, wall)   = splitAt 14 xs
+
+-- | A hand that contains provided tiles in starting position
+initHand :: [Tile] -> Hand
+initHand tiles = Hand tiles Nothing Nothing
+    (HandPublic [] [] False False False Nothing False Nothing False)
+    False

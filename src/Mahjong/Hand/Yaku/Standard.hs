@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
 -- | 
 -- Module         : Hajong.Game.Yaku.Standard
@@ -10,6 +11,8 @@
 module Mahjong.Hand.Yaku.Standard where
 
 import Mahjong.Hand.Yaku.Builder
+import Mahjong.Hand.Mentsu (Shout(..), ShoutKind(..))
+import Mahjong.Hand.Algo (shantenBy, chiitoitsuShanten)
 import Mahjong.Tiles (Number(..), kaze)
 
 -- * 4 mentsu + 1 jantou
@@ -145,32 +148,65 @@ chinitsu = do
 -- * Special
 
 chiitoitsu :: YakuCheck Yaku
-chiitoitsu =
-    undefined -- TODO how does this implement?
+chiitoitsu = do
+    concealedHand
+    info <- yakuState
+    if Just (-1) == shantenBy chiitoitsuShanten (vTiles info)
+        then return (Yaku 2 "Chiitoitsu")
+        else yakuFail
 
 -- * Unrelated to mentsu
 
 menzenTsumo :: YakuCheck Yaku
-menzenTsumo = undefined
+menzenTsumo = do
+    concealedHand
+    ValueInfo{..} <- yakuState
+    if isNothing vWinCalled
+        then yakuFail
+        else return (Yaku 1 "Menzen Tsumo")
 
 riichi :: YakuCheck Yaku
-riichi = undefined
+riichi = do
+    concealedHand
+    ValueInfo{..} <- yakuState
+    if vRiichi
+        then return (Yaku 1 "Riichi")
+        else yakuFail
 
 ippatsu :: YakuCheck Yaku
-ippatsu = undefined
-
-doubleRiichi :: YakuCheck Yaku
-doubleRiichi = undefined
+ippatsu = do
+    riichi
+    ValueInfo{..} <- yakuState
+    if vIppatsu
+        then return (Yaku 1 "Ippatsu")
+        else yakuFail
 
 houteiRaoyui :: YakuCheck Yaku
-houteiRaoyui = undefined
+houteiRaoyui = do
+    ValueInfo{..} <- yakuState
+    if vTilesLeft == 0
+        then return (Yaku 1 "Houtei Raoyui")
+        else yakuFail
 
 rinshanKaihou :: YakuCheck Yaku
-rinshanKaihou = undefined
+rinshanKaihou = do
+    ValueInfo{..} <- yakuState
+    if vFromWanpai
+        then return (Yaku 1 "Rinshan Kaihou")
+        else yakuFail
 
 chankan :: YakuCheck Yaku
-chankan = undefined
+chankan = do
+    ValueInfo{..} <- yakuState
+    case vWinCalled of
+        Just s | shoutKind s == Chankan -> return (Yaku 1 "Chankan")
+        _ -> yakuFail
 
 nagashiMangan :: YakuCheck Yaku
 nagashiMangan = undefined
 
+doubleRiichi :: YakuCheck Yaku
+doubleRiichi = do
+    db <- vDoubleRiichi <$> yakuState
+    if db then return (Yaku 2 "Double Riichi")
+          else yakuFail

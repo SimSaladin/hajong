@@ -27,58 +27,7 @@ import Mahjong.Hand.Value
 import Mahjong.Hand.Algo
 import Mahjong.Hand.Yaku
 import Mahjong.Tiles
-
--- * Hand
-
-data HandPublic = HandPublic
-                { _handCalled :: [Mentsu]
-                , _handDiscards :: [Discard]
-                , _handRiichi :: Bool
-                , _handDrawWanpai :: Bool -- ^ Should draw from wanpai
-                , _handAgari :: Maybe Tile
-                } deriving (Show, Read, Eq)
-
-data Hand = Hand
-          { _handConcealed :: [Tile]
-          , _handPick :: Maybe Tile
-          , _handFuriten :: Maybe Bool -- ^ Just (temporary?)
-          , _handPublic :: HandPublic
-          , _hCanTsumo :: Bool
-          } deriving (Show, Read, Eq)
-
-data Discard = Discard { _dcTile :: Tile, _dcTo :: Maybe Kaze, _dcRiichi :: Bool }
-             deriving (Show, Read, Eq)
-
--- ** Lenses
-
---
-makeLenses ''Discard
-makeLenses ''HandPublic
-makeLenses ''Hand
-
--- Instances
-
-instance HasGroupings Hand where
-    getGroupings h = getGroupings $ (,)
-        <$> _handCalled . _handPublic
-        <*> (liftA2 (\mp c -> maybe c (: c) mp) _handPick _handConcealed) $ h
-
-instance Pretty Hand where
-    pretty h =
-        prettyList' (h^.handConcealed) P.<+>
-        maybe "" (("|-" P.<+>) . pretty) (h^.handPick)
-
-instance Pretty HandPublic where
-    pretty = do
-        -- FIXME
-        tilenum <- view (handCalled.to length) <&> (13 -) . (*3)
-        return $ string $ unwords $ replicate tilenum "_"
-
--- * Create
-
--- | A hand that contains provided tiles in starting position
-initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing (HandPublic [] [] False False Nothing) False
+import Mahjong.State
 
 maskPublicHand :: Hand -> Hand
 maskPublicHand = (handConcealed .~ []) . (handPick .~ Nothing)
@@ -225,20 +174,20 @@ shoutFromHand sk shout hand =
 
 -- * Valued hand
 
--- | A hand that won.
-data ValuedHand = ValuedHand
-    { _vhMentsu :: [Mentsu]
-    , _vhTiles  :: [Tile]
-    , _vhValue  :: Value
-    } deriving (Show, Read)
 
-makeLenses ''ValuedHand
-
-valueHand :: Hand -> Kaze -> Kaze -> ValuedHand
-valueHand h r player = ValuedHand (h^.handPublic.handCalled) (h^.handConcealed) (getValue vi)
-  where vi = ValueInfo r player
+valueHand :: Kaze -> Hand -> Deal -> ValuedHand
+valueHand player h deal = ValuedHand (h^.handPublic.handCalled) (h^.handConcealed) (getValue vi)
+  where vi = ValueInfo
+            (deal^.pRound)
+            player
             (h^.handPublic.handRiichi)
             (h^.handPublic.handCalled.to null)
             (h^.handPublic.handDiscards^..each.dcTile)
             (h^.handPublic.handCalled)
             (h^.handPublic.handAgari.to fromJust)
+            (h^.handPublic.handAgariCall)
+            (h^.handConcealed ++ maybe [] return (h^.handPick))
+            (h^.handPublic.hIppatsu)
+            (h^.handPublic.hDoubleRiichi)
+            (deal^.pWallTilesLeft)
+            (h^.handPublic.hLastFromWanpai)
