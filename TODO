@@ -1,12 +1,9 @@
 x = done, / = half done, ! = needs testing
 
 # mechanics
-[!] (game) "harder yaku" checks
 [ ] (game) nagashi mangan check
 [ ] (game) furiten
 [/] (game) chankan
-[!] (game) final scoring and possible next rounds
-[ ] (game) honba in scoring
 [ ] (game) ryanhan-shibari
 [ ] (game) tenhou
 [ ] (game) ankan in riichi
@@ -17,6 +14,9 @@ x = done, / = half done, ! = needs testing
    [ ] ask for new round when enough non-related tiles
    [ ] other
 [ ] (game) yaku tests
+[!] (game) "harder yaku" checks
+[!] (game) final scoring and possible next rounds
+[!] (game) honba in scoring
 [!] (game) shout only ron on last tile from wall
 [!] (game) no wait-shout other than ron if riichi
 [!] (game) BUG: riichi even if hand open
@@ -26,13 +26,13 @@ x = done, / = half done, ! = needs testing
 
 # elm
 [ ] (elm) chat/dialog
-[ ] (elm) show honba
 [ ] (elm) point sticks (1000 done)
 [ ] (elm) auto wait-for-shouts status after discard; indicator color?
 [ ] (elm) ankan mentsu view
 [ ] (elm) error prompts
 [/] (elm) real tiles
 [ ] (web) BUG game ended and back in lobby -> cannot join games
+[!] (elm) show honba
 
 # worker
 [ ] (worker) pause

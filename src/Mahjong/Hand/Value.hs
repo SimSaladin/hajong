@@ -29,7 +29,7 @@ data Value = Value
     { _vaYaku  :: [Yaku]
     , _vaFu    :: Fu
     , _vaHan   :: Han
-    , _vaValue :: Int
+    , _vaValue :: Points
     , _vaNamed :: Maybe Text
     } deriving (Show, Read)
 

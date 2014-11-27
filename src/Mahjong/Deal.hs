@@ -87,9 +87,7 @@ advanceWithShout shout sp = do
     updateHand sk sh' >> updateHand tk th'
     tellEvent $ DealTurnShouted sk shout
     if shoutKind shout == Ron
-        then do
-            win <- toWinner sp
-            Just <$> dealEnds (DealRon [win] [(tp, win^._2.vhValue.vaValue)])
+        then Just <$> endRon sp tp
         else startTurn sk >> return Nothing
 
 -- ** Actions
@@ -174,32 +172,49 @@ endDraw = do
         then dealEnds $ DealDraw [] []
         else do
             res <- DealDraw <$> mapM kazeToPlayer tenpaiPlayers
-                            <*> mapM (kazeToPlayer >=> return . (, 1000)) nootenPlayers
+                            <*> mapM kazeToPlayer nootenPlayers
             dealEnds res
 
 endTsumo :: DealM m => m DealResults
 endTsumo = do
+    honba   <- view pHonba
     tk      <- view pTurn
     players <- view pPlayers <&> map fst . itoList
     tp      <- kazeToPlayer tk
     oja     <- view pOja
     win     <- toWinner tp
-    dealEnds $ DealTsumo [win] (tsumoPayers oja (win^._2.vhValue.vaValue) $ L.delete tp players)
+    dealEnds $ DealTsumo [win] (tsumoPayers honba oja (win^._3.vhValue.vaValue) $ L.delete tp players)
+
+endRon :: DealM m => Player -> Player -> m DealResults
+endRon sp tp = do
+    h   <- view pHonba
+    win <- toWinner sp
+    oja <- view pOja
+    let basic = win^._3.vhValue.vaValue
+    dealEnds $ DealRon [win] [(tp, negate $ roundPoints $ basic * if' (tp == oja) 6 4 + h * 100)]
 
 dealEnds :: DealM m => DealResults -> m DealResults
-dealEnds results = tell [DealEnded results] >> return results
+dealEnds results = do
+    tell $ DealEnded results : payPoints results
+    return results
 
 toWinner :: DealM m => Player -> m Winner
 toWinner p = do
     pk <- playerToKaze p
     h  <- handOf' pk
     d  <- ask
-    return (p, valueHand pk h d)
+    let vh  = valueHand pk h d
+    return (p, roundPoints $ if' (p == _pOja d) 6 4 * (vh^.vhValue.vaValue) + _pHonba d * 300, vh)
 
-tsumoPayers :: Player -> Points -> [Player] -> [Payer]
-tsumoPayers oja basic payers
-    | oja `elem` payers = map (\p -> (p, basic * if' (p == oja) 2 1)) payers
-    | otherwise         = map (, basic) payers
+tsumoPayers :: Int -> Player -> Points -> [Player] -> [Payer]
+tsumoPayers honba oja basic payers
+    | oja `elem` payers = map (\p -> (p, negate $ roundPoints $ basic * if' (p == oja) 2 1 + honba * 100)) payers
+    | otherwise         = map (        , negate $ roundPoints $ basic * 2                  + honba * 100) payers
+
+roundPoints :: Points -> Points
+roundPoints x = case x `divMod` 100 of
+    (a, b) | b > 0     -> a + 1
+           | otherwise -> a
 
 ----------------------------------------------------------------------------------------
 
@@ -252,6 +267,16 @@ publishTurnAction pk ra = tellEvent $ case ra of
     TurnTileDraw b _ -> DealTurnAction pk (TurnTileDraw b Nothing)
     _                -> DealTurnAction pk ra
 
+-- | @payPoints oya honba res@
+payPoints :: DealResults -> [GameEvent]
+payPoints res = case res of
+    DealAbort{}  -> []
+    DealDraw{..} -> map (`GamePoints` 1000) dTenpais ++
+                    map (`GamePoints` (- floor (fromIntegral (length dTenpais) / fromIntegral (length dNooten)))) dNooten
+    _            -> map f (dWinners res) ++ map g (dPayers res)
+  where f (p, v, _) = GamePoints p v
+        g (p, v)    = GamePoints p v
+
 ----------------------------------------------------------------------------------------
 
 -- * Query info
@@ -277,6 +302,8 @@ handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") r
 handOf :: Kaze -> Lens Deal Deal (Maybe Hand) (Maybe Hand)
 handOf pk = sHands.at pk
 
+-- * Kyoku ends
+
 -- | Advance the game to next deal, or end it.
 nextDeal :: Deal -> IO (Either GameResults Deal)
 nextDeal deal = case maybeGameResults deal of
@@ -284,6 +311,7 @@ nextDeal deal = case maybeGameResults deal of
     Nothing -> do
         let po      = deal^.pOja
             around  = deal^.pResults & goesAround po
+            honba   = deal^.pResults & newHonba po
             np      = deal^.pPlayers & (if around then each._1 %~ prevKaze else id)
 
             po_k                    = np^?!ix po._1
@@ -293,15 +321,21 @@ nextDeal deal = case maybeGameResults deal of
                . set pTurn Ton
                . set pResults Nothing
                . set pOja oja
+               . over pHonba honba
                . over pRound (if' (oja_k == Ton && around) nextKaze id)
 
-        Right . go <$> dealTiles (logDeal deal)
+            in Right . go <$> dealTiles (logDeal deal)
 
   where
     goesAround po (Just DealDraw{..}) = not (null dTenpais) || notElem po dTenpais
     goesAround po (Just res)          = notElemOf (each._1) po (dWinners res)
     goesAround _ _ = error "nextDeal: game ended prematurely, this is not possible"
 
+    newHonba _ (Just DealDraw{})  = (+1)
+    newHonba _ (Just DealAbort{}) = (+1)
+    newHonba po (Just x) | notElemOf (each._1) po (dWinners x) = const 0
+                         | otherwise                           = (+1)
+    newHonba _ _ = error "newHonba: game ended prematurely, this is not possible"
     logDeal = do
         k <- view pRound
         over pDeals $ \case
@@ -382,7 +416,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
 
     -- TODO get rid these in favor of finer control
     DealPublicHandChanged pk hp -> [ Endo $ sHands.ix pk.handPublic .~ hp ]
-    DealPrivateHandChanged p pk h -> [ Endo $ sHands.ix pk .~ h ]
+    DealPrivateHandChanged _ pk h -> [ Endo $ sHands.ix pk .~ h ]
 
     DealEnded how
             -> [ Endo $ pResults .~ Just how ]

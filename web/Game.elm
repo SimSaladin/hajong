@@ -130,6 +130,8 @@ dispInfoBlock co gs rs =
    <| [ turnIndicator gs |> moveRotateKaze 90 rs.mypos rs.turn
       , toForm <| (centered <| bold <| toText <| show rs.round) `beside` plainText (" " ++ show rs.deal)
       , move (-60, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
+      , if rs.honba > 0 then move (-60,-60) <| toForm <| centered <| toText (show (rs.honba * 100) ++ "H")
+                        else toForm empty
       , moveY (-30) <| toForm <| centered <| toText <| show rs.tilesleft
       ]
       ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 95 rs.mypos k) [Ton, Nan, Shaa, Pei]
