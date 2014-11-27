@@ -66,14 +66,15 @@ makeLenses ''Lounge
 -- = unpack . getNick.
 data Client = Client
             { getNick :: Nick
+            , getIdent :: Maybe Int
             , isReal  :: Bool
             , isReady :: Bool
             , unicast :: MonadIO m => Event -> m ()
             , receive :: MonadIO m => m Event
             }
 
-instance Eq Client where a == b = getNick a == getNick b
-instance Ord Client where a <= b = getNick a <= getNick b
+instance Eq Client where (==) = (==) `on` getIdent
+instance Ord Client where (<=) = (<=) `on` getIdent
 instance Show Client where show = unpack . getNick
 
 instance IsPlayer Client where
@@ -82,7 +83,7 @@ instance IsPlayer Client where
     playerNick = getNick
 
 dummyClient :: Nick -> Client
-dummyClient nick = Client nick False False (const (return ())) (error "called receive of dummy Client")
+dummyClient nick = Client nick Nothing False False (const (return ())) (error "called receive of dummy Client")
 
 -- * Sending to client(s)
 
@@ -102,7 +103,7 @@ clientEither _ (Right a) f  = f a
 -- * Web socket specific
 
 websocketClient :: Nick -> WS.Connection -> Client
-websocketClient nick conn = Client nick True True
+websocketClient nick conn = Client nick Nothing True True
     (liftIO . WS.sendTextData conn)
     (liftIO $ WS.receiveData conn)
 

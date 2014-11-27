@@ -16,7 +16,8 @@ import           Mahjong
 
 ------------------------------------------------------------------------------
 import           Control.Monad.Logger
-import           Control.Concurrent (ThreadId)
+import           Control.Concurrent
+import           Data.IntMap                (IntMap)
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
 import qualified Data.Aeson                 as A
@@ -25,20 +26,24 @@ import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 
 ------------------------------------------------------------------------------
 
--- * Server main
-
-data ServerState = ServerState
-                 { _serverConnections :: Map Nick (Client, Maybe Int)
-                 , _serverLounge :: Set Client
-                 , _serverGames :: Map Int Game
-                 , _serverCounter :: Int -- ^ Game counter
-                 , _serverLoggerSet :: LoggerSet
-                 } deriving (Typeable)
+-- * Types
 
 data Game = Game
-          { _gWorker :: WorkerData
-          , _gThread :: ThreadId
-          }
+    { _gWorker :: WorkerData
+    , _gThread :: ThreadId
+    , _gClients :: IntMap Client
+    } deriving (Typeable)
+
+data ServerState = ServerState
+    { _seConnections   :: IntMap Client               -- ^ Client has nick
+    , _seLounge        :: Set Client                  -- ^ Idle clients
+    , _seNicks         :: Set Nick                    -- ^ Taken nicks
+    , _seGameCounter   :: Int                         -- ^ Game counter
+    , _seClientCounter :: Int                         -- ^ Client counter
+    , _seWorkers       :: IntMap Game                 -- ^ Active games
+    , _seWatcher       :: TChan (Int, WorkerResult)   -- ^ Worker watcher, **broadcast chan**.
+    , _seLoggerSet     :: LoggerSet                   -- ^ Fed to new workers
+    } deriving (Typeable)
 
 data PartedException = PartedException deriving (Show, Typeable)
 instance Exception PartedException
@@ -50,10 +55,10 @@ makeLenses ''ServerState
 makeLenses ''Game
 
 gameId :: Applicative f => Nick -> LensLike' f ServerState Int
-gameId nick = serverConnections.at nick._Just._2._Just
+gameId nick = seConnections.at nick._Just._2._Just
 
 gameAt :: Int -> Lens' ServerState (Maybe Game)
-gameAt n = serverGames.at n
+gameAt n = seWorkers.at n
 
 ssVar :: Lens' (TVar ServerState, Client) (TVar ServerState)
 ssVar = _1
@@ -61,23 +66,65 @@ ssVar = _1
 client :: Lens' (TVar ServerState, Client) Client
 client = _2
 
--- ** Utility
+-- * Pure functions
 
-broadcast' :: Event -> ServerState -> IO ()
-broadcast' event ss = forM_ (ss ^. serverLounge) (`unicast` event)
+buildLounge :: ServerState -> Lounge
+buildLounge = Lounge
+    <$> view (seLounge.to (mapMonotonic getNick))
+    <*> view (seWorkers.to (fmap $ view $ gWorker.wSettings))
 
--- ** Entry points
+-- | Remove from seLounge
+clientToGame :: Int -> Client -> ServerState -> ServerState
+clientToGame n c = (seLounge %~ deleteSet c)
+        . (seConnections.at (getNick c)._Just._2 .~ Just n)
+
+-- | Add a client based on nick.
+tryAddClient :: Client -> ServerState -> Maybe (ServerState -> (Client, ServerState))
+tryAddClient c ss
+
+    -- Previously known client but not connected, goes maybe to a game
+    | Just i  <- getIdent c
+    , Nothing <- ss^.seConnections.at i
+    = Just $ \ss -> (c, ss & seConnections.at i .~ Just c
+                           & if' (ingame i ss) (seLounge %~ insertSet c) id)
+
+    -- Completely new client nick, goes to lounge
+    | Nothing <- getIdent c
+    = Just $ \ss ->
+        let (i,ss') = ss & seClientCounter <+~ 1
+        in  Just (c, ss' & seConnections.at i .~ Just c
+                         & seLounge %~ insertSet c)
+
+    -- Nick taken by a real client
+    | otherwise = Nothing
+
+ingame :: Int -> ServerState -> Bool
+ingame i ss = isJust $ ss^?seWorkers.folded.filtered (isJust . (^.gClients.at i))
+
+------------------------------------------------------------------------------
+
+-- * Entry points
+
+-- | Invoke the 'workerWatcher' and the websocket 'app'.
+runServer :: TVar ServerState -> IO ()
+runServer ss_v = do
+    void . forkIO $ workerWatcher ss_v
+    WS.runServer "0.0.0.0" 8001 $ app ss_v
 
 newServer :: LoggerSet -> IO (TVar ServerState)
-newServer = atomically . newTVar . ServerState mempty mempty mempty 0
+newServer lgr = do
+    chan <- newBroadcastTChanIO
+    atomically . newTVar $ ServerState
+        mempty mempty mempty 0 0 mempty chan lgr
 
--- | Starts websocket stuff
-runServer :: TVar ServerState -> IO ()
-runServer = WS.runServer "0.0.0.0" 8001 . serverApp
+-- ** Websocket app
 
--- | The websocket app
-serverApp :: TVar ServerState -> WS.ServerApp
-serverApp ss_v pending = do
+-- | On every new request, parse the first 'Event' and check whether it is
+-- a 'JoinServer' event and the nick isn't taken. Invoke 'clientListener'
+-- for the client on success, otherwise close the connection with an
+-- appropriate 'Invalid' event.
+app :: TVar ServerState -> WS.ServerApp
+app ss_v pending = do
     conn  <- WS.acceptRequest pending
     event <- WS.receiveData conn
 
@@ -89,9 +136,28 @@ serverApp ss_v pending = do
                 $logWarn $ "Received non-event or malformed json first: " <> tshow event
                 unicast c $ Invalid "No JoinServer received. Please identify yourself."
 
+-- * Worker Watcher
+
+workerWatcher :: TVar ServerState -> IO ()
+workerWatcher ss_v = do
+    chan <- readTVarIO ss_v >>= dupTChan . _seWatcher
+    forever $
+        atomically (readTChanIO chan) >>= uncurry gameEnded >>= modifyTVar ss_v
+
+-- | worker has finished
+workerEnded :: Int -> WorkerResult -> IO (ServerState -> ServerState)
+workerEnded game res = do
+    either ($logError $ "Game " ++ tshow game ++ " errored! " ++)
+           (\x -> $logInfo $ "Game " ++ tshow game ++ " finished. " ++ tshow x)
+           res
+    return $ \ss -> 
+        let cs = ss^?!seWorkers.at game.gClients
+        in ss & (seWorkers.at game .~ Nothing) . (seLounge %~ union cs)
+
+
 ------------------------------------------------------------------------------
 
--- * ClientWorker
+-- * Client listening
 
 newtype ClientWorker a = ClientWorker { unClientWorker :: LoggingT (ReaderT (TVar ServerState, Client) IO) a }
                          deriving ( Functor, Applicative, Monad, MonadIO
@@ -109,6 +175,10 @@ putWorker g = atomically . putTMVar (g^.gWorker.wInput)
 broadcast :: Event -> ClientWorker ()
 broadcast event = rview ssVar >>= liftIO . broadcast' event
 
+broadcast' :: Event -> ServerState -> IO ()
+{-# INLINE broadcast' #-}
+broadcast' event ss = forM_ (ss ^. seLounge) (`unicast` event)
+
 -- ** Entry points
 
 runClientWorker :: TVar ServerState -> Client -> ClientWorker a -> IO a
@@ -120,7 +190,7 @@ clientWorkerMain ss_v c = go connects `finally` go disconnects
   where
     go = runClientWorker ss_v c
 
--- ** Client care
+-- ** Logic
 
 -- | Execute usual connection rituals with the new connection.
 connects :: ClientWorker ()
@@ -141,7 +211,7 @@ connects = do
             unicast c (LoungeInfo $ buildLounge ss)
             broadcast (JoinServer nick)
 
-            let clientInfo = ss ^. serverConnections.at nick
+            let clientInfo = ss ^. seConnections.at nick
 
             reconnectGame clientInfo
             talkClient
@@ -159,8 +229,8 @@ disconnects = do
 
     ss <- withAtomic $ \var -> do
         modifyTVar var
-            $ set (serverConnections.at nick._Just._1) (dummyClient nick)
-            . over serverLounge (deleteSet c)
+            $ set (seConnections.at nick._Just._1) (dummyClient nick)
+            . over seLounge (deleteSet c)
 
         readTVar var
 
@@ -191,22 +261,22 @@ handleEventOf c event = case event of
         unicast c $ Invalid "Event not allowed or not implemented."
         $logWarn $ "Ignored event: " <> tshow event
 
--- ** Games
+-- ** Actions
 
 createGame :: Text -> ClientWorker Int
 createGame name = do
     wd <- WorkerData (GameSettings name)
         <$> liftIO (newTVarIO $ newEmptyGS (dummyClient "") name)
         <*> liftIO newEmptyTMVarIO
-        <*> fmap _serverLoggerSet (rview ssVar)
+        <*> fmap _seLoggerSet (rview ssVar)
     threadId <- liftIO $ startWorker wd
 
     let game = Game wd threadId
 
     n <- withAtomic $ \v -> do
         s <- readTVar v
-        let (n, s') = s & serverCounter <+~ 1
-        writeTVar v $ serverGames %~ insertMap n game $ s'
+        let (n, s') = s & seGameCounter <+~ 1
+        writeTVar v $ seWorkers %~ insertMap n game $ s'
         return n
 
     broadcast $ GameCreated (n, name, mempty)
@@ -252,34 +322,6 @@ handleGameAction action = do
 
 ------------------------------------------------------------------------------
 
--- * Pure functions
-
-buildLounge :: ServerState -> Lounge
-buildLounge = Lounge
-    <$> view (serverLounge.to (mapMonotonic getNick))
-    <*> view (serverGames.to (fmap $ view $ gWorker.wSettings))
-
--- | Remove from serverLounge
-clientToGame :: Int -> Client -> ServerState -> ServerState
-clientToGame n c = (serverLounge %~ deleteSet c)
-        . (serverConnections.at (getNick c)._Just._2 .~ Just n)
-
-tryAddClient :: Client -> ServerState -> Maybe (ServerState -> ServerState)
-tryAddClient c ss = case ss ^. serverConnections.at nick of
-    -- Completely new client nick, goes to lounge
-    Nothing -> Just $ over serverConnections (insertMap nick (c, Nothing))
-                    . over serverLounge (insertSet c)
-    -- Previously known client, maybe to game
-    Just (sc, sg) | not (isReal sc) -> Just
-        $ set (serverConnections.at nick._Just._1) c
-        . (if isNothing sg then over serverLounge (insertSet c) else id)
-    -- Nick taken by a real client
-    _ -> Nothing
-    where
-        nick = getNick c
-
-------------------------------------------------------------------------------
-
 -- * Debugger
 
 serverDebugger :: TVar ServerState -> IO ()
@@ -291,7 +333,7 @@ serverDebugger ss = go
         case asText i of
             ""  -> return ()
             "s" -> do s <- readTVarIO ss
-                      mapM_ debugGameShow . itoList $ _serverGames s
+                      mapM_ debugGameShow . itoList $ _seWorkers s
             _   -> putStrLn "Unknown command"
         go
 

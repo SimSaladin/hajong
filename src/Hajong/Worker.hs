@@ -20,7 +20,7 @@
 ------------------------------------------------------------------------------
 module Hajong.Worker
     ( WorkerData(..), wGame, wSettings, wInput, wLogger
-    , WorkerInput(..)
+    , WorkerInput(..), WorkerResult
     , startWorker
     ) where
 
@@ -50,6 +50,10 @@ data WorkerData = WorkerData
                 , _wLogger    :: LoggerSet
                 } deriving (Typeable)
 
+-- | Result from a dying worker thread.
+type WorkerResult = Either Text GameResults
+               -- ^ Left only on an unexpected event, a bug.
+
 data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
                  | WorkerPartPlayer Client (GameState Client -> IO ())
                  | WorkerGameAction Client GameAction
@@ -70,12 +74,9 @@ makeLenses ''WorkerData
 -- * Entry points
 
 -- | Fork a new worker thread
-startWorker :: WorkerData -> IO ThreadId
-startWorker wdata =
-    forkIO $ runWCont wdata $ do
-        $logInfo "New Worker started"
-        waitPlayersAndBegin
-        $logInfo "Worker has finished"
+startWorker :: (WorkerResult -> IO ()) -> WorkerData -> IO ThreadId
+startWorker ends wdata =
+    forkIO $ runWCont wdata waitPlayersAndBegin
 
 -- * Unwrap monads
 
