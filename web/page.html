@@ -38,6 +38,7 @@
        mynick = prompt("Please enter a nick");
        localStorage.setItem("nick", mynick);
     }
+    myident = localStorage.getItem("ident") || 0;
 
     var socket = new WebSocket("ws://84.248.82.156:8001");
 
@@ -56,6 +57,9 @@
 
       socket.onmessage = function (e) {
          var data = JSON.parse(e.data);
+          if (data.type == "join" && data.nick == mynick) {
+              localStorage.setItem("ident", data.ident);
+          }
          if (data.events) {
             for (i = 0; i < data.events.length; ++ i) {
                var t = data.events[i];
@@ -78,7 +82,7 @@
         }
       });
 
-      socket.send( '{ "type" : "join", "nick": "' + mynick + '" }' );
+      socket.send( '{ "type" : "join", "nick": "' + mynick + '", "ident":' + myident + ' }' );
     }
 
 

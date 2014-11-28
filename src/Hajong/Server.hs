@@ -127,8 +127,8 @@ app ss_v pending = do
     event <- WS.receiveData conn
 
     case A.decode event of
-        Just (JoinServer nick) -> clientWorkerMain ss_v (websocketClient nick conn)
-        _                      -> do
+        Just (JoinServer nick ident) -> clientWorkerMain ss_v (websocketClient nick conn){ getIdent = ident }
+        _ -> do
             let c = websocketClient "name-not-set" conn
             runClientWorker ss_v c $ do
                 $logWarn $ "Received non-event or malformed json first: " <> tshow event
@@ -220,7 +220,7 @@ connects = do
                 Just (c, ss) -> do
                     unicast c (ClientIdentity $ getNick c)
                     unicast c (LoungeInfo $ buildLounge ss)
-                    broadcast (JoinServer $ getNick c)
+                    broadcast (liftA2 JoinServer getNick getIdent c)
                     local (client.~c) $ case ss^.clientGameId c of
                         Nothing -> return ()
                         Just g  -> handleEventOf c (JoinGame g (getNick c))
@@ -253,7 +253,7 @@ talkClient = do
 
 handleEventOf :: Client -> Event -> ClientWorker ()
 handleEventOf c event = case event of
-    JoinServer _      -> unicast c (Invalid "Already joined (and nick change not implemented)")
+    JoinServer{}      -> unicast c (Invalid "Already joined (and nick change not implemented)")
     PartServer reason -> do
         broadcast $ Message "" ("User " <> getNick c <> " has left [" <> reason <> "]")
         liftIO (throwIO PartedException)

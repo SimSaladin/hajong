@@ -18,7 +18,7 @@ fromJSON_Event str = maybe (Invalid { content = str }) parseEvent <| fromString 
 
 toJSON_Event : Event -> Value
 toJSON_Event ev = case ev of
-    JoinServer {nick}     -> atType "join" [("nick", String nick)]
+    JoinServer {nick,ident} -> atType "join" [("nick", String nick), ("ident", Number <| toFloat ident)]
     PartServer {nick}     -> atType "part" [("nick", String nick)]
     Identity   {nick}     -> atType "identity" [("nick", String nick)]
     Message{from,content} -> atType "msg" [("from", String from), ("content", String content)]
@@ -96,7 +96,7 @@ parsePlayer = parseInt
 parseEvent : Value -> Event
 parseEvent (Object o) = case "type" .: o |> parseString of
     "identity"     -> Identity     <| hasNick o {}
-    "join"         -> JoinServer   <| hasNick o {}
+    "join"         -> JoinServer   <| hasNick o { ident = parseInt <| "ident" .: o }
     "part"         -> PartServer   <| hasNick o {}
     "msg"          -> Message      <| hasContent o <| hasFrom o {}
     "invalid"      -> Invalid      <| hasContent o {}

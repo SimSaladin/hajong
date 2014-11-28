@@ -31,7 +31,7 @@ import           Data.Aeson.Types (Pair)
 
 -- * Event
 
-data Event = JoinServer Nick
+data Event = JoinServer Nick Int
            | PartServer Nick
            | ClientIdentity Nick
            | Message Nick Text -- ^ from, content
@@ -146,7 +146,7 @@ gamePairs (i,GameSettings t) = object
 
 instance ToJSON Event where
     toJSON (ClientIdentity nick)   = atType "identity"     ["nick"    .= nick]
-    toJSON (JoinServer nick)       = atType "join"         ["nick"    .= nick]
+    toJSON (JoinServer nick ident) = atType "join"         ["nick"    .= nick, "ident" .= ident]
     toJSON (PartServer nick)       = atType "part"         ["nick"    .= nick]
     toJSON (Message sender cnt)    = atType "msg"          ["from"    .= sender, "content" .= cnt]
     toJSON (Invalid msg)           = atType "invalid"      ["content" .= msg]
@@ -242,7 +242,7 @@ instance FromJSON Event where
     parseJSON v@(Object o) = do
         t <- o .: "type"
         case t :: Text of
-            "join"         -> JoinServer         <$> o .: "nick"
+            "join"         -> JoinServer         <$> o .: "nick" <*> o .: "ident"
             "part"         -> PartServer         <$> o .: "nick"
             "msg"          -> Message            <$> o .: "from" <*> o .: "content"
             "game-created" -> (\x y z -> GameCreated (x,y,z)) <$> o .: "ident" <*> o .: "topic" <*> o .: "players"

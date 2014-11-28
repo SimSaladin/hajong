@@ -7,6 +7,7 @@ import Set
 -- {{{ GameState -------------------------------------------------------------
 type GameState = { status     : Status
                  , mynick     : String
+                 , myid       : Int
                  , lounge     : LoungeData
                  , gameWait   : Maybe Int
                  , updated    : Time
@@ -73,7 +74,7 @@ type HandValue = { yaku : [Yaku]
 -- }}}
 
 -- {{{ Event -----------------------------------------------------------------
-data Event = JoinServer  { nick : String } -- ^ Nick
+data Event = JoinServer  { nick : String, ident : Int }
            | PartServer  { nick : String }
            | Identity    { nick : String }
            | Message     { from : String, content : String } -- ^ from, content

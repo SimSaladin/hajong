@@ -62,6 +62,7 @@ port upstream = (toJSON_Event >> Json.toString "") <~ merges
 newState : GameState
 newState = { status     = InLounge
            , mynick     = ""
+           , myid       = 0
            , lounge     = defaultLounge
            , gameWait   = Nothing
            , updated    = 0
