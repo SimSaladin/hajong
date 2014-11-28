@@ -224,9 +224,9 @@ newRound players names = do
         }
 
 dealTiles :: Deal -> IO Deal
-dealTiles deal = liftM dealTiles $ shuffleM riichiTiles
+dealTiles deal = go <$> shuffleM riichiTiles
   where
-    dealTiles tiles = deal
+    go tiles = deal
         { _pWallTilesLeft = length wall
         , _pDora          = [dora]
         , _sEvents        = []

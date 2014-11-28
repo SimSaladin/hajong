@@ -51,7 +51,7 @@ data WorkerData = WorkerData
                 } deriving (Typeable)
 
 -- | Result from a dying worker thread.
-type WorkerResult = Either Text GameResults
+type WorkerResult = Either SomeException GameResults
                -- ^ Left only on an unexpected event, a bug.
 
 data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
@@ -64,7 +64,7 @@ newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerData IO) a }
                    deriving ( Functor, Applicative, Monad, MonadIO
                             , MonadLogger, MonadReader WorkerData)
 
-type WCont = Worker ()
+type WCont = Worker GameResults
 
 -- ** Lenses
 
@@ -74,9 +74,8 @@ makeLenses ''WorkerData
 -- * Entry points
 
 -- | Fork a new worker thread
-startWorker :: (WorkerResult -> IO ()) -> WorkerData -> IO ThreadId
-startWorker ends wdata =
-    forkIO $ runWCont wdata waitPlayersAndBegin
+startWorker :: (Either SomeException GameResults -> IO ()) -> WorkerData -> IO ThreadId
+startWorker ends wdata = runWCont wdata waitPlayersAndBegin `forkFinally` ends
 
 -- * Unwrap monads
 
@@ -225,7 +224,7 @@ workerProcessTurnAction ta c = do
                         TurnTileDiscard{} -> waitForShouts
                         TurnTsumo
                             | Just roundRes <- rr -> endDeal roundRes
-                            | otherwise           -> $logError "TurnTsumo went through but results were Nothing"
+                            | otherwise           -> fail "TurnTsumo went through but results were Nothing"
 
 -- | "workerRace n ma b" races between "ma" and "threadDelay n" (return b)
 workerRace :: Int -> Worker a -> a -> Worker a
@@ -367,8 +366,4 @@ endDeal results = do
     liftIO $ threadDelay (secs * 1000000)
     g <- rview wGame
     liftIO (nextDeal (g^?!gameDeal._Just))
-        >>= either endGame (beginDeal . ($ g) . set gameDeal . Just)
-
-endGame :: GameResults -> WCont
-endGame res = $logInfo "Game ended, stopping worker."
-    -- TODO: Inform the main server process?
+        >>= either return (beginDeal . ($ g) . set gameDeal . Just)

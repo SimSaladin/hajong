@@ -27,7 +27,6 @@ module Mahjong.Hand.Mentsu
     ) where
 
 import Mahjong.Tiles
-import Text.PrettyPrint.ANSI.Leijen (Pretty(..))
 
 -- Types
 
@@ -71,6 +70,7 @@ instance Pretty Shout where
         Ron -> "Ron!"
         Kan -> "Kan!"
         Chi -> "Chi!"
+        Chankan -> "Chankan!"
 
 -- Helpers
 
@@ -101,14 +101,14 @@ jantou  = Mentsu Jantou `flip` Nothing
 
 fromShout :: Shout -> Mentsu
 fromShout s@Shout{..} = setShout $ case shoutKind of
-    Pon -> koutsu shoutTile
-    Kan -> kantsu shoutTile
-    Chi -> shuntsu (minimumEx $ shoutTile : shoutTo)
-    Ron
-        | [_]   <- shoutTo         -> jantou shoutTile
-        | [x,y] <- shoutTo, x == y -> koutsu shoutTile
+    Pon     -> koutsu shoutTile
+    Kan     -> kantsu shoutTile
+    Chi     -> shuntsu (minimumEx $ shoutTile : shoutTo)
+    Ron | [_]    <- shoutTo                           -> jantou shoutTile
+        | [x, y] <- shoutTo, x == y                   -> koutsu shoutTile
         | Just m <- shuntsuWith (shoutTile : shoutTo) -> m
-        | otherwise -> error "fromShout: malformed shout"
+        | otherwise                                   -> error "fromShout: malformed shout"
+    Chankan -> kantsu shoutTile
     where
         setShout (Mentsu k t _) = Mentsu k t (Just s)
 

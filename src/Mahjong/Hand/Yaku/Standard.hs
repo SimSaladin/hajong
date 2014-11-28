@@ -175,7 +175,7 @@ riichi = do
 
 ippatsu :: YakuCheck Yaku
 ippatsu = do
-    riichi
+    _ <- riichi
     ValueInfo{..} <- yakuState
     if vIppatsu
         then return (Yaku 1 "Ippatsu")

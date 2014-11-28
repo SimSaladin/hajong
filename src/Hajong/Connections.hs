@@ -38,9 +38,10 @@ data Event = JoinServer Nick
            | Invalid Text
 
            | LoungeInfo Lounge
-           | GameCreated (Int, Text, Set Nick) -- id, name, nicks
+           | GameCreated (Int, Text, [Nick]) -- id, name, nicks
            | CreateGame Text
            | JoinGame Int Nick -- ^ game num, nick
+           | PartGame Nick
            | ForceStart Int
 
            | InGamePrivateEvent GameEvent
@@ -57,7 +58,7 @@ data GameSettings = GameSettings { gameTitle :: Text }
 
 data Lounge = Lounge
             { _loungeNicksIdle :: Set Nick
-            , _loungeGames :: Map Int GameSettings
+            , _loungeGames :: IntMap GameSettings
             } deriving (Show, Read)
 
 makeLenses ''Lounge
@@ -65,12 +66,12 @@ makeLenses ''Lounge
 -- | NOTE: Client equality is decided by getNick exclusively, and show
 -- = unpack . getNick.
 data Client = Client
-            { getNick :: Nick
-            , getIdent :: Maybe Int
-            , isReal  :: Bool
-            , isReady :: Bool
-            , unicast :: MonadIO m => Event -> m ()
-            , receive :: MonadIO m => m Event
+            { getNick  :: Nick
+            , getIdent :: Int -- ^ 0 if none set
+            , isReal   :: Bool
+            , isReady  :: Bool
+            , unicast  :: MonadIO m => Event -> m ()
+            , receive  :: MonadIO m => m Event
             }
 
 instance Eq Client where (==) = (==) `on` getIdent
@@ -83,7 +84,7 @@ instance IsPlayer Client where
     playerNick = getNick
 
 dummyClient :: Nick -> Client
-dummyClient nick = Client nick Nothing False False (const (return ())) (error "called receive of dummy Client")
+dummyClient nick = Client nick 0 False False (const (return ())) (error "called receive of dummy Client")
 
 -- * Sending to client(s)
 
@@ -103,7 +104,7 @@ clientEither _ (Right a) f  = f a
 -- * Web socket specific
 
 websocketClient :: Nick -> WS.Connection -> Client
-websocketClient nick conn = Client nick Nothing True True
+websocketClient nick conn = Client nick 0 True True
     (liftIO . WS.sendTextData conn)
     (liftIO $ WS.receiveData conn)
 
@@ -134,7 +135,7 @@ dealAsPlayer ev deal pk p =
     in Object (d `mappend` o)
 
 loungeJSON :: Lounge -> [Pair]
-loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (M.toList games)]
+loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (itoList games)]
 
 gamePairs :: (Int, GameSettings) -> A.Value
 gamePairs (i,GameSettings t) = object
@@ -144,17 +145,20 @@ gamePairs (i,GameSettings t) = object
 -- Instances -----------------------------------------------------------------
 
 instance ToJSON Event where
-    toJSON (ClientIdentity nick)   = atType "identity"     ["nick" .= nick]
-    toJSON (JoinServer nick)       = atType "join"         ["nick" .= nick]
-    toJSON (PartServer nick)       = atType "part"         ["nick" .= nick]
-    toJSON (Message sender cnt)    = atType "msg"          ["from" .= sender, "content" .= cnt]
+    toJSON (ClientIdentity nick)   = atType "identity"     ["nick"    .= nick]
+    toJSON (JoinServer nick)       = atType "join"         ["nick"    .= nick]
+    toJSON (PartServer nick)       = atType "part"         ["nick"    .= nick]
+    toJSON (Message sender cnt)    = atType "msg"          ["from"    .= sender, "content" .= cnt]
     toJSON (Invalid msg)           = atType "invalid"      ["content" .= msg]
     toJSON (LoungeInfo lounge)     = atType "lounge"       (loungeJSON lounge)
-    toJSON (GameCreated (i,t,n))   = atType "game-created" ["ident" .= i, "topic" .= t, "players" .= n]
-    toJSON (JoinGame nth nick)     = atType "game-join"    ["nick" .= nick, "ident" .= nth]
-    toJSON (InGamePrivateEvent x)  = atType "game-event"   ["events" .= [x] ]
-    toJSON (InGameEvents xs)       = atType "game-event"   ["events" .= xs  ]
-    toJSON x                       = error $ "toJSON called for an Event that shouldn't be deserialized on server: " ++ show x
+    toJSON (GameCreated (i,t,n))   = atType "game-created" ["ident"   .= i,    "topic" .= t, "players" .= n]
+    toJSON (JoinGame nth nick)     = atType "game-join"    ["nick"    .= nick, "ident" .= nth]
+    toJSON (PartGame nick)         = atType "game-part"    ["nick"    .= nick] -- TODO client
+    toJSON (InGamePrivateEvent x)  = atType "game-event"   ["events"  .= [x] ]
+    toJSON (InGameEvents xs)       = atType "game-event"   ["events"  .= xs  ]
+    toJSON (CreateGame name)       = atType "game-create"  ["name"    .= name]
+    toJSON (ForceStart nth)        = atType "game-fstart"  ["ident"   .= nth]
+    toJSON (InGameAction _)        = atType "game-action"  (error "InGameAction toJSON not implemented")
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of

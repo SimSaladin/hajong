@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 ------------------------------------------------------------------------------
 -- |
 -- Module         : Hajong.Server
@@ -17,7 +18,6 @@ import           Mahjong
 ------------------------------------------------------------------------------
 import           Control.Monad.Logger
 import           Control.Concurrent
-import           Data.IntMap                (IntMap)
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
 import qualified Data.Aeson                 as A
@@ -36,6 +36,7 @@ data Game = Game
 
 data ServerState = ServerState
     { _seConnections   :: IntMap Client               -- ^ Client has nick
+    , _seInGame        :: IntMap Int                  -- ^ Clients in-game
     , _seLounge        :: Set Client                  -- ^ Idle clients
     , _seNicks         :: Set Nick                    -- ^ Taken nicks
     , _seGameCounter   :: Int                         -- ^ Game counter
@@ -54,11 +55,14 @@ instance Exception PartedException
 makeLenses ''ServerState
 makeLenses ''Game
 
-gameId :: Applicative f => Nick -> LensLike' f ServerState Int
-gameId nick = seConnections.at nick._Just._2._Just
+playerGameId :: Int -> Lens' ServerState (Maybe Int)
+playerGameId i = seInGame.at i
 
-gameAt :: Int -> Lens' ServerState (Maybe Game)
-gameAt n = seWorkers.at n
+clientGameId :: Client -> Lens' ServerState (Maybe Int)
+clientGameId = playerGameId . getIdent
+
+game :: Int -> Lens' ServerState (Maybe Game)
+game n = seWorkers.at n
 
 ssVar :: Lens' (TVar ServerState, Client) (TVar ServerState)
 ssVar = _1
@@ -73,33 +77,27 @@ buildLounge = Lounge
     <$> view (seLounge.to (mapMonotonic getNick))
     <*> view (seWorkers.to (fmap $ view $ gWorker.wSettings))
 
--- | Remove from seLounge
 clientToGame :: Int -> Client -> ServerState -> ServerState
-clientToGame n c = (seLounge %~ deleteSet c)
-        . (seConnections.at (getNick c)._Just._2 .~ Just n)
+clientToGame g c ss = ss & seLounge %~ deleteSet c
+                         & seInGame.at i .~ Just g
+                         & seWorkers.ix g.gClients.at i .~ Just c
+    where i = getIdent c
+
+clientFromGame :: Client -> Int -> ServerState -> ServerState
+clientFromGame c g ss = ss & seWorkers.ix g.gClients.at i .~ Nothing
+    where i      = getIdent c
 
 -- | Add a client based on nick.
-tryAddClient :: Client -> ServerState -> Maybe (ServerState -> (Client, ServerState))
-tryAddClient c ss
-
-    -- Previously known client but not connected, goes maybe to a game
-    | Just i  <- getIdent c
-    , Nothing <- ss^.seConnections.at i
-    = Just $ \ss -> (c, ss & seConnections.at i .~ Just c
-                           & if' (ingame i ss) (seLounge %~ insertSet c) id)
-
-    -- Completely new client nick, goes to lounge
-    | Nothing <- getIdent c
-    = Just $ \ss ->
-        let (i,ss') = ss & seClientCounter <+~ 1
-        in  Just (c, ss' & seConnections.at i .~ Just c
-                         & seLounge %~ insertSet c)
-
-    -- Nick taken by a real client
-    | otherwise = Nothing
-
-ingame :: Int -> ServerState -> Bool
-ingame i ss = isJust $ ss^?seWorkers.folded.filtered (isJust . (^.gClients.at i))
+tryAddClient :: Client -> ServerState -> Maybe (Client, ServerState)
+tryAddClient c ss = do
+    let mi = getIdent c
+    (i, _) <- if mi > 0
+                  then return (mi, ss) <* guard (isNothing $ ss^.seConnections.at mi)
+                  else return $ ss & seClientCounter <+~ 1
+    return $
+        (c { getIdent = i },) $
+        ss & seConnections.at i .~ Just c
+           & maybe (seLounge %~ insertSet c) (\g -> clientToGame g c) (ss^.playerGameId i)
 
 ------------------------------------------------------------------------------
 
@@ -115,7 +113,7 @@ newServer :: LoggerSet -> IO (TVar ServerState)
 newServer lgr = do
     chan <- newBroadcastTChanIO
     atomically . newTVar $ ServerState
-        mempty mempty mempty 0 0 mempty chan lgr
+        mempty mempty mempty mempty 0 0 mempty chan lgr
 
 -- ** Websocket app
 
@@ -140,20 +138,33 @@ app ss_v pending = do
 
 workerWatcher :: TVar ServerState -> IO ()
 workerWatcher ss_v = do
-    chan <- readTVarIO ss_v >>= dupTChan . _seWatcher
-    forever $
-        atomically (readTChanIO chan) >>= uncurry gameEnded >>= modifyTVar ss_v
+    chan <- readTVarIO ss_v >>= atomically . dupTChan . _seWatcher
+    forever $ atomically (readTChan chan)
+            >>= uncurry workerDied
+            >>= atomically . go
+            >>= enteredLounge ss_v
+  where
+    go f = do (s, r) <- readTVar ss_v <&> f
+              writeTVar ss_v s
+              return r
 
 -- | worker has finished
-workerEnded :: Int -> WorkerResult -> IO (ServerState -> ServerState)
-workerEnded game res = do
-    either ($logError $ "Game " ++ tshow game ++ " errored! " ++)
-           (\x -> $logInfo $ "Game " ++ tshow game ++ " finished. " ++ tshow x)
+workerDied :: Int -> WorkerResult -> IO (ServerState -> (ServerState, Set Client))
+workerDied g res = do
+    either (\x -> {- $logError -} putStrLn $ "Game " ++ tshow g ++ " errored! " ++ tshow x)
+           (\x -> {- $logInfo  -} putStrLn $ "Game " ++ tshow g ++ " finished. " ++ tshow x)
+           -- TODO ^ logging
            res
-    return $ \ss -> 
-        let cs = ss^?!seWorkers.at game.gClients
-        in ss & (seWorkers.at game .~ Nothing) . (seLounge %~ union cs)
+    return $ \ss ->
+        let cs = ss^?!seWorkers.at g._Just.gClients^..folded & setFromList
+            f  = ss & seWorkers.at g .~ Nothing
+                    & seLounge %~ union cs
+            in (f, cs)
 
+enteredLounge :: TVar ServerState -> Set Client -> IO ()
+enteredLounge ss_v cs = do
+    ss <- readTVarIO ss_v
+    mapM_ (\c -> broadcast' (PartGame $ getNick c) ss) cs
 
 ------------------------------------------------------------------------------
 
@@ -195,50 +206,45 @@ clientWorkerMain ss_v c = go connects `finally` go disconnects
 -- | Execute usual connection rituals with the new connection.
 connects :: ClientWorker ()
 connects = do
-    c <- view client
-    let nick = getNick c
-    $logInfo $ "New client " <> nick
-
-    accepted <- withAtomic $ \var -> do
-        ss     <- readTVar var
-        let res = ($ ss) <$> tryAddClient c ss
-        maybe (return ()) (writeTVar var) res
-        return res
-
-    case accepted of
-        Just ss -> do
-            unicast c (ClientIdentity nick)
-            unicast c (LoungeInfo $ buildLounge ss)
-            broadcast (JoinServer nick)
-
-            let clientInfo = ss ^. seConnections.at nick
-
-            reconnectGame clientInfo
-            talkClient
-        Nothing -> unicast c $ Invalid "Nick already in use"
-  where
-    reconnectGame (Just (c, Just g)) = handleEventOf c $ JoinGame g (getNick c)
-    reconnectGame _                  = return ()
+    dc <- view client
+    $logInfo $ "New client " <> tshow (getIdent dc) <> " (" <> getNick dc <> ")"
+    if (length (getNick dc) > 24)
+        then unicast dc $ Invalid "Maximum nick length is 24 characters"
+        else do
+            accepted <- withAtomic $ \var -> do
+                res <- readTVar var <&> tryAddClient dc
+                maybe (return ()) (writeTVar var . snd) res
+                return res
+            case accepted of
+                Nothing -> unicast dc $ Invalid "Nick already in use"
+                Just (c, ss) -> do
+                    unicast c (ClientIdentity $ getNick c)
+                    unicast c (LoungeInfo $ buildLounge ss)
+                    broadcast (JoinServer $ getNick c)
+                    local (client.~c) $ case ss^.clientGameId c of
+                        Nothing -> return ()
+                        Just g  -> handleEventOf c (JoinGame g (getNick c))
+                    talkClient
 
 -- | Client disconnect rituals.
 disconnects :: ClientWorker ()
 disconnects = do
     c <- view client
-    let nick = getNick c
-    $logInfo $ "Client disconnected (" <> nick <> ")"
+    $logInfo $ "Client disconnected (" <> tshow (getIdent c) <> ")"
 
-    ss <- withAtomic $ \var -> do
-        modifyTVar var
-            $ set (seConnections.at nick._Just._1) (dummyClient nick)
-            . over seLounge (deleteSet c)
+    wasInGame <- withAtomic $ \var -> do
+        s <- readTVar var
+        let mg = s^.clientGameId c
+            s' = s & seConnections.at (getIdent c) .~ Nothing
+                   & seLounge %~ deleteSet c
+                   & maybe id (clientFromGame c) mg
+        writeTVar var s'
+        return $ mg >>= \g -> s^.game g
 
-        readTVar var
-
-    case ss^?gameId (getNick c) >>= \i -> ss^.gameAt i of
+    case wasInGame of
         Just g  -> putWorker g $ WorkerPartPlayer c (const $ return ())
         Nothing -> return ()
-
-    broadcast (PartServer nick)
+    broadcast (PartServer $ getNick c)
 
 talkClient :: ClientWorker ()
 talkClient = do
@@ -269,17 +275,20 @@ createGame name = do
         <$> liftIO (newTVarIO $ newEmptyGS (dummyClient "") name)
         <*> liftIO newEmptyTMVarIO
         <*> fmap _seLoggerSet (rview ssVar)
-    threadId <- liftIO $ startWorker wd
-
-    let game = Game wd threadId
 
     n <- withAtomic $ \v -> do
-        s <- readTVar v
-        let (n, s') = s & seGameCounter <+~ 1
-        writeTVar v $ seWorkers %~ insertMap n game $ s'
-        return n
+        (n, s) <- readTVar v <&> seGameCounter <+~ 1
+        writeTVar v s >> return n
 
-    broadcast $ GameCreated (n, name, mempty)
+    chan     <- rview ssVar <&> _seWatcher
+    threadId <- let die = atomically . writeTChan chan . (n,)
+                    in liftIO $ startWorker die wd
+
+    c <- view client
+    let g = Game wd threadId (singletonMap (getIdent c) c)
+    rmodify ssVar (seWorkers.at n .~ Just g)
+
+    broadcast $ GameCreated (n, name, g^..gClients.folded <&> getNick)
     return n
 
 joinGame :: Int -> ClientWorker ()
@@ -290,10 +299,10 @@ joinGame n = do
 
     $logInfo $ "Nick " <> nick <> " joins game " <> tshow n
 
-    case ss^?gameId nick of
+    case ss^.clientGameId c of
         Just n'
             | n /= n' -> unicast c $ Invalid "You are already in some game. You cannot join multiple games simultaneously."
-        _             -> case ss ^. gameAt n of
+        _             -> case ss ^. game n of
             Just g -> do
                 ss_v <- view ssVar
                 putWorker g $ WorkerAddPlayer c $ \gs -> do
@@ -306,7 +315,7 @@ joinGame n = do
 forceStart :: Int -> ClientWorker ()
 forceStart n = do
     ss <- rview ssVar
-    case ss^.gameAt n of
+    case ss^.game n of
         Nothing -> return ()
         Just g -> putWorker g WorkerForceStart
 
@@ -315,8 +324,8 @@ handleGameAction :: GameAction -> ClientWorker ()
 handleGameAction action = do
     c  <- view client
     ss <- rview ssVar
-    case ss ^? gameId (getNick c) of
-        Just n | Just g <- ss^.gameAt n
+    case ss ^. clientGameId c of
+        Just n | Just g <- ss^.game n
             -> putWorker g (c `WorkerGameAction` action)
         _   -> unicast c $ Invalid "You are not in a game"
 

@@ -26,12 +26,10 @@ import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import           Data.List.HT (removeEach)
 import           Data.Either (isLeft)
-import           Text.PrettyPrint.ANSI.Leijen (Pretty(..))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import Mahjong.Tiles
 import Mahjong.Hand.Mentsu
-import Mahjong.Hand.Value
 import Mahjong.Hand.Algo
 
 -- * WaitTree

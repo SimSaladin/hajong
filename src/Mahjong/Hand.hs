@@ -18,9 +18,7 @@ module Mahjong.Hand
     ) where
 
 import qualified Data.List as L
-import Text.PrettyPrint.ANSI.Leijen (Pretty(..), string)
 import Data.Maybe (fromJust)
-import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Value

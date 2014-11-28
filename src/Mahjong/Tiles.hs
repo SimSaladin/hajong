@@ -13,7 +13,7 @@
 module Mahjong.Tiles where
 
 import Prelude hiding ((<>))
-import Text.PrettyPrint.ANSI.Leijen (Pretty(..), string, (<>), displayS, renderCompact)
+import Text.PrettyPrint.ANSI.Leijen (string, (<>), displayS, renderCompact)
 
 -- * Types
 
