@@ -23,5 +23,9 @@
 <aside>
   <h1>Play now!
   <p>
-    <button.btn.btn-full>Create a game
-    and invite your friends with the link provided.
+    <form method=POST action=@{NewGameR}>
+      <input.btn.btn-full type=submit>Create a game
+    and invite your friends with the link provided, or
+  <p>
+    <a.btn.btn-full href=@{LobbyR}>Go to the lobby
+    and chat with other players.

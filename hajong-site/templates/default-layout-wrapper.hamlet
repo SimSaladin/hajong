@@ -25,11 +25,15 @@ $newline never
     <body>
         <div class="header-container">
           <header class="wrapper clearfix">
-            <h1 class="title">#{pageTitle pc}
+            <a href=@{HomeR}>
+              <h1 class="title">Funjong
+                $if route /= Just HomeR
+                  \ - #{pageTitle pc}
             <nav>
               <ul>
                 <li>
-                  <a href="#">asd
+                  <a href="#">Home
+                  <a href="#">Games
 
         <div class="main-container">
           <div id="main" role="main" class="main wrapper clearfix">

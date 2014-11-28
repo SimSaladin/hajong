@@ -1,0 +1,57 @@
+var mainDiv = document.getElementById('game');
+var waitDiv = document.getElementById('wait');
+var game;
+
+mainDiv.hidden = true;
+
+function startGame(debugging) {
+  if (debugging) {
+    return Elm.debugFullscreen(Elm.Main, "Main.elm");
+  } else {
+    return Elm.embed(Elm.Main, mainDiv, { downstream : "" });
+  }
+}
+
+window.onerror = function(msg, file, lineNr) {
+   alert(msg + file + lineNr);
+   return false;
+}
+
+mynick = localStorage.getItem("nick");
+if (!mynick) {
+   mynick = prompt("Please enter a nick");
+   localStorage.setItem("nick", mynick);
+}
+myident = localStorage.getItem("ident") || 0;
+
+var socket = new WebSocket("ws://84.248.82.156:8001");
+
+socket.onopen = function () {
+
+  waitDiv.hidden = true;
+  mainDiv.hidden = false;
+  game = startGame();
+
+  socket.onclose = function () {
+    game.dispose();
+    mainDiv.hidden = true;
+    waitDiv.hidden = false;
+    waitDiv.innerHTML = "Connection to server has been lost! Please refresh this page";
+  }
+
+  socket.onmessage = function (e) {
+     var data = JSON.parse(e.data);
+      if (data.type == "join" && data.nick == mynick) {
+          localStorage.setItem("ident", data.ident);
+      }
+     game.ports.downstream.send(e.data);
+  }
+
+  game.ports.upstream.subscribe(function(e) {
+    var d = JSON.parse(e);
+    if (d.type !== "noop") socket.send(e);
+  });
+
+  socket.send(JSON.stringify({"type":"join", "nick":mynick, "ident":myident}));
+}
+
