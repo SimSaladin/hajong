@@ -1,6 +1,16 @@
 #main {
    min-height:80vh;
 }
+a {
+   color:rgb(181, 122, 0);
+}
+a:hover {
+   opacity:0.9;
+   text-decoration:none;
+}
+.footer-container a {
+   color:rgb(249, 220, 155);
+}
 .btn {
    display:inline-block;
    background:rgb(226,236,0);
@@ -19,4 +29,28 @@
 }
 .title {
     text-shadow:2px 2px 2px #555;
+}
+nav a {
+   background:rgb(171, 137, 0);
+}
+nav a.active {
+   background: #ce9814;
+}
+
+.form {
+   padding:0.5em;
+   input[type=email], input[type=text], textarea {
+      min-width:30em;
+   }
+}
+
+.form-group {
+   padding:0.5em 0;
+   label {
+      display:inline-block;
+      min-width:13em;
+   }
+}
+.form-controls {
+   padding-left:13em;
 }

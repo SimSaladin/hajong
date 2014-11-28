@@ -1,6 +1,7 @@
 module Handler.Play where
 
 import Import
+import Data.Time (getCurrentTime)
 
 getPlayR :: GameIdent -> Handler Html
 getPlayR ident = do
@@ -27,4 +28,17 @@ postGameR ident = do
 
 postNewGameR :: Handler Html
 postNewGameR = do
-    undefined
+    ident <- _
+    time <- liftIO getCurrentTime
+
+    let game = Game ident _ time Nothing
+    _ <- runDB $ insert game
+
+    redirect $ GameR ident
+
+getGamesR :: Handler Html
+getGamesR = do
+    games <- runDB $ selectList [] []
+    defaultLayout $ do
+        setTitle "Past Games"
+        $(widgetFile "game-history")

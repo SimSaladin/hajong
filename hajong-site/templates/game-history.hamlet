@@ -1,0 +1,5 @@
+<h>
+
+<ul>
+  $forall Entity _ v <- games
+    <li>#{gameIdent v}

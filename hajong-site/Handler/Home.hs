@@ -4,37 +4,27 @@ import Import
 import Yesod.Form.Bootstrap3
     ( BootstrapFormLayout (..), renderBootstrap3, withSmallInput )
 
--- This is a handler function for the GET request method on the HomeR
--- resource pattern. All of your resource patterns are defined in
--- config/routes
---
--- The majority of the code you will write in Yesod lives in these handler
--- functions. You can spread them across multiple files if you are so
--- inclined, or create a single monolithic file.
 getHomeR :: Handler Html
-getHomeR = do
-    (formWidget, formEnctype) <- generateFormPost sampleForm
-    let submission = Nothing :: Maybe (FileInfo, Text)
-        handlerName = "getHomeR" :: Text
-    defaultLayout $ do
-        aDomId <- newIdent
-        setTitle "Funjong"
-        $(widgetFile "homepage")
+getHomeR = defaultLayout $ do
+    setTitle "Funjong"
+    $(widgetFile "homepage")
 
-postHomeR :: Handler Html
-postHomeR = do
-    ((result, formWidget), formEnctype) <- runFormPost sampleForm
-    let handlerName = "postHomeR" :: Text
-        submission = case result of
-            FormSuccess res -> Just res
-            _ -> Nothing
+getSupportR, postSupportR :: Handler Html
+getSupportR  = postSupportR
+postSupportR = do
+    ((res, widget), enctype) <- runFormPost ticketForm
+
+    submitted <- case res of
+        FormSuccess ticket -> do
+            tid <- runDB $ insert ticket
+            return (Just tid)
+        _ -> return Nothing
 
     defaultLayout $ do
-        aDomId <- newIdent
-        setTitle "Welcome To Yesod!"
-        $(widgetFile "homepage")
+        setTitle "Support"
+        $(widgetFile "support")
 
-sampleForm :: Form (FileInfo, Text)
-sampleForm = renderBootstrap3 BootstrapBasicForm $ (,)
-    <$> fileAFormReq "Choose a file"
-    <*> areq textField (withSmallInput "What's on the file?") Nothing
+ticketForm :: Form Ticket
+ticketForm = renderBootstrap3 BootstrapBasicForm $ Ticket
+    <$> areq emailField "Your email address" Nothing
+    <*> fmap unTextarea (areq textareaField "Description" Nothing)

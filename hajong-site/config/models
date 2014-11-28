@@ -15,9 +15,13 @@ GameResult
 
 Game
    ident Text
-   UniqueGame ident
    creator Text
    created UTCTime
-   results GameResultId
+   results GameResultId Maybe
+   UniqueGame ident
+
+Ticket
+   email Text
+   content Text
 
  -- By default this file is used in Model.hs (which is imported by Foundation.hs)

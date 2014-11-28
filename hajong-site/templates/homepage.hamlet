@@ -17,14 +17,15 @@
   <section>
     <h2>Open source
     <p>Funjong is licensed under the MIT license. #
-       <a href="https://github.com/SimSaladin/hajong">Code is on GitHub
-       .  As far as I know, this is the only open source implementation of the rather complex game.
+       \<a href="https://github.com/SimSaladin/hajong">See on GitHub</a>.
+       As far as I know, this is the only open source implementation of the
+       rather complex game.
 
 <aside>
   <h1>Play now!
   <p>
     <form method=POST action=@{NewGameR}>
-      <input.btn.btn-full type=submit>Create a game
+      <input.btn.btn-full type=submit value="Create a game">
     and invite your friends with the link provided, or
   <p>
     <a.btn.btn-full href=@{LobbyR}>Go to the lobby

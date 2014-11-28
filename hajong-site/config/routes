@@ -4,8 +4,11 @@
 /favicon.ico FaviconR GET
 /robots.txt RobotsR GET
 
-/                 HomeR    GET POST
+/                 HomeR    GET
 /new-game         NewGameR     POST
+/games            GamesR   GET
 /game/#GameIdent  GameR    GET POST
 /play/#GameIdent  PlayR    GET
 /lobby            LobbyR   GET
+
+/support          SupportR GET POST

@@ -22,7 +22,7 @@ if (!mynick) {
    mynick = prompt("Please enter a nick");
    localStorage.setItem("nick", mynick);
 }
-myident = localStorage.getItem("ident") || 0;
+myident = Number(localStorage.getItem("ident")); // Number(null) == 0
 
 var socket = new WebSocket("ws://84.248.82.156:8001");
 

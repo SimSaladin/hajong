@@ -1,0 +1,13 @@
+<section>
+
+  $maybe tid <- submitted
+    <h1>Thank you!
+    <p>Your support ticket \##{fromSqlKey tid} has been opened.
+
+  $nothing
+    <h1>Support request
+
+    <form.form method=post enctype=#{enctype} action=@{SupportR}>
+      ^{widget}
+      <div .form-controls>
+        <input .btn type=submit value="Submit">

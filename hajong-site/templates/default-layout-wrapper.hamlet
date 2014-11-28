@@ -32,8 +32,11 @@ $newline never
             <nav>
               <ul>
                 <li>
-                  <a href="#">Home
-                  <a href="#">Games
+                  <a href=@{HomeR} :route == Just HomeR:.active>Home
+                <li>
+                  <a href=@{LobbyR} :route == Just LobbyR:.active>Lobby
+                <li>
+                  <a href=@{GamesR} :route == Just GamesR:.active>Games
 
         <div class="main-container">
           <div id="main" role="main" class="main wrapper clearfix">
@@ -45,6 +48,9 @@ $newline never
             <p>Funjong is work of #
                <a href="http://funktionaali.com">Samuli Thomasson
                .
+            <p>Having problems? Found a bug? Have a feature request? #
+               <a href=@{SupportR}>File a support ticket here
+               . I'll look into it as soon as I can!
             <p>&copy; #{extraCopyright $ appExtra $ settings master}
 
         $maybe analytics <- extraAnalytics $ appExtra $ settings master
