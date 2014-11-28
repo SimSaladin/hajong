@@ -1,0 +1,20 @@
+Default: &defaults
+  database: hajong-site.sqlite3
+  poolsize: 10
+
+Development:
+  <<: *defaults
+
+Testing:
+  database: hajong-site_test.sqlite3
+  <<: *defaults
+
+Staging:
+  database: hajong-site_staging.sqlite3
+  poolsize: 100
+  <<: *defaults
+
+Production:
+  database: hajong-site_production.sqlite3
+  poolsize: 100
+  <<: *defaults
