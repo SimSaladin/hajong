@@ -18,7 +18,7 @@ getHomeR = do
         handlerName = "getHomeR" :: Text
     defaultLayout $ do
         aDomId <- newIdent
-        setTitle "Welcome To Yesod!"
+        setTitle "Funjong"
         $(widgetFile "homepage")
 
 postHomeR :: Handler Html

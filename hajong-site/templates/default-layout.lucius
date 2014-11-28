@@ -1,0 +1,19 @@
+#main {
+   min-height:80vh;
+}
+.btn {
+   background:rgb(226,236,0);
+   color:black;
+   margin:1em 0;
+   padding:0.7em 1em;
+   border:none;
+}
+.btn:hover {
+   background:rgb(200,216,0);
+}
+.btn-full {
+   width:100%;
+}
+.title {
+    text-shadow:2px 2px 2px #555;
+}

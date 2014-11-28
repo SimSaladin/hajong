@@ -23,12 +23,25 @@ $newline never
         <script>
           document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/,'js');
     <body>
-        <div class="container">
-            <header>
-            <div id="main" role="main">
-              ^{pageBody pc}
-            <footer>
-                #{extraCopyright $ appExtra $ settings master}
+        <div class="header-container">
+          <header class="wrapper clearfix">
+            <h1 class="title">#{pageTitle pc}
+            <nav>
+              <ul>
+                <li>
+                  <a href="#">asd
+
+        <div class="main-container">
+          <div id="main" role="main" class="main wrapper clearfix">
+            ^{pageBody pc}
+
+        <div class="footer-container">
+          <footer class="wrapper">
+            <h3>About
+            <p>Funjong is work of #
+               <a href="http://funktionaali.com">Samuli Thomasson
+               .
+            <p>&copy; #{extraCopyright $ appExtra $ settings master}
 
         $maybe analytics <- extraAnalytics $ appExtra $ settings master
             <script>
