@@ -56,7 +56,7 @@ data RoundResult = DealTsumo { winners : [Winner], payers : [Payer] }
                  | DealRon   { winners : [Winner], payers : [Payer] }
                  | DealDraw  { tenpai  : [Player], nooten : [Payer] }
 
-type Winner = { player : Player, valuehand : Valued }
+type Winner = { player : Player, points : Points, valuehand : Valued }
 type Payer  = { player : Player, points : Points }
 
 type Points = Int

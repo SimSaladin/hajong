@@ -43,6 +43,7 @@ x = done, / = half done, ! = needs testing
 [/] (server) worker logging in file
 [ ] (site) webrtc
 [ ] (site) games/worker status query
+[ ] (site, elm) player last.fm integration
 
 # other
 [ ] (docs) write json channel spec

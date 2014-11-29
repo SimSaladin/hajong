@@ -1,6 +1,7 @@
 module Handler.Play where
 
-import Import
+import           Import
+-- import qualified GameServer   as GS
 
 import           Data.Time (getCurrentTime)
 import qualified Data.Text    as T
@@ -32,10 +33,14 @@ postGameR ident = do
 
 postNewGameR :: Handler Html
 postNewGameR = do
-    ident <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
-    time <- liftIO getCurrentTime
+    -- the unique id
+    ident  <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
 
-    let game = Game ident time Nothing
+    -- temporary id
+    -- tempid <- GS.createGame
+    time   <- liftIO getCurrentTime
+
+    let game = Game ident 0 time Nothing
     _ <- runDB $ insert game
 
     redirect $ GameR ident

@@ -15,6 +15,7 @@ GameResult
 
 Game
    ident Text
+   tempid Int
    created UTCTime
    results GameResultId Maybe
    UniqueGame ident

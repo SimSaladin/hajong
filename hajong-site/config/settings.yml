@@ -1,8 +1,13 @@
 Default: &defaults
   host: "*4" # any IPv4 host
   port: 3000
-  approot: "http://localhost:3000"
+  approot: "" # "http://localhost:3000"
   copyright: "2014 Samuli Thomasson"
+  server_port: 8001
+  server_binary: "hajong-server" # in path or absolute
+  server_args:
+     - "--verbose"
+  server_log: "game-devel.log"
   #analytics: UA-YOURCODE
 
 Development:

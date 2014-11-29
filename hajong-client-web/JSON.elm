@@ -289,7 +289,7 @@ parseResults val = case val of
     Null -> Nothing
 
 parseWinner : Value -> Winner
-parseWinner (Array [p, h]) = Winner (parsePlayer p) (parseValuedHand h)
+parseWinner (Array [p, points, h]) = Winner (parsePlayer p) (parseInt points) (parseValuedHand h)
 
 parsePayer : Value -> Payer
 parsePayer (Array [p, v]) = Payer (parsePlayer p) (parseInt v)

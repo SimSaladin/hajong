@@ -117,7 +117,7 @@ moveRotateKaze off mypos pos =
       3 -> moveX (-off) << rotate (degrees 270)
 
 playerRiichi : Form
-playerRiichi = toForm <| image 200 20 "images/point1000.svg"
+playerRiichi = toForm <| image 200 20 "/static/img/point1000.svg"
 
 -- }}}
 
@@ -256,7 +256,7 @@ tileImage tile =
                Honor (Kazehai k)   -> (222 + (kazeNth k) * 97, 356)
                Honor (Sangenpai s) -> (707 + (sangenNth s) * 97, 356)
    in
-      croppedImage (row, col) 62 82 "Mahjong-tiles.jpg"
+      croppedImage (row, col) 62 82 "static/img/Mahjong-tiles.jpg"
 -- }}}
 
 -- {{{ Buttons 'n stuff --------------------------------------------------------

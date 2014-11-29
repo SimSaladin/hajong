@@ -34,9 +34,10 @@ $newline never
                 <li>
                   <a href=@{HomeR} :route == Just HomeR:.active>Home
                 <li>
-                  <a href=@{LobbyR} :route == Just LobbyR:.active>Lobby
-                <li>
+                  <a href=@{LobbyR} :route == Just LobbyR:.active>Play
+                <!-- <li>
                   <a href=@{GamesR} :route == Just GamesR:.active>Games
+                  -->
 
         <div class="main-container">
           <div id="main" role="main" class="main wrapper clearfix">
