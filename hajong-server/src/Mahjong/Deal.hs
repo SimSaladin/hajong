@@ -322,7 +322,7 @@ nextDeal deal = case maybeGameResults deal of
                . set pResults Nothing
                . set pOja oja
                . over pHonba honba
-               . over pRound (if' (oja_k == Ton && around) nextKaze id)
+               . over pRound (if' (oja_k == Shaa && around) nextKaze id)
 
             in Right . go <$> dealTiles (logDeal deal)
 

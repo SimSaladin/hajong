@@ -33,6 +33,8 @@ x = done, / = half done, ! = needs testing
 [/] (elm) real tiles
 [ ] (web) BUG game ended and back in lobby -> cannot join games
 [!] (elm) show honba
+[ ] (elm) undisplay riichi when clicked
+[ ] (elm) riichi options: order right way
 
 # worker
 [ ] (worker) pause
