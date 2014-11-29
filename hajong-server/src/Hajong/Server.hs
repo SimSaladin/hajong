@@ -21,7 +21,7 @@ import           Control.Concurrent
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
 import qualified Data.Aeson                 as A
-import           System.Log.FastLogger (LoggerSet)
+import           System.Log.FastLogger (LoggerSet, pushLogStr, toLogStr)
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 
 ------------------------------------------------------------------------------
@@ -64,10 +64,10 @@ clientGameId = playerGameId . getIdent
 game :: Int -> Lens' ServerState (Maybe Game)
 game n = seWorkers.at n
 
-ssVar :: Lens' (TVar ServerState, Client) (TVar ServerState)
+ssVar :: Lens' (TVar ServerState, a, b) (TVar ServerState)
 ssVar = _1
 
-client :: Lens' (TVar ServerState, Client) Client
+client :: Lens' (a, Client, b) Client
 client = _2
 
 -- * Pure functions
@@ -170,9 +170,14 @@ enteredLounge ss_v cs = do
 
 -- * Client listening
 
-newtype ClientWorker a = ClientWorker { unClientWorker :: LoggingT (ReaderT (TVar ServerState, Client) IO) a }
-                         deriving ( Functor, Applicative, Monad, MonadIO
-                                  , MonadReader (TVar ServerState, Client), MonadLogger)
+newtype ClientWorker a = ClientWorker { unClientWorker :: ReaderT (TVar ServerState, Client, LoggerSet) IO a }
+                         deriving ( Functor, Applicative, Monad, MonadIO, MonadReader (TVar ServerState, Client, LoggerSet))
+instance MonadLogger ClientWorker where
+    monadLoggerLog loc src lvl msg = do
+        lgr <- view _3
+        let out = defaultLogStr loc src lvl (toLogStr msg)
+        liftIO $ pushLogStr lgr out
+
 
 -- ** Utility
 
@@ -193,11 +198,13 @@ broadcast' event ss = forM_ (ss ^. seLounge) (`unicast` event)
 -- ** Entry points
 
 runClientWorker :: TVar ServerState -> Client -> ClientWorker a -> IO a
-runClientWorker ss c m = runReaderT (runStdoutLoggingT (unClientWorker m)) (ss, c)
+runClientWorker ss c m = do
+    lgr <- readTVarIO ss <&> _seLoggerSet
+    runReaderT (unClientWorker m) (ss, c, lgr)
 
 -- | After-handshake stuff
 clientWorkerMain :: TVar ServerState -> Client -> IO ()
-clientWorkerMain ss_v c = go connects `finally` go disconnects
+clientWorkerMain ss_v c = (go connects `finally` go disconnects) `catch` \(WS.CloseRequest _ _) -> return ()
   where
     go = runClientWorker ss_v c
 
