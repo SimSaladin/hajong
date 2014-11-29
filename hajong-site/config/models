@@ -15,7 +15,6 @@ GameResult
 
 Game
    ident Text
-   creator Text
    created UTCTime
    results GameResultId Maybe
    UniqueGame ident

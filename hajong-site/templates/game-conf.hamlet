@@ -1,3 +1,10 @@
 <section>
   <h1>Game #{ident}
-  <p>...
+  <p>
+    Link to game:
+    <pre>
+      <code>@{PlayR ident}
+    <br>
+    <a.btn href=@{PlayR ident}>Play
+  <p>
+    <i>Game settings are not yet implemented.
