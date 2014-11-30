@@ -240,7 +240,9 @@ restartGames = do
     query' GetGames >>= imapM startGame >>= atomically . swapTVar (ss^.seWorkers)
 
 startGame :: Int -> Game -> Server RunningGame
-startGame gid game = createWorker game >>= forkWorker gid
+startGame gid game = do
+    $logInfo $ "Starting game worker (" <> tshow gid ")"
+    createWorker game >>= forkWorker gid
 
 createWorker :: Game -> Server WorkerData
 createWorker game = WorkerData (game^.gaSettings)

@@ -38,7 +38,7 @@ makeLenses ''Value
 -- ** Calculating
 
 getValue :: ValueInfo -> Value
-getValue vi = Value yaku fu han val name
+getValue vi = traceShow vi $ Value yaku fu han val name
   where
     yaku        = getYaku vi
     fu          = getFu yaku vi
@@ -62,8 +62,7 @@ baseFu vi | Just _ <- vWinCalled vi = 30
 
 waitValue :: ValueInfo -> Fu
 waitValue = go <$> vWinWith <*> map mentsuTiles . filter (not . mentsuShouted) . vMentsu
-    where
-        go t = fromMaybe 0 . maximumMay . map (waitFu t)
+    where go t = fromMaybe 0 . maximumMay . map (waitFu t)
 
 waitFu :: Tile -> [Tile] -> Fu
 waitFu t xs = case xs of

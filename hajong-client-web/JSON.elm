@@ -35,6 +35,7 @@ toJSON_GameAction a = case a of
    GameTurn (TurnTileDraw dead _)         -> atAction "draw" [("dead", Boolean dead)]
    GameTurn (TurnAnkan tile)              -> atAction "ankan" [("tile", toJSON_Tile tile)]
    GameTurn (TurnShouminkan tile)         -> atAction "shouminkan" [("tile", toJSON_Tile tile)]
+   GameTurn TurnTsumo                     -> atAction "tsumo" []
    GameShout s                            -> atAction "shout"
                [ ("kind", toJSON_ShoutKind s.shoutKind)
                , ("from", String <| show s.shoutFrom)
