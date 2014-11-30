@@ -38,6 +38,7 @@ x = done, / = half done, ! = needs testing
 
 # worker
 [ ] (worker) pause
+[ ] (server, elm) DealResults JSON parsing
 
 # site
 [ ] nick set

@@ -286,10 +286,12 @@ instance FromJSON TurnAction where
     parseJSON v@(Object o) = do
         t <- o .: "action"
         case t :: Text of
-            "discard" -> TurnTileDiscard <$> parseJSON v
-            "draw"    -> TurnTileDraw    <$> o .: "dead" <*> pure Nothing
-            "ankan"   -> TurnAnkan       <$> o .: "tile"
-            _         -> fail "TurnAction type not recognized"
+            "discard"    -> TurnTileDiscard <$> parseJSON v
+            "draw"       -> TurnTileDraw    <$> o .: "wanpai" <*> o .:? "tile"
+            "ankan"      -> TurnAnkan       <$> o .: "tile"
+            "shouminkan" -> TurnShouminkan  <$> o .: "tile"
+            "tsumo"      -> pure TurnTsumo
+            _            -> fail "TurnAction type not recognized"
     parseJSON _ = fail "Expected an object"
 
 instance FromJSON Number where

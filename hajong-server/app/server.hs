@@ -15,6 +15,6 @@ import System.Log.FastLogger
 
 main :: IO ()
 main = do
-    ss <- newServer =<< newStderrLoggerSet defaultBufSize
-    _ <- forkIO $ runServer ss
-    serverDebugger ss
+    st <- initServer =<< newStderrLoggerSet defaultBufSize
+    _ <- forkIO $ runServerMain st
+    runServer st serverDebugger

@@ -58,6 +58,8 @@ library
                      , monad-logger            >=0.3
                      , aeson
                      , acid-state
+                     , safecopy
+                     , reusable-identifiers
                      , fast-logger
                      , data-default
                      , stm 
