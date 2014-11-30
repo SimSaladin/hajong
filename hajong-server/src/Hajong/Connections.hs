@@ -31,9 +31,9 @@ import           Data.Aeson.Types (Pair)
 
 -- * Event
 
-data Event = JoinServer Nick Int
+data Event = JoinServer Nick Int (Maybe Text) -- auth token to server
            | PartServer Nick
-           | ClientIdentity Nick
+           | ClientIdentity Nick Int Text
            | Message Nick Text -- ^ from, content
            | Invalid Text
 
@@ -145,8 +145,8 @@ gamePairs (i,GameSettings t) = object
 -- Instances -----------------------------------------------------------------
 
 instance ToJSON Event where
-    toJSON (ClientIdentity nick)   = atType "identity"     ["nick"    .= nick]
-    toJSON (JoinServer nick ident) = atType "join"         ["nick"    .= nick, "ident" .= ident]
+    toJSON (ClientIdentity nick i tkn) = atType "identity" ["nick"    .= nick, "ident" .= i, "token" .= tkn]
+    toJSON (JoinServer nick i tkn) = atType "join"         ["nick"    .= nick, "ident" .= i, "token" .= tkn]
     toJSON (PartServer nick)       = atType "part"         ["nick"    .= nick]
     toJSON (Message sender cnt)    = atType "msg"          ["from"    .= sender, "content" .= cnt]
     toJSON (Invalid msg)           = atType "invalid"      ["content" .= msg]
@@ -224,17 +224,17 @@ instance ToJSON Deal where
 -- derived
 
 --
-$(deriveToJSON (aesonOptions 5) ''HandPublic)
+$(deriveJSON (aesonOptions 5) ''HandPublic)
 $(deriveJSON (aesonOptions 3) ''Discard)
-$(deriveToJSON (aesonOptions 6) ''Mentsu)
-$(deriveToJSON (aesonOptions 0) ''MentsuKind)
-$(deriveToJSON (aesonOptions 0) ''ShoutKind)
-$(deriveToJSON (aesonOptions 5) ''Shout)
-$(deriveToJSON (aesonOptions' 1 4) ''DealResults)
-$(deriveToJSON (aesonOptions 4) ''Yaku)
-$(deriveToJSON (aesonOptions 3) ''Value)
-$(deriveToJSON (aesonOptions 3) ''ValuedHand)
-$(deriveToJSON (aesonOptions 0) ''AbortiveDraw)
+$(deriveJSON (aesonOptions 6) ''Mentsu)
+$(deriveJSON (aesonOptions 0) ''MentsuKind)
+$(deriveJSON (aesonOptions 0) ''ShoutKind)
+$(deriveJSON (aesonOptions 5) ''Shout)
+$(deriveJSON (aesonOptions' 1 4) ''DealResults)
+$(deriveJSON (aesonOptions 4) ''Yaku)
+$(deriveJSON (aesonOptions 3) ''Value)
+$(deriveJSON (aesonOptions 3) ''ValuedHand)
+$(deriveJSON (aesonOptions 0) ''AbortiveDraw)
 
 -- FromJSON
 
@@ -242,7 +242,7 @@ instance FromJSON Event where
     parseJSON v@(Object o) = do
         t <- o .: "type"
         case t :: Text of
-            "join"         -> JoinServer         <$> o .: "nick" <*> o .: "ident"
+            "join"         -> JoinServer         <$> o .: "nick" <*> o .: "ident" <*> o .:? "token"
             "part"         -> PartServer         <$> o .: "nick"
             "msg"          -> Message            <$> o .: "from" <*> o .: "content"
             "game-created" -> (\x y z -> GameCreated (x,y,z)) <$> o .: "ident" <*> o .: "topic" <*> o .: "players"
@@ -265,22 +265,6 @@ instance FromJSON GameAction where
                 "shout"   -> GameShout <$> parseJSON v
                 _         -> fail "Game 'action' not recognized"
     parseJSON _ = fail "Expected an object"
-                
-instance FromJSON Shout where
-    parseJSON (Object o) = Shout <$> o .: "shout"
-                                 <*> o .: "from"
-                                 <*> o .: "tile"
-                                 <*> o .: "into"
-    parseJSON _ = fail "Expected an object"
-
-instance FromJSON ShoutKind where
-    parseJSON (String s) = case s of
-        "pon" -> return Pon
-        "kan" -> return Kan
-        "chi" -> return Chi
-        "ron" -> return Ron
-        _     -> fail "shout no parse"
-    parseJSON _ = fail "Expected a string"
 
 instance FromJSON TurnAction where
     parseJSON v@(Object o) = do

@@ -21,12 +21,14 @@ import           Mahjong
 import           Control.Monad.Logger
 import           Control.Concurrent
 import           Data.Acid
+import           Data.Acid.Remote
 import           Data.SafeCopy
 import           Data.ReusableIdentifiers
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
-import qualified Data.Aeson                 as A
+import           Network (PortID)
 import           System.Log.FastLogger (LoggerSet, pushLogStr, toLogStr)
+import           System.Random
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 
 ------------------------------------------------------------------------------
@@ -36,7 +38,7 @@ import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 data Game = Game
     { _gaSettings      :: GameSettings
     , _gaState         :: GameState Int
-    } deriving (Typeable)
+    } deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''GameSettings)
 $(deriveSafeCopy 0 'base ''Player)
@@ -61,12 +63,11 @@ $(deriveSafeCopy 0 'base ''ValuedHand)
 $(deriveSafeCopy 0 'base ''Shout)
 $(deriveSafeCopy 0 'base ''HandPublic)
 $(deriveSafeCopy 0 'base ''GameEvent)
+$(deriveSafeCopy 0 'base ''Game)
 
 instance SafeCopy (GameState Int) where
     putCopy (GameState a b c) = contain $ do safePut a; safePut b; safePut c
     getCopy = contain $ GameState <$> safeGet <*> safeGet <*> safeGet
-
-$(deriveSafeCopy 0 'base ''Game)
 
 -- | This is ACID.
 --
@@ -79,7 +80,7 @@ data ServerDB = ServerDB
     , _seInGame        :: IntMap Int          -- ^ In games, connected or not
     , _seGameRecord    :: Record              -- ^ Temp game id's
     , _seGames         :: IntMap Game
-    } deriving (Typeable)
+    } deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''ServerDB)
 
@@ -129,6 +130,9 @@ isInGame i = view (seInGame.at i)
 getGames :: Query ServerDB (IntMap Game)
 getGames = view seGames
 
+dumpDB :: Query ServerDB ServerDB
+dumpDB = ask
+
 clientToGame :: Int -> Int -> Update ServerDB ()
 clientToGame gid i = seInGame.at i .= Just gid
 
@@ -167,8 +171,16 @@ tryConnectClient mi token = if' (mi > 0) tryReconnect connectAnon
 
     connect i = Right . (i,) <$> use (seInGame.at i)
 
+getToken :: Int -> Query ServerDB (Maybe Text)
+getToken i = view (sePlayerAuth.at i)
+
+setToken :: Int -> Text -> Update ServerDB ()
+setToken i t = sePlayerAuth.at i .= Just t
+
 $(makeAcidic ''ServerDB [ 'isInGame, 'clientToGame
-                        , 'insertGame, 'destroyGame, 'tryConnectClient, 'getGames])
+                        , 'insertGame, 'destroyGame, 'tryConnectClient, 'getGames
+                        , 'getToken, 'setToken
+                        , 'dumpDB])
 
 ------------------------------------------------------------------------------
 
@@ -181,16 +193,13 @@ runServerMain st = do
     void . forkIO $ runServer st workerWatcher
     WS.runServer "0.0.0.0" 8001 $ wsApp st
 
-runServer :: ServerSt -> Server a -> IO a
-runServer st ma = runReaderT (unServer ma) st
+runServerAcidRemote :: ServerSt -> PortID -> IO ()
+runServerAcidRemote st port = acidServer skipAuthenticationCheck port (st^.db)
 
-runClient :: Client -> ServerSt -> Server a -> IO a
-runClient client st = runServer (st&seClient.~client)
+openServerDB :: PortID -> IO (AcidState ServerDB)
+openServerDB = openRemoteState skipAuthenticationPerform "127.0.0.1"
 
-withClient :: Client -> Server a -> Server a
-withClient c = local (seClient.~c)
-
--- ** Initialize
+-- * Initialize state
 
 initServer :: LoggerSet -> IO ServerSt
 initServer lgr = do
@@ -206,6 +215,19 @@ initServer lgr = do
 
 emptyDB :: ServerDB
 emptyDB = ServerDB (newRecord 1024) mempty mempty (newRecord 256) mempty
+
+-- * Run Servers
+
+runServer :: ServerSt -> Server a -> IO a
+runServer st ma = runReaderT (unServer ma) st
+
+runClient :: Client -> ServerSt -> Server a -> IO a
+runClient client st = runServer (st&seClient.~client)
+
+withClient :: Client -> Server a -> Server a
+withClient c = local (seClient.~c)
+
+-- * Games and workers
 
 restartGames :: Server (IntMap RunningGame)
 restartGames = do
@@ -242,28 +264,34 @@ forkWorker gid wd = do
 wsApp :: ServerSt -> WS.ServerApp
 wsApp st pending = do
     conn  <- WS.acceptRequest pending
-    event <- WS.receiveData conn
-    let c = websocketClient "anonymous" conn
-    runClient c st (handshakeClient event)
-
-handshakeClient :: LByteString -> Server ()
-handshakeClient event = case A.decode event of
-    Just (JoinServer nick ident) -> do
-        c <- view seClient
-        withClient c{getNick = nick, getIdent = ident} afterHandshake
-
-    _ -> do
-        $logWarn $ "Received non-event or malformed json first: " <> tshow event
-        uni $ Invalid "No JoinServer received. Please identify yourself."
-
--- | After a successful handshake
-afterHandshake :: Server ()
-afterHandshake = do
-    st <- ask
-    let go = runServer st
-    liftIO $ (go connects `finally` go disconnects) `catch` \case
+    runClient (websocketClient "anonymous" conn) st initiateHandshake `catch` \case
         WS.CloseRequest _ _ -> return ()
         _                   -> return ()
+
+initiateHandshake :: Server ()
+initiateHandshake = do
+    c <- view seClient
+    $logInfo $ "New client " <> tshow (getIdent c) <> " (" <> getNick c <> ")"
+    event <- receive c
+    case event of
+        JoinServer nick ident token
+            | length nick > 24 -> uniError "Maximum nick length is 24 characters"
+            | otherwise        -> withClient c{getNick = nick, getIdent = ident} (handshake token)
+        _                      -> uniError "Received an invalid Event"
+
+handshake :: Maybe Text -> Server ()
+handshake token = do
+    c <- view seClient
+    res <- update' $ TryConnectClient (getIdent c) token
+    case res of
+        Right (i, mgid) -> withClient c{getIdent=i} (afterHandshake mgid)
+        Left err        -> uniError $ "Handshake failed: " <> err
+
+-- | After a successful handshake
+afterHandshake :: Maybe Int -> Server ()
+afterHandshake mgid = do
+    go <- ask <&> runServer
+    liftIO $ (go (connects mgid) `finally` go disconnects)
 
 -- * Worker Watcher
 
@@ -286,7 +314,7 @@ workerDied gid res = do
         modifyTVar' (ss^.seWorkers) (at gid .~ Nothing)
         modifyTVar' (ss^.seLounge) (union clientSet)
         return clientSet
-    return () -- TODO broadcast cs parting?
+    forM_ cs $ \c -> unicast c (PartGame (getNick c))
 
 ------------------------------------------------------------------------------
 
@@ -301,6 +329,9 @@ putLounge ev = rview seLounge >>= mapM_ (`unicast` ev)
 uni :: Event -> Server ()
 uni ev = view seClient >>= (`unicast` ev)
 
+uniError :: Text -> Server ()
+uniError txt = view seClient >>= (`unicastError` txt)
+
 update' ev = view db >>= \d -> liftIO (update d ev)
 query'  ev = view db >>= \d -> liftIO (query d ev)
 
@@ -313,26 +344,26 @@ buildLounge = do
 -- * Listen logic
 
 -- | Execute usual connection rituals with the new connection.
-connects :: Server ()
-connects = do
-    dc <- view seClient
-    $logInfo $ "New client " <> tshow (getIdent dc) <> " (" <> getNick dc <> ")"
-    if (length (getNick dc) > 24)
-        then uni $ Invalid "Maximum nick length is 24 characters"
-        else do
-            res <- update' $ TryConnectClient (getIdent dc) Nothing -- TODO get auth token
-            case res of
-                Left err -> uni (Invalid err)
-                Right (i, mgid) -> withClient dc{getIdent=i} $ do
-                    $logDebug $ "Client valid, listening"
-                    c <- view seClient
-                    uni (ClientIdentity $ getNick c)
-                    uni . LoungeInfo =<< buildLounge 
-                    putLounge (liftA2 JoinServer getNick getIdent c)
-                    case mgid of
-                        Nothing  -> return ()
-                        Just gid -> handleEventOf c (JoinGame gid (getNick c))
-                    talkClient
+connects :: Maybe Int -> Server ()
+connects mgid = do
+    c <- view seClient
+    token <- getOrCreateToken (getIdent c)
+    uni $ ClientIdentity (getNick c) (getIdent c) token
+    uni . LoungeInfo =<< buildLounge 
+    putLounge (liftA3 JoinServer getNick getIdent (pure Nothing) c)
+    case mgid of
+        Nothing  -> return ()
+        Just gid -> handleEventOf c (JoinGame gid (getNick c))
+    talkClient
+    
+getOrCreateToken :: Int -> Server Text
+getOrCreateToken i = query' (GetToken i) >>= maybe newToken return
+  where newToken = do t <- liftIO randomToken
+                      update' $ SetToken i t
+                      return t
+
+randomToken :: IO Text
+randomToken = liftM pack $ replicateM 16 $ randomRIO ('A', 'Z')
 
 talkClient :: Server ()
 talkClient = do
@@ -396,7 +427,7 @@ createGame name = do
             putLounge $ GameCreated (gid, name, running^..gClients.folded <&> getNick)
             joinGame gid
 
-        Left err -> uni $ Invalid err
+        Left err -> uniError err
 
 joinGame :: Int -> Server ()
 joinGame gid = do
@@ -405,7 +436,7 @@ joinGame gid = do
 
     res <- query' $ IsInGame (getIdent c)
     case res of
-        Just gid' | gid' /= gid -> uni $ Invalid "You are already in some other game. You cannot join multiple games simultaneously."
+        Just gid' | gid' /= gid -> uniError "You are already in some other game. You cannot join multiple games simultaneously."
         _                       -> withRunningGame gid (handleJoinGame gid)
 
 handleJoinGame :: Int -> RunningGame -> Server ()
@@ -434,12 +465,12 @@ withInGame :: (Int -> Server ()) -> Server ()
 withInGame f = do
     c  <- view seClient
     res <- query' $ IsInGame (getIdent c)
-    maybe (uni $ Invalid "You are not in a game") f res
+    maybe (uniError "You are not in a game") f res
 
 withRunningGame :: Int -> (RunningGame -> Server ()) -> Server ()
 withRunningGame gid f = do
     res <- rview seWorkers <&> view (at gid)
-    maybe (uni $ Invalid "Game not found") f res
+    maybe (uniError "Game not found") f res
 
 ------------------------------------------------------------------------------
 
@@ -451,6 +482,7 @@ serverDebugger = forever $ do
     i <- getLine
     case asText i of
         ""  -> return ()
+        "d" -> print =<< query' DumpDB
         "c" -> do print =<< rview seConnections
                   print =<< rview seLounge
         "s" -> mapM_ debugGameShow . itoList =<< rview seWorkers
