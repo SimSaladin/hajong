@@ -23,6 +23,7 @@ x = done, / = half done, ! = needs testing
 [!] (game, elm, server) tsumo
 [!] minshoukan
 [!] ankan
+[ ] ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4", "P5"] - riichi, bug?
 
 # elm
 [ ] (elm) chat/dialog

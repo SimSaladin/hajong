@@ -1,5 +1,5 @@
-<h>
+<h1>Game history
 
 <ul>
   $forall Entity _ v <- games
-    <li>#{gameIdent v}
+    <li>#{pastGameUuid v}

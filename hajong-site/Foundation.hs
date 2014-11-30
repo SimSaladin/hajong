@@ -18,6 +18,8 @@ import Model
 import Text.Jasmine (minifym)
 import Text.Hamlet (hamletFile)
 import Yesod.Core.Types (Logger)
+import Data.Acid
+import qualified Hajong.Server as G
 
 -- | The site argument for your application. This can be a good place to
 -- keep settings and values requiring initialization before your application
@@ -30,6 +32,7 @@ data App = App
     , httpManager :: Manager
     , persistConfig :: Settings.PersistConf
     , appLogger :: Logger
+    , appGameState :: AcidState G.ServerDB
     }
 
 instance HasHttpManager App where

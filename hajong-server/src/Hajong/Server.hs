@@ -130,6 +130,9 @@ isInGame i = view (seInGame.at i)
 getGames :: Query ServerDB (IntMap Game)
 getGames = view seGames
 
+getGame :: Int -> Query ServerDB (Maybe Game)
+getGame i = view (seGames.at i)
+
 dumpDB :: Query ServerDB ServerDB
 dumpDB = ask
 
@@ -178,7 +181,7 @@ setToken :: Int -> Text -> Update ServerDB ()
 setToken i t = sePlayerAuth.at i .= Just t
 
 $(makeAcidic ''ServerDB [ 'isInGame, 'clientToGame
-                        , 'insertGame, 'destroyGame, 'tryConnectClient, 'getGames
+                        , 'insertGame, 'destroyGame, 'tryConnectClient, 'getGame, 'getGames
                         , 'getToken, 'setToken
                         , 'dumpDB])
 

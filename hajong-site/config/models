@@ -9,16 +9,12 @@ Email
     verkey Text Maybe
     UniqueEmail email
 
-GameResult
+PastGame
+   uuid Text
+   created UTCTime
    started UTCTime
    finished UTCTime
-
-Game
-   ident Text
-   tempid Int
-   created UTCTime
-   results GameResultId Maybe
-   UniqueGame ident
+   UniquePastGame uuid
 
 Ticket
    email Text

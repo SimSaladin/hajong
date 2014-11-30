@@ -21,8 +21,10 @@ import Network.HTTP.Client.Conduit (newManager)
 import Control.Monad.Logger (runLoggingT)
 import System.Log.FastLogger (newStdoutLoggerSet, defaultBufSize)
 import Network.Wai.Logger (clockDateCacher)
+import Network
 import Data.Default (def)
 import Yesod.Core.Types (loggerSet, Logger (Logger))
+import qualified Hajong.Server as G
 
 -- Import all relevant handler modules here.
 -- Don't forget to add new modules to your cabal file!
@@ -69,6 +71,8 @@ makeFoundation conf = do
     loggerSet' <- newStdoutLoggerSet defaultBufSize
     (getter, _) <- clockDateCacher
 
+    st <- G.openServerDB (UnixSocket "/tmp/hajong.socket") 
+
     let logger = Yesod.Core.Types.Logger loggerSet' getter
         mkFoundation p = App
             { settings = conf
@@ -77,6 +81,7 @@ makeFoundation conf = do
             , httpManager = manager
             , persistConfig = dbconf
             , appLogger = logger
+            , appGameState = st
             }
         tempFoundation = mkFoundation $ error "connPool forced in tempFoundation"
         logFunc = messageLoggerSource tempFoundation logger

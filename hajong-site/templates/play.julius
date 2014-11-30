@@ -1,8 +1,17 @@
+var game;
+var debug = true;
+
+var socket = new WebSocket("ws://84.248.82.156:8001");
+
 var mainDiv = document.getElementById('game');
 var waitDiv = document.getElementById('wait');
-var game;
-
 mainDiv.hidden = true;
+
+window.onerror = function(msg, file, lineNr) {
+   alert(msg + file + lineNr);
+   game.destroy();
+   return false;
+}
 
 function startGame(debugging) {
   if (debugging) {
@@ -12,19 +21,16 @@ function startGame(debugging) {
   }
 }
 
-window.onerror = function(msg, file, lineNr) {
-   alert(msg + file + lineNr);
-   return false;
-}
+nick  = localStorage.getItem("nick") || prompt("Select a nickname");
+ident = #{playerIdent} || Number(localStorage.getItem("ident")); // Number(null) == 0
+token = #{authToken}   || localStorage.getItem("auth-token");
 
-mynick = localStorage.getItem("nick");
-if (!mynick) {
-   mynick = prompt("Please enter a nick");
-   localStorage.setItem("nick", mynick);
-}
-myident = Number(localStorage.getItem("ident")); // Number(null) == 0
-
-var socket = new WebSocket("ws://84.248.82.156:8001");
+joinEvent = { "type": "join"
+            , "ident": ident
+            , "token": token
+            , "nick" : nick
+            }
+console.log(joinEvent);
 
 socket.onopen = function () {
 
@@ -34,16 +40,27 @@ socket.onopen = function () {
 
   socket.onclose = function () {
     game.dispose();
-    mainDiv.hidden = true;
-    waitDiv.hidden = false;
+    mainDiv.hidden    = true;
+    waitDiv.hidden    = false;
     waitDiv.innerHTML = "Connection to server has been lost! Please refresh this page";
   }
 
   socket.onmessage = function (e) {
      var data = JSON.parse(e.data);
-      if (data.type == "join" && data.nick == mynick) {
+
+      if (data.type == "identity") {
+          localStorage.setItem("nick", data.nick);
           localStorage.setItem("ident", data.ident);
+          localStorage.setItem("auth-token", data.token);
+          console.log("set my info to", data.nick, data.ident, data.token);
       }
+
+      if (data.type == "invalid") {
+        console.log(data);
+      } else {
+        if (debug) console.log(data);
+      }
+
      game.ports.downstream.send(e.data);
   }
 
@@ -52,6 +69,6 @@ socket.onopen = function () {
     if (d.type !== "noop") socket.send(e);
   });
 
-  socket.send(JSON.stringify({"type":"join", "nick":mynick, "ident":myident}));
+  socket.send(JSON.stringify(joinEvent));
 }
 
