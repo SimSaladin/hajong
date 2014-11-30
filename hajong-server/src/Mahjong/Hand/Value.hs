@@ -52,8 +52,13 @@ getYaku vi = mapMaybe (runYakuCheck vi) allStandard
 getFu :: [Yaku] -> ValueInfo -> Fu
 getFu ys
   | any (\y -> yakuName y == "Chiitoitsu") ys = const 25
-  | otherwise = rounded . liftA2 (+) (sum . map mentsuValue . vMentsu) waitValue
+  | otherwise = rounded . sum . sequence [ sum . map mentsuValue . vMentsu
+                                         , waitValue, baseFu ]
     where rounded = (* 10) . fst . (`divMod` 10)
+
+baseFu :: ValueInfo -> Fu
+baseFu vi | Just _ <- vWinCalled vi = 30
+          | otherwise               = 20
 
 waitValue :: ValueInfo -> Fu
 waitValue = go <$> vWinWith <*> map mentsuTiles . filter (not . mentsuShouted) . vMentsu
