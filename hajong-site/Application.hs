@@ -71,7 +71,9 @@ makeFoundation conf = do
     loggerSet' <- newStdoutLoggerSet defaultBufSize
     (getter, _) <- clockDateCacher
 
+    putStrLn "Opening hajong connection..."
     st <- G.openServerDB (UnixSocket "/tmp/hajong.socket") 
+    putStrLn "Hajong socket opened"
 
     let logger = Yesod.Core.Types.Logger loggerSet' getter
         mkFoundation p = App

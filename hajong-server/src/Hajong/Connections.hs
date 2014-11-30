@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Connections
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
@@ -58,7 +58,7 @@ data GameSettings = GameSettings { gameTitle :: Text }
 
 data Lounge = Lounge
             { _loungeNicksIdle :: Set Nick
-            , _loungeGames :: IntMap GameSettings
+            , _loungeGames     :: IntMap (GameSettings, Set Nick)
             } deriving (Show, Read)
 
 makeLenses ''Lounge
@@ -110,7 +110,7 @@ websocketClient nick conn = Client nick 0 True True
 
 instance WS.WebSocketsData Event where
     toLazyByteString   = encode
-    fromLazyByteString = fromMaybe (Invalid "Malformed event") . decode
+    fromLazyByteString = either (Invalid . ("Malformed event: " ++) . pack) id . eitherDecode
 
 -- Helpers -------------------------------------------------------------------
 
@@ -135,12 +135,14 @@ dealAsPlayer ev deal pk p =
     in Object (d `mappend` o)
 
 loungeJSON :: Lounge -> [Pair]
-loungeJSON (Lounge nicks games) = ["idle" .= nicks, "games" .= map gamePairs (itoList games)]
+loungeJSON (Lounge nicks games) = [ "idle" .= nicks
+                                  , "games" .= map gamePairs (itoList games)]
 
-gamePairs :: (Int, GameSettings) -> A.Value
-gamePairs (i,GameSettings t) = object
-    [ "ident"   .= i , "topic"   .= t , "players" .= (mempty :: Set Text) ]
-        -- TODO players, necessary?
+gamePairs :: (Int, (GameSettings, Set Nick)) -> A.Value
+gamePairs (i, (GameSettings t, nicks)) = object
+    [ "ident"   .= i
+    , "topic"   .= t
+    , "players" .= nicks ]
 
 -- Instances -----------------------------------------------------------------
 

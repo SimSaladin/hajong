@@ -1,5 +1,5 @@
 var game;
-var debug = true;
+var debug; // set to true to debug events
 
 var socket = new WebSocket("ws://84.248.82.156:8001");
 
@@ -26,9 +26,9 @@ ident = #{playerIdent} || Number(localStorage.getItem("ident")); // Number(null)
 token = #{authToken}   || localStorage.getItem("auth-token");
 
 joinEvent = { "type": "join"
+            , "nick" : nick
             , "ident": ident
             , "token": token
-            , "nick" : nick
             }
 console.log(joinEvent);
 
@@ -66,6 +66,7 @@ socket.onopen = function () {
 
   game.ports.upstream.subscribe(function(e) {
     var d = JSON.parse(e);
+    if (debug) console.log("out", d);
     if (d.type !== "noop") socket.send(e);
   });
 

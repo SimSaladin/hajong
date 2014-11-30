@@ -40,35 +40,6 @@ data Game = Game
     , _gaState         :: GameState Int
     } deriving (Show, Typeable)
 
-$(deriveSafeCopy 0 'base ''GameSettings)
-$(deriveSafeCopy 0 'base ''Player)
-$(deriveSafeCopy 0 'base ''Tile)
-$(deriveSafeCopy 0 'base ''MentsuKind)
-$(deriveSafeCopy 0 'base ''Honor)
-$(deriveSafeCopy 0 'base ''Number)
-$(deriveSafeCopy 0 'base ''Sangen)
-$(deriveSafeCopy 0 'base ''TileKind)
-$(deriveSafeCopy 0 'base ''Deal)
-$(deriveSafeCopy 0 'base ''DealResults)
-$(deriveSafeCopy 0 'base ''AbortiveDraw)
-$(deriveSafeCopy 0 'base ''Hand)
-$(deriveSafeCopy 0 'base ''Value)
-$(deriveSafeCopy 0 'base ''Discard)
-$(deriveSafeCopy 0 'base ''TurnAction)
-$(deriveSafeCopy 0 'base ''Yaku)
-$(deriveSafeCopy 0 'base ''Mentsu)
-$(deriveSafeCopy 0 'base ''ShoutKind)
-$(deriveSafeCopy 0 'base ''Kaze)
-$(deriveSafeCopy 0 'base ''ValuedHand)
-$(deriveSafeCopy 0 'base ''Shout)
-$(deriveSafeCopy 0 'base ''HandPublic)
-$(deriveSafeCopy 0 'base ''GameEvent)
-$(deriveSafeCopy 0 'base ''Game)
-
-instance SafeCopy (GameState Int) where
-    putCopy (GameState a b c) = contain $ do safePut a; safePut b; safePut c
-    getCopy = contain $ GameState <$> safeGet <*> safeGet <*> safeGet
-
 -- | This is ACID.
 --
 -- Players are identified with unique Ints. When joining the server, they
@@ -101,7 +72,7 @@ data RunningGame = RunningGame
     , _gClients        :: IntMap Client
     } deriving (Typeable)
 
-data PartedException = PartedException deriving (Show, Typeable)
+data PartedException = PartedException Nick Int Text deriving (Show, Typeable)
 instance Exception PartedException
 
 newtype Server a = Server
@@ -121,6 +92,37 @@ instance MonadLogger Server where
         lgr <- view seLoggerSet
         let out = defaultLogStr loc src lvl (toLogStr msg)
         liftIO $ pushLogStr lgr out
+
+-- * Safecopy
+
+$(deriveSafeCopy 0 'base ''GameSettings)
+$(deriveSafeCopy 0 'base ''Player)
+$(deriveSafeCopy 0 'base ''Tile)
+$(deriveSafeCopy 0 'base ''MentsuKind)
+$(deriveSafeCopy 0 'base ''Honor)
+$(deriveSafeCopy 0 'base ''Number)
+$(deriveSafeCopy 0 'base ''Sangen)
+$(deriveSafeCopy 0 'base ''TileKind)
+$(deriveSafeCopy 0 'base ''Deal)
+$(deriveSafeCopy 0 'base ''DealResults)
+$(deriveSafeCopy 0 'base ''AbortiveDraw)
+$(deriveSafeCopy 0 'base ''Hand)
+$(deriveSafeCopy 0 'base ''Value)
+$(deriveSafeCopy 0 'base ''Discard)
+$(deriveSafeCopy 0 'base ''TurnAction)
+$(deriveSafeCopy 0 'base ''Yaku)
+$(deriveSafeCopy 0 'base ''Mentsu)
+$(deriveSafeCopy 0 'base ''ShoutKind)
+$(deriveSafeCopy 0 'base ''Kaze)
+$(deriveSafeCopy 0 'base ''ValuedHand)
+$(deriveSafeCopy 0 'base ''Shout)
+$(deriveSafeCopy 0 'base ''HandPublic)
+$(deriveSafeCopy 0 'base ''GameEvent)
+$(deriveSafeCopy 0 'base ''Game)
+
+instance SafeCopy (GameState Int) where
+    putCopy (GameState a b c) = contain $ do safePut a; safePut b; safePut c
+    getCopy = contain $ GameState <$> safeGet <*> safeGet <*> safeGet
 
 -- * Transactions
 
@@ -274,7 +276,6 @@ wsApp st pending = do
 initiateHandshake :: Server ()
 initiateHandshake = do
     c <- view seClient
-    $logInfo $ "New client " <> tshow (getIdent c) <> " (" <> getNick c <> ")"
     event <- receive c
     case event of
         JoinServer nick ident token
@@ -285,6 +286,7 @@ initiateHandshake = do
 handshake :: Maybe Text -> Server ()
 handshake token = do
     c <- view seClient
+    $logInfo $ "New client " <> tshow (getIdent c) <> " (" <> getNick c <> ")"
     res <- update' $ TryConnectClient (getIdent c) token
     case res of
         Right (i, mgid) -> withClient c{getIdent=i} (afterHandshake mgid)
@@ -294,7 +296,10 @@ handshake token = do
 afterHandshake :: Maybe Int -> Server ()
 afterHandshake mgid = do
     go <- ask <&> runServer
-    liftIO $ (go (connects mgid) `finally` go disconnects)
+    liftIO $ (go (connects mgid) `finally` go disconnects) `catch` \case
+        PartedException nick i reason -> go $
+            putLounge $ Message "" (nick <> " has left the server [" <> reason <> "]")
+        
 
 -- * Worker Watcher
 
@@ -338,21 +343,43 @@ uniError txt = view seClient >>= (`unicastError` txt)
 update' ev = view db >>= \d -> liftIO (update d ev)
 query'  ev = view db >>= \d -> liftIO (query d ev)
 
-buildLounge :: Server Lounge
-buildLounge = do
+-- | Send updated lounge to everyone there
+updateLounge :: Server ()
+updateLounge = do
     il <- rview seLounge
-    ws <- rview seWorkers
-    return $ Lounge (il^.to (mapMonotonic getNick)) (ws^.to (fmap $ view $ gWorker.wSettings))
+    lounge <- Lounge (il & mapMonotonic getNick) <$> (rview seWorkers <&> fmap f)
+    forM_ il (`unicast` LoungeInfo lounge)
+    where
+        f x = (x^.gWorker.wSettings, x^.gClients^..folded & setFromList . map getNick)
+
+withInGame :: (Int -> Server ()) -> Server ()
+withInGame f = do
+    c  <- view seClient
+    res <- query' $ IsInGame (getIdent c)
+    maybe (uniError "You are not in a game") f res
+
+withRunningGame :: Int -> (RunningGame -> Server ()) -> Server ()
+withRunningGame gid f = do
+    res <- rview seWorkers <&> view (at gid)
+    maybe (uniError "Game not found") f res
+
+randomToken :: IO Text
+randomToken = liftM pack $ replicateM 16 $ randomRIO ('A', 'Z')
 
 -- * Listen logic
 
 -- | Execute usual connection rituals with the new connection.
 connects :: Maybe Int -> Server ()
 connects mgid = do
-    c <- view seClient
+    c     <- view seClient
     token <- getOrCreateToken (getIdent c)
     uni $ ClientIdentity (getNick c) (getIdent c) token
-    uni . LoungeInfo =<< buildLounge 
+
+    ss    <- ask
+    atomically $ do modifyTVar' (ss^.seConnections) (at (getIdent c) .~ Just c)
+                    modifyTVar' (ss^.seLounge) (insertSet c)
+    updateLounge
+
     putLounge (liftA3 JoinServer getNick getIdent (pure Nothing) c)
     case mgid of
         Nothing  -> return ()
@@ -364,9 +391,6 @@ getOrCreateToken i = query' (GetToken i) >>= maybe newToken return
   where newToken = do t <- liftIO randomToken
                       update' $ SetToken i t
                       return t
-
-randomToken :: IO Text
-randomToken = liftM pack $ replicateM 16 $ randomRIO ('A', 'Z')
 
 talkClient :: Server ()
 talkClient = do
@@ -388,6 +412,7 @@ disconnects = do
         case mg of
             Just gid -> modifyTVar' (ss^.seWorkers) (ix gid.gClients.at i .~ Nothing)
             Nothing  -> return ()
+    updateLounge
 
     case mg of
         Just gid -> withRunningGame gid
@@ -397,19 +422,14 @@ disconnects = do
 
 handleEventOf :: Client -> Event -> Server ()
 handleEventOf c event = case event of
-    JoinServer{}      -> unicast c (Invalid "Already joined (and nick change not implemented)")
-    PartServer reason -> do
-        putLounge $ Message "" ("User " <> getNick c <> " has left [" <> reason <> "]")
-        liftIO (throwIO PartedException)
-
+    JoinServer{}      -> uniError "Already joined (and nick change not implemented)"
+    PartServer reason -> liftIO $ throwIO $ PartedException (getNick c) (getIdent c) reason
     Message _ msg     -> putLounge $ Message (getNick c) msg
     CreateGame name   -> createGame name
     JoinGame n _      -> joinGame n
     ForceStart n      -> forceStart n
     InGameAction a    -> handleGameAction a
-    _ -> do
-        unicast c $ Invalid "Event not allowed or not implemented."
-        $logWarn $ "Ignored event: " <> tshow event
+    _                 -> uniError $ "Event not allowed or not implemented (" <> tshow event <> ")"
 
 -- ** Actions
 
@@ -464,33 +484,25 @@ handleGameAction action = withInGame $ \n -> withRunningGame n $ \gr -> do
     c <- view seClient
     putWorker gr (c `WorkerGameAction` action)
 
-withInGame :: (Int -> Server ()) -> Server ()
-withInGame f = do
-    c  <- view seClient
-    res <- query' $ IsInGame (getIdent c)
-    maybe (uniError "You are not in a game") f res
-
-withRunningGame :: Int -> (RunningGame -> Server ()) -> Server ()
-withRunningGame gid f = do
-    res <- rview seWorkers <&> view (at gid)
-    maybe (uniError "Game not found") f res
-
 ------------------------------------------------------------------------------
 
 -- * Debugger
 
 serverDebugger :: Server ()
 serverDebugger = forever $ do
-    putStr "> "
     i <- getLine
+    putStrLn ""
     case asText i of
         ""  -> return ()
         "d" -> print =<< query' DumpDB
-        "c" -> do print =<< rview seConnections
-                  print =<< rview seLounge
-        "s" -> mapM_ debugGameShow . itoList =<< rview seWorkers
+        "c" -> do print' "connections: " =<< rview seConnections
+                  print' "lounge:      " =<< rview seLounge
+        "g" -> mapM_ debugGameShow . itoList =<< rview seWorkers
         _   -> putStrLn "Unknown command"
+    putStrLn ""
   where
+    print' :: Show a => Text -> a -> Server ()
+    print' t x = putStrLn (t ++ tshow x)
     debugGameShow (n, g) = liftIO $ do
         putStrLn $ "Game: " ++ tshow n
         readTVarIO (g^.gWorker.wGame) >>= putDoc . pretty . fmap (unpack . getNick)

@@ -36,10 +36,10 @@ toJSON_GameAction a = case a of
    GameTurn (TurnAnkan tile)              -> atAction "ankan" [("tile", toJSON_Tile tile)]
    GameTurn (TurnShouminkan tile)         -> atAction "shouminkan" [("tile", toJSON_Tile tile)]
    GameShout s                            -> atAction "shout"
-               [ ("shout", toJSON_ShoutKind s.shoutKind)
+               [ ("kind", toJSON_ShoutKind s.shoutKind)
                , ("from", String <| show s.shoutFrom)
                , ("tile", toJSON_Tile s.shoutTile)
-               , ("into", Array <| map toJSON_Tile s.shoutTo) ]
+               , ("to", Array <| map toJSON_Tile s.shoutTo) ]
    GameDontCare -> atAction "pass" []
 
 toJSON_ShoutKind sk = String <| case sk of
