@@ -5,9 +5,11 @@ import Yesod.Form.Bootstrap3
     ( BootstrapFormLayout (..), renderBootstrap3, withSmallInput )
 
 getHomeR :: Handler Html
-getHomeR = defaultLayout $ do
-    setTitle "Funjong"
-    $(widgetFile "homepage")
+getHomeR = do
+    mauth <- maybeAuth
+    defaultLayout $ do
+        setTitle "Funjong"
+        $(widgetFile "homepage")
 
 getSupportR, postSupportR :: Handler Html
 getSupportR  = postSupportR

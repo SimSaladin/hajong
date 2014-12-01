@@ -73,6 +73,7 @@ library
                      , semigroups
                      , ansi-wl-pprint
                      , network
+                     , directory
 
   default-extensions:  TemplateHaskell
                      , OverloadedStrings

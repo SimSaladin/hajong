@@ -29,5 +29,11 @@
       <input.btn.btn-full type=submit value="Create a game">
     and invite your friends with the link provided, or
     -->
+
   <p>
-    <a.btn.btn-full href=@{LobbyR}>Play
+    $maybe auth <- mauth
+      Logged in as #{show auth}
+      <button.btn.btn-full>New game
+    $nothing
+      <a.btn.btn-full href=@{LobbyR}>Play anonymously
+      <a.btn.btn-full href="">Register

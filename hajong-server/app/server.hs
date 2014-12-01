@@ -11,12 +11,13 @@ module Main where
 
 import Hajong.Server
 import Control.Concurrent (forkIO)
+import Control.Exception (finally)
 import System.Log.FastLogger
 import Network
 
 main :: IO ()
 main = do
-    st <- initServer =<< newStderrLoggerSet defaultBufSize
-    _  <- forkIO $ runServerMain st
-    _  <- forkIO $ runServerAcidRemote st (UnixSocket "/tmp/hajong.socket")
-    runServer st serverDebugger
+    st  <- initServer =<< newStderrLoggerSet defaultBufSize
+    _   <- forkIO $ runServerMain st
+    fin <- forkServerAcidRemote st (UnixSocket "/tmp/hajong.socket")
+    runServer st serverDebugger `finally` fin

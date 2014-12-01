@@ -19,6 +19,7 @@ import           Mahjong
 
 ------------------------------------------------------------------------------
 import           Control.Monad.Logger
+import           Control.Exception (mask_)
 import           Control.Concurrent
 import           Data.Acid
 import           Data.Acid.Remote
@@ -26,8 +27,9 @@ import           Data.SafeCopy
 import           Data.ReusableIdentifiers
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
-import           Network (PortID)
+import           Network
 import           System.Log.FastLogger (LoggerSet, pushLogStr, toLogStr)
+import           System.Directory (removeFile)
 import           System.Random
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 
@@ -198,8 +200,15 @@ runServerMain st = do
     void . forkIO $ runServer st workerWatcher
     WS.runServer "0.0.0.0" 8001 $ wsApp st
 
-runServerAcidRemote :: ServerSt -> PortID -> IO ()
-runServerAcidRemote st port = acidServer skipAuthenticationCheck port (st^.db)
+-- | Returns the finalizer
+forkServerAcidRemote :: ServerSt -> PortID -> IO (IO ())
+forkServerAcidRemote st port = do
+    _threadId <- forkIO $ withSocketsDo $ do
+        sckt <- listenOn port
+        acidServer' skipAuthenticationCheck sckt (st^.db)
+    return $ case port of
+                 UnixSocket str -> removeFile str
+                 _ -> return ()
 
 openServerDB :: PortID -> IO (AcidState ServerDB)
 openServerDB = openRemoteState skipAuthenticationPerform "127.0.0.1"
