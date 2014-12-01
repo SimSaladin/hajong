@@ -4,9 +4,6 @@ import GameTypes (..)
 
 -- Create Events ------------------------------------------------------------
 
-joinServer : String -> Event
-joinServer nick = JoinServer {nick = nick}
-
 createGame : String -> Event
 createGame topic = CreateGame topic
 

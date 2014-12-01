@@ -266,14 +266,14 @@ publishTurnAction pk ra = tellEvent $ case ra of
     TurnTileDraw b _ -> DealTurnAction pk (TurnTileDraw b Nothing)
     _                -> DealTurnAction pk ra
 
--- | @payPoints oya honba res@
 payPoints :: DealResults -> [GameEvent]
 payPoints res = case res of
     DealAbort{}  -> []
-    DealDraw{..} -> map g dTenpais ++ map g dNooten
+    DealDraw{..} -> map g' dTenpais ++ map g dNooten
     _            -> map f (dWinners res) ++ map g (dPayers res)
   where f (p, v, _) = GamePoints p v
-        g (p, v)    = GamePoints p v
+        g (p, v)    = GamePoints p (- v)
+        g' (p, v)   = GamePoints p v
 
 ----------------------------------------------------------------------------------------
 
@@ -442,7 +442,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
             -> [ Endo $ pDora %~ (|> td)
                , Endo $ maybe id (over sWanpai . flip snoc) mtw ]
     GamePoints pk ps
-            -> [ Endo $ pPlayers.ix pk._2 .~ ps ]
+            -> [ Endo $ pPlayers.ix pk._2 +~ ps ]
 
 dealTurnAction :: Kaze -> TurnAction -> Deal -> Deal
 dealTurnAction p ta = appEndo . mconcat $ case ta of 

@@ -27,10 +27,8 @@ ident        = Number(localStorage.getItem("ident")); // Number(null) =  = 0
 token        = localStorage.getItem("token");
 
 function authenticate() {
-  if (token)        return joinCached();
-  if (loggedInNick) return joinFetching();
-  if (anon_ok)      return joinAnon();
-  return joinLogin();
+  if (token) return joinCached();
+  else  return joinFetching();
 }
 
 function joinCached() {
@@ -38,15 +36,7 @@ function joinCached() {
 }
 
 function joinFetching() {
-  window.location.replace("@{AuthTokenR}");
-}
-
-function joinAnon() {
-  window.location.replace("@{AuthTokenR}?anon");
-}
-
-function joinLogin() {
-  window.location.replace("@{AuthR LoginR}");
+  window.location.replace(window.location.search.replace("?", "@{AuthTokenR}?"));
 }
 
 doJoin = authenticate();

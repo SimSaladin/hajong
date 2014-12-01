@@ -31,4 +31,6 @@
     $nothing
       <a.btn.btn-full href=@{AuthR LoginR}>Log in
       <a.btn.btn-full href=@{AuthR newAccountR}>Register an account
-      <a.btn.btn-full href=@{LobbyR}>Play anonymously
+      <form action=@{LobbyR} method=get>
+        <input type=text name=anon>
+        <input.btn.btn-full type=submit value="Play with a nick">
