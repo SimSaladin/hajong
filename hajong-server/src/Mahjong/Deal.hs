@@ -167,13 +167,12 @@ autoDrawWanpai = void . flip runTurn' (TurnTileDraw True Nothing) =<< view pTurn
 endDraw :: DealM m => m DealResults
 endDraw = do
     hands <- view sHands
-    let (tenpaiPlayers, nootenPlayers) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
-    if null tenpaiPlayers
-        then dealEnds $ DealDraw [] []
-        else do
-            res <- DealDraw <$> mapM kazeToPlayer tenpaiPlayers
-                            <*> mapM kazeToPlayer nootenPlayers
-            dealEnds res
+    let x@(tp, np) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
+    let (r, p) | null tp || null np = (0, 0)
+               | otherwise          = x & both %~ div 3000 . fromIntegral . length
+    tp' <- mapM kazeToPlayer tp
+    np' <- mapM kazeToPlayer np
+    dealEnds $ DealDraw (map (,r) tp') (map (,p) np')
 
 endTsumo :: DealM m => m DealResults
 endTsumo = do
@@ -271,8 +270,7 @@ publishTurnAction pk ra = tellEvent $ case ra of
 payPoints :: DealResults -> [GameEvent]
 payPoints res = case res of
     DealAbort{}  -> []
-    DealDraw{..} -> map (`GamePoints` 1000) dTenpais ++
-                    map (`GamePoints` (- floor (fromIntegral (length dTenpais) / fromIntegral (length dNooten)))) dNooten
+    DealDraw{..} -> map g dTenpais ++ map g dNooten
     _            -> map f (dWinners res) ++ map g (dPayers res)
   where f (p, v, _) = GamePoints p v
         g (p, v)    = GamePoints p v
@@ -327,7 +325,7 @@ nextDeal deal = case maybeGameResults deal of
             in Right . go <$> dealTiles (logDeal deal)
 
   where
-    goesAround po (Just DealDraw{..}) = not (null dTenpais) || notElem po dTenpais
+    goesAround po (Just DealDraw{..}) = not (null dTenpais) || all ((/= po) . fst) dTenpais
     goesAround po (Just res)          = notElemOf (each._1) po (dWinners res)
     goesAround _ _ = error "nextDeal: game ended prematurely, this is not possible"
 

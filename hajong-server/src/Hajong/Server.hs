@@ -241,7 +241,7 @@ restartGames = do
 
 startGame :: Int -> Game -> Server RunningGame
 startGame gid game = do
-    $logInfo $ "Starting game worker (" <> tshow gid ")"
+    $logInfo $ "Starting game worker (" <> tshow gid <> ")"
     createWorker game >>= forkWorker gid
 
 createWorker :: Game -> Server WorkerData

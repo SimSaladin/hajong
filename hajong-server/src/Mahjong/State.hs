@@ -69,7 +69,7 @@ newtype Player = Player Int deriving (Show, Read, Eq, Ord)
 
 data DealResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                  | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
-                 | DealDraw  { dTenpais :: [Player], dNooten :: [Player] }
+                 | DealDraw  { dTenpais :: [(Player, Points)], dNooten :: [Payer] }
                  | DealAbort { dReason :: AbortiveDraw }
                   deriving (Show, Read, Typeable)
 

@@ -55,14 +55,15 @@ discard d@Discard{..} hand
     | _dcRiichi && hand ^. handPublic.handRiichi      = throwError "Already in riichi"
     | hand^.handPublic.handDrawWanpai || canDraw hand = throwError "You need to draw first"
     | _dcRiichi && not (canRiichiWith _dcTile hand)   = throwError "Cannot riichi: not tenpai"
-    | hand^.handPick /= Just _dcTile && hand^.handPublic.handRiichi
-                                                      = throwError "Cannot change wait in riichi"
-    | otherwise                                       = setRiichi . movePick . setDiscard <$> tileFromHand _dcTile hand
+    | hand^.handPick /= Just _dcTile
+    , hand^.handPublic.handRiichi                     = throwError "Cannot change wait in riichi"
+    | otherwise = setRiichi . setNoTsumo . movePick . setDiscard <$> tileFromHand _dcTile hand
   where
     movePick h
         | Just p <- _handPick h = h & (handConcealed %~ (`snoc` p)) . (handPick .~ Nothing)
         | otherwise             = h
     setDiscard = handPublic.handDiscards %~ (|> d)
+    setNoTsumo = hCanTsumo .~ False
     setRiichi
         | _dcRiichi = handPublic.handRiichi .~ True
         | otherwise = id

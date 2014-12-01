@@ -285,7 +285,7 @@ parseResults val = case val of
                            , payers  = ("payers"  .: o |> withArray parsePayer) }
       "ron"   -> DealRon   { winners = ("winners" .: o |> withArray parseWinner)
                            , payers  = ("payers"  .: o |> withArray parsePayer) }
-      "draw"  -> DealDraw  { tenpai  = ("tenpais" .: o |> withArray parsePlayer)
+      "draw"  -> DealDraw  { tenpai  = ("tenpais" .: o |> withArray parsePayer) -- (player, points)
                            , nooten  = ("nooten"  .: o |> withArray parsePayer) }
     Null -> Nothing
 
