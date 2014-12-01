@@ -21,16 +21,35 @@ function startGame(debugging) {
   }
 }
 
-nick  = localStorage.getItem("nick") || prompt("Select a nickname");
-ident = #{playerIdent} || Number(localStorage.getItem("ident")); // Number(null) == 0
-token = #{authToken}   || localStorage.getItem("auth-token");
+loggedInNick = #{maybe Null String mauth};
+nick         = localStorage.getItem("nick");
+ident        = Number(localStorage.getItem("ident")); // Number(null) =  = 0
+token        = localStorage.getItem("token");
 
-joinEvent = { "type": "join"
-            , "nick" : nick
-            , "ident": ident
-            , "token": token
-            }
-console.log(joinEvent);
+function authenticate() {
+  if (token)        return joinCached();
+  if (loggedInNick) return joinFetching();
+  if (anon_ok)      return joinAnon();
+  return joinLogin();
+}
+
+function joinCached() {
+  return ({ "type": "join", "nick" : nick, "ident": ident, "token": token });
+}
+
+function joinFetching() {
+  window.location.replace("@{AuthTokenR}");
+}
+
+function joinAnon() {
+  window.location.replace("@{AuthTokenR}?anon");
+}
+
+function joinLogin() {
+  window.location.replace("@{AuthR LoginR}");
+}
+
+doJoin = authenticate();
 
 socket.onopen = function () {
 
@@ -70,6 +89,6 @@ socket.onopen = function () {
     if (d.type !== "noop") socket.send(e);
   });
 
-  socket.send(JSON.stringify(joinEvent));
+  socket.send(JSON.stringify(doJoin));
 }
 

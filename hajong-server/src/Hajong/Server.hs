@@ -19,7 +19,6 @@ import           Mahjong
 
 ------------------------------------------------------------------------------
 import           Control.Monad.Logger
-import           Control.Exception (mask_)
 import           Control.Concurrent
 import           Data.Acid
 import           Data.Acid.Remote
@@ -42,19 +41,29 @@ data Game = Game
     , _gaState         :: GameState Int
     } deriving (Show, Typeable)
 
+data ClientRecord = ClientRecord
+    { _cNick           :: Text
+    , _cToken          :: Text
+    , _cRegistered     :: Bool
+    , _cJoined         :: Maybe UTCTime
+    , _cParted         :: Maybe UTCTime
+    , _cInGame         :: Maybe Int
+    } deriving (Show, Typeable)
+
 -- | This is ACID.
 --
 -- Players are identified with unique Ints. When joining the server, they
 -- may opt for a new *anonymous* identifier or provide their previous
 -- identifier and a passphrase.
 data ServerDB = ServerDB
-    { _sePlayerRecord  :: Record              -- ^ Identifiers
-    , _sePlayerAuth    :: IntMap Text         -- ^ Auth tokens
-    , _seInGame        :: IntMap Int          -- ^ In games, connected or not
+    { _sePlayerRecord  :: Record              -- ^ Identifiers, connected or in game
+    , _seReserved      :: IntMap ClientRecord -- ^ Reserved places and nicks, "valid until"
+    , _seNicks         :: Map Nick Int
     , _seGameRecord    :: Record              -- ^ Temp game id's
     , _seGames         :: IntMap Game
     } deriving (Show, Typeable)
 
+$(deriveSafeCopy 0 'base ''ClientRecord)
 $(deriveSafeCopy 0 'base ''ServerDB)
 
 -- | In Reader.
@@ -85,6 +94,7 @@ newtype Server a = Server
 
 --
 makeLenses ''Game
+makeLenses ''ClientRecord
 makeLenses ''RunningGame
 makeLenses ''ServerDB
 makeLenses ''ServerSt
@@ -126,10 +136,10 @@ instance SafeCopy (GameState Int) where
     putCopy (GameState a b c) = contain $ do safePut a; safePut b; safePut c
     getCopy = contain $ GameState <$> safeGet <*> safeGet <*> safeGet
 
--- * Transactions
+-- * Query
 
-isInGame :: Int -> Query ServerDB (Maybe Int)
-isInGame i = view (seInGame.at i)
+getClientRecord :: Int -> Query ServerDB (Maybe ClientRecord)
+getClientRecord i = view (seReserved.at i)
 
 getGames :: Query ServerDB (IntMap Game)
 getGames = view seGames
@@ -140,15 +150,60 @@ getGame i = view (seGames.at i)
 dumpDB :: Query ServerDB ServerDB
 dumpDB = ask
 
-clientToGame :: Int -> Int -> Update ServerDB ()
-clientToGame gid i = seInGame.at i .= Just gid
+-- * Updates
 
-destroyGame :: Int -> Update ServerDB ()
+-- | Connect with (ident, token).
+connectClient :: UTCTime -> Int -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
+connectClient time mi token = use (seReserved.at mi) >>= \case
+    Nothing                     -> return (Left "Unknown identity")
+    Just c | token == c^.cToken -> do let c' = c&cJoined.~Just time
+                                      seReserved.at mi <.= Just c'
+                                      return (Right (mi, c'))
+           | otherwise          -> return $ Left "Auth token didn't match"
+
+partClient :: UTCTime -> Int -> Update ServerDB (Maybe ClientRecord)
+partClient t i = use (seReserved.at i) >>= \case
+        Just c  -> seReserved.at i <.= Just (c&cParted.~Just t)
+        Nothing -> return Nothing
+
+-- | New (maybe anon)
+newPlayerRecord :: Text -> Text -> Bool -> Update ServerDB (Either Text (Int, ClientRecord))
+newPlayerRecord nick token reg = do
+    taken <- use (seNicks.at nick)
+    rec   <- use sePlayerRecord
+    case newId rec of
+        Just (i, rec')
+            | isJust taken -> return (Left "Nick is taken")
+            | otherwise -> do sePlayerRecord  .= rec'
+                              seNicks.at nick .= Just i
+                              let c = ClientRecord nick token reg Nothing Nothing Nothing
+                              seReserved.at i .= Just c
+                              return (Right (i, c))
+        Nothing -> return (Left "Server is full")
+
+newAnon :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
+newAnon nick token = newPlayerRecord nick token False
+
+-- | Add or get info for registered user.
+addRegisteredUser :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
+addRegisteredUser user token = use (seNicks.at user) >>= \case
+    Nothing -> newPlayerRecord user token True
+    Just i  -> do
+        Just c <- use (seReserved.at i)
+        if c^.cRegistered then return (Right (i, c))
+                          else return (Left "Your nick is in use by someone anonymous!")
+
+clientToGame :: Int -> Int -> Update ServerDB ()
+clientToGame gid i = seReserved.at i._Just.cInGame .= Just gid
+
+destroyGame :: Int -> Update ServerDB [ClientRecord]
 destroyGame gid = do seGameRecord %= freeId gid
                      cs <- preuse (seGames.at gid._Just.gaState.gamePlayers)
-                     forM_ (maybe [] (^..each) cs) $ \i ->
-                        seInGame.at i .= Nothing
                      seGames.at gid .= Nothing
+                     forM (maybe [] (^..each) cs) $ \i -> do
+                        seReserved.at i._Just.cInGame .= Nothing
+                        Just c <- use (seReserved.at i)
+                        return c
 
 insertGame :: Game -> Update ServerDB (Either Text Int)
 insertGame game = do
@@ -159,35 +214,12 @@ insertGame game = do
                                return (Right gid)
         Nothing -> return (Left "Server's Game capacity reached")
 
--- | Try re-connecting the client if auth token was supplied. If no auth
--- token is given record it as anonymous. Also fails if the nick was taken.
-tryConnectClient :: Int -> Maybe Text -> Update ServerDB (Either Text (Int, Maybe Int))
-tryConnectClient mi token = if' (mi > 0) tryReconnect connectAnon
-  where
-    tryReconnect = case token of
-        Nothing -> return $ Left "ident given but no auth token"
-        Just t  -> do 
-            mt <- use (sePlayerAuth.at mi)
-            if Just t == mt then connect mi else return $ Left "Auth token didn't match"
-
-    connectAnon = do
-        rec <- use sePlayerRecord
-        case newId rec of
-            Nothing        -> return $ Left "Server has reached player limit"
-            Just (i, rec') -> sePlayerRecord .= rec' >> connect i
-
-    connect i = Right . (i,) <$> use (seInGame.at i)
-
-getToken :: Int -> Query ServerDB (Maybe Text)
-getToken i = view (sePlayerAuth.at i)
-
-setToken :: Int -> Text -> Update ServerDB ()
-setToken i t = sePlayerAuth.at i .= Just t
-
-$(makeAcidic ''ServerDB [ 'isInGame, 'clientToGame
-                        , 'insertGame, 'destroyGame, 'tryConnectClient, 'getGame, 'getGames
-                        , 'getToken, 'setToken
-                        , 'dumpDB])
+-- 
+$(makeAcidic ''ServerDB [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB
+                        , 'connectClient, 'partClient, 'newAnon, 'addRegisteredUser
+                        , 'clientToGame
+                        , 'insertGame, 'destroyGame
+                        ])
 
 ------------------------------------------------------------------------------
 
@@ -294,23 +326,25 @@ initiateHandshake = do
             | otherwise        -> withClient c{getNick = nick, getIdent = ident} (handshake token)
         _                      -> uniError "Received an invalid Event"
 
-handshake :: Maybe Text -> Server ()
+handshake :: Text -> Server ()
 handshake token = do
     c <- view seClient
     $logInfo $ "New client " <> tshow (getIdent c) <> " (" <> getNick c <> ")"
-    res <- update' $ TryConnectClient (getIdent c) token
+    time <- liftIO getCurrentTime
+    res <- update' $ ConnectClient time (getIdent c) token
     case res of
-        Right (i, mgid) -> withClient c{getIdent=i} (afterHandshake mgid)
-        Left err        -> uniError $ "Handshake failed: " <> err
+        Right (i, cr) -> withClient c{getIdent=i} (afterHandshake cr)
+        Left err      -> uniError $ "Handshake failed: " <> err
 
 -- | After a successful handshake
-afterHandshake :: Maybe Int -> Server ()
-afterHandshake mgid = do
+afterHandshake :: ClientRecord -> Server ()
+afterHandshake cr = do
     go <- ask <&> runServer
-    liftIO $ (go (connects mgid) `finally` go disconnects) `catch` \case
-        PartedException nick i reason -> go $
+    liftIO $ (go (connects cr) `finally` go disconnects) `catch` \case
+        PartedException nick i reason -> go $ do
+            time <- liftIO getCurrentTime
+            update' $ PartClient time i
             putLounge $ Message "" (nick <> " has left the server [" <> reason <> "]")
-        
 
 -- * Worker Watcher
 
@@ -365,9 +399,9 @@ updateLounge = do
 
 withInGame :: (Int -> Server ()) -> Server ()
 withInGame f = do
-    c  <- view seClient
-    res <- query' $ IsInGame (getIdent c)
-    maybe (uniError "You are not in a game") f res
+    c        <- view seClient
+    Just res <- query' $ GetClientRecord (getIdent c)
+    maybe (uniError "You are not in a game") f (res^.cInGame)
 
 withRunningGame :: Int -> (RunningGame -> Server ()) -> Server ()
 withRunningGame gid f = do
@@ -380,28 +414,21 @@ randomToken = liftM pack $ replicateM 16 $ randomRIO ('A', 'Z')
 -- * Listen logic
 
 -- | Execute usual connection rituals with the new connection.
-connects :: Maybe Int -> Server ()
-connects mgid = do
-    c     <- view seClient
-    token <- getOrCreateToken (getIdent c)
-    uni $ ClientIdentity (getNick c) (getIdent c) token
+connects :: ClientRecord -> Server ()
+connects cr = do
+    c <- view seClient
+    uni $ ClientIdentity (getNick c) (getIdent c) (cr^.cToken)
 
-    ss    <- ask
+    ss <- ask
     atomically $ do modifyTVar' (ss^.seConnections) (at (getIdent c) .~ Just c)
                     modifyTVar' (ss^.seLounge) (insertSet c)
     updateLounge
 
-    putLounge (liftA3 JoinServer getNick getIdent (pure Nothing) c)
-    case mgid of
+    putLounge (liftA3 JoinServer getNick getIdent (pure "") c)
+    case cr^.cInGame of
         Nothing  -> return ()
         Just gid -> handleEventOf c (JoinGame gid (getNick c))
     talkClient
-    
-getOrCreateToken :: Int -> Server Text
-getOrCreateToken i = query' (GetToken i) >>= maybe newToken return
-  where newToken = do t <- liftIO randomToken
-                      update' $ SetToken i t
-                      return t
 
 talkClient :: Server ()
 talkClient = do
@@ -416,16 +443,16 @@ disconnects = do
     $logInfo $ "Client disconnected (" <> tshow i <> ")"
 
     ss <- ask
-    mg <- query' $ IsInGame i
+    Just cr <- query' $ GetClientRecord i
     atomically $ do
         modifyTVar' (ss^.seConnections) (at i .~ Nothing)
         modifyTVar' (ss^.seLounge) (deleteSet c)
-        case mg of
+        case cr^.cInGame of
             Just gid -> modifyTVar' (ss^.seWorkers) (ix gid.gClients.at i .~ Nothing)
             Nothing  -> return ()
     updateLounge
 
-    case mg of
+    case cr^.cInGame of
         Just gid -> withRunningGame gid
             (`putWorker` WorkerPartPlayer c (const $ return ()))
         Nothing  -> return ()
@@ -468,8 +495,8 @@ joinGame gid = do
     c  <- view seClient
     $logInfo $ "Nick " <> getNick c <> " joins game " <> tshow gid
 
-    res <- query' $ IsInGame (getIdent c)
-    case res of
+    Just cr <- query' $ GetClientRecord (getIdent c)
+    case cr^.cInGame of
         Just gid' | gid' /= gid -> uniError "You are already in some other game. You cannot join multiple games simultaneously."
         _                       -> withRunningGame gid (handleJoinGame gid)
 

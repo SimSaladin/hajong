@@ -1,10 +1,11 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Foundation where
 
 import Prelude
 import Yesod
 import Yesod.Static
 import Yesod.Auth
-import Yesod.Auth.BrowserId
+import Yesod.Auth.Account
 import Yesod.Default.Config
 import Yesod.Default.Util (addStaticContentExternal)
 import Network.HTTP.Client.Conduit (Manager, HasHttpManager (getHttpManager))
@@ -60,19 +61,13 @@ instance Yesod App where
     -- Store session data on the client in encrypted cookies,
     -- default session idle timeout is 120 minutes
     makeSessionBackend _ = fmap Just $ defaultClientSessionBackend
-        120    -- timeout in minutes
+        480    -- timeout in minutes
         "config/client_session_key.aes"
 
     defaultLayout widget = do
         master <- getYesod
         mmsg <- getMessage
         route <- getCurrentRoute
-
-        -- We break up the default layout into two components:
-        -- default-layout is the contents of the body tag, and
-        -- default-layout-wrapper is the entire page. Since the final
-        -- value passed to hamletToRepHtml cannot be a widget, this allows
-        -- you to use normal widget features in default-layout.
 
         pc <- widgetToPageContent $ do
             addStylesheet $ StaticR css_normalize_css
@@ -82,13 +77,10 @@ instance Yesod App where
             $(widgetFile "default-layout")
         withUrlRenderer $(hamletFile "templates/default-layout-wrapper.hamlet")
 
-    -- This is done to provide an optimization for serving static files from
-    -- a separate domain. Please see the staticRoot setting in Settings.hs
     urlRenderOverride y (StaticR s) =
         Just $ uncurry (joinPath y (Settings.staticRoot $ settings y)) $ renderRoute s
     urlRenderOverride _ _ = Nothing
 
-    -- The page to be redirected to when authentication is required.
     authRoute _ = Just $ AuthR LoginR
 
     -- Routes not requiring authentication.
@@ -98,10 +90,6 @@ instance Yesod App where
     -- Default to Authorized for now.
     isAuthorized _ _ = return Authorized
 
-    -- This function creates static content files in the static folder
-    -- and names them based on a hash of their content. This allows
-    -- expiration dates to be set far in the future without worry of
-    -- users receiving stale content.
     addStaticContent =
         addStaticContentExternal minifym genFileName Settings.staticDir (StaticR . flip StaticRoute [])
       where
@@ -110,17 +98,13 @@ instance Yesod App where
             | development = "autogen-" ++ base64md5 lbs
             | otherwise   = base64md5 lbs
 
-    -- Place Javascript at bottom of the body tag so the rest of the page loads first
     jsLoader _ = BottomOfBody
 
-    -- What messages should be logged. The following includes all messages when
-    -- in development, and warnings and errors in production.
     shouldLog _ _source level =
         development || level == LevelWarn || level == LevelError
 
     makeLogger = return . appLogger
 
--- How to run database actions.
 instance YesodPersist App where
     type YesodPersistBackend App = SqlBackend
     runDB = defaultRunDB persistConfig connPool
@@ -128,29 +112,19 @@ instance YesodPersistRunner App where
     getDBRunner = defaultGetDBRunner connPool
 
 instance YesodAuth App where
-    type AuthId App = UserId
-
-    -- Where to send a user after successful login
+    type AuthId App = Username
+    getAuthId = return . Just . credsIdent
     loginDest _ = HomeR
-    -- Where to send a user after logout
     logoutDest _ = HomeR
+    authPlugins _ = [accountPlugin]
+    authHttpManager _ = error "No manager needed"
+    onLogin = return ()
+    maybeAuthId = lookupSession credsKey
 
-    getAuthId creds = runDB $ do
-        x <- getBy $ UniqueUser $ credsIdent creds
-        case x of
-            Just (Entity uid _) -> return $ Just uid
-            Nothing -> do
-                fmap Just $ insert User
-                    { userIdent = credsIdent creds
-                    , userPassword = Nothing
-                    }
+instance YesodAuthAccount (AccountPersistDB App User) App where
+    runAccountDB = runAccountPersistDB
 
-    -- You can add other plugins like BrowserID, email or OAuth here
-    authPlugins _ = [authBrowserId def]
-
-    authHttpManager = httpManager
-
-instance YesodAuthPersist App
+instance AccountSendEmail App
 
 -- This instance is required to use forms. You can modify renderMessage to
 -- achieve customized and internationalized form validation messages.

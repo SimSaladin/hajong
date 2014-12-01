@@ -1,3 +1,13 @@
-<section>
+
+<article>
   <div id="wait">Connecting...
+
   <div id="game" style="height:100%">
+
+<aside>
+  <h1>
+  <p>
+    $maybe user <- mauth
+      Playing as <b>#{user}</b>
+    $nothing
+      <i>Playing anonymously

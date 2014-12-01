@@ -1,0 +1,10 @@
+
+localStorage.setItem("ident", #{String $ T.pack $ show ident});
+localStorage.setItem("nick", #{String $ G._cNick cr});
+localStorage.setItem("token", #{String $ G._cToken cr});
+
+if (localStorage.getItem("token")) {
+  window.location.replace("@{LobbyR}");
+} else {
+  alert("Seems like you don't have local storage. Local storage is required for this game to work");
+}

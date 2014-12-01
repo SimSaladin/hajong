@@ -10,5 +10,6 @@
 /game/#Int  GameR    GET POST
 /play       LobbyR   GET
 /play/#Int  PlayR    GET
+/token      AuthTokenR GET
 
 /support    SupportR GET POST

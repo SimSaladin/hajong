@@ -20,18 +20,14 @@ import qualified Data.UUID.V4 as UUID
 
 -- | Attempt to join the game
 getPlayR :: Int -> Handler Html
-getPlayR ident = do
-    G.getGame ident >>= \case
-        Nothing -> notFound
-        x -> playLayout x
+getPlayR ident = G.getGame ident >>= maybe notFound (playLayout . Just)
 
 getLobbyR :: Handler Html
 getLobbyR = playLayout Nothing
 
 playLayout :: Maybe G.Game -> Handler Html
 playLayout mgid = do
-    playerIdent <- maybe Null String <$> lookupSession "ident"
-    authToken   <- maybe Null String <$> lookupSession "token"
+    mauth <- maybeAuthId
     defaultLayout $ do
         setTitle "Playing"
         addScriptRemote "http://elm-lang.org/elm-runtime.js"
@@ -48,14 +44,8 @@ postGameR ident = do
 
 postNewGameR :: Handler Html
 postNewGameR = do
-    -- uuid
+    -- new uuid
     _ident  <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
-    {-
-    time   <- liftIO getCurrentTime
-    let game = Game ident 0 time Nothing
-    _ <- runDB $ insert game
-    -}
-
     redirect $ GameR undefined -- TODO
 
 getGamesR :: Handler Html
@@ -64,3 +54,19 @@ getGamesR = do
     defaultLayout $ do
         setTitle "Past Games"
         $(widgetFile "game-history")
+
+getAuthTokenR :: Handler Html
+getAuthTokenR = do
+    user <- maybeAuthId
+    anon <- lookupGetParam "anon"
+    case (user, anon) of
+        (Just name, _)       -> G.getRegisteredUser name >>= processAuthRes
+        (Nothing, Just nick) -> G.getNewAnonUser    nick >>= processAuthRes
+        _                    -> do setMessage "That requires login"; redirect $ AuthR LoginR
+
+processAuthRes :: Either Text (Int, G.ClientRecord) -> Handler Html
+processAuthRes res = case res of 
+    Left err -> do setMessage $ toHtml err; redirect HomeR
+    Right (ident, cr) -> defaultLayout $ do
+        setTitle "Game authentication"
+        $(widgetFile "push-auth-token")

@@ -22,18 +22,13 @@
        rather complex game.
 
 <aside>
-  <h1>Play now!
-  <!-- 
+  <h1>Play
   <p>
-    <form method=POST action=@{NewGameR}>
-      <input.btn.btn-full type=submit value="Create a game">
-    and invite your friends with the link provided, or
-    -->
-
-  <p>
-    $maybe auth <- mauth
-      Logged in as #{show auth}
+    $maybe user <- muser
       <button.btn.btn-full>New game
+      <a.btn.btn-full href=@{AuthR LogoutR}>Log out
+      <i>Logged in as #{user}
     $nothing
+      <a.btn.btn-full href=@{AuthR LoginR}>Log in
+      <a.btn.btn-full href=@{AuthR newAccountR}>Register an account
       <a.btn.btn-full href=@{LobbyR}>Play anonymously
-      <a.btn.btn-full href="">Register

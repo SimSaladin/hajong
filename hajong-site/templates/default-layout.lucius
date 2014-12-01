@@ -1,6 +1,12 @@
 #main {
    min-height:80vh;
 }
+
+#message {
+  background: rgb(226,236,0);
+  padding: 0.5em 1.5em;
+  margin: 0 0 1em 0;
+}
 a {
    color:rgb(181, 122, 0);
 }
@@ -11,7 +17,7 @@ a:hover {
 .footer-container a {
    color:rgb(249, 220, 155);
 }
-.btn {
+.btn, input[type="submit"] {
    display:inline-block;
    background:rgb(226,236,0);
    color:black;
@@ -21,7 +27,7 @@ a:hover {
    text-decoration:none;
    text-align:center;
 }
-.btn:hover {
+.btn:hover, input[type="submit"]:hover {
    background:rgb(200,216,0);
 }
 .btn-full {
@@ -53,4 +59,22 @@ nav a.active {
 }
 .form-controls {
    padding-left:13em;
+}
+
+.loginDiv, .newaccountDiv {
+  width:30em;
+  margin:0 auto;
+}
+
+form > div {
+  margin-top:1em;
+}
+
+label {
+  display:inline-block;
+  min-width:8em;
+}
+
+input[type="submit"] {
+  margin-left:8em;
 }

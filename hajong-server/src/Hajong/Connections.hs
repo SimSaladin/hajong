@@ -31,7 +31,7 @@ import           Data.Aeson.Types (Pair)
 
 -- * Event
 
-data Event = JoinServer Nick Int (Maybe Text) -- auth token to server
+data Event = JoinServer Nick Int Text -- auth token to server
            | PartServer Nick
            | ClientIdentity Nick Int Text
            | Message Nick Text -- ^ from, content
@@ -244,7 +244,7 @@ instance FromJSON Event where
     parseJSON v@(Object o) = do
         t <- o .: "type"
         case t :: Text of
-            "join"         -> JoinServer         <$> o .: "nick" <*> o .: "ident" <*> o .:? "token"
+            "join"         -> JoinServer         <$> o .: "nick" <*> o .: "ident" <*> o .: "token"
             "part"         -> PartServer         <$> o .: "nick"
             "msg"          -> Message            <$> o .: "from" <*> o .: "content"
             "game-created" -> (\x y z -> GameCreated (x,y,z)) <$> o .: "ident" <*> o .: "topic" <*> o .: "players"
