@@ -1,7 +1,6 @@
 var game;
 var debug; // set to true to debug events
-
-var socket = new WebSocket("ws://84.248.82.156:8001");
+var socket;
 
 var mainDiv = document.getElementById('game');
 var waitDiv = document.getElementById('wait');
@@ -13,39 +12,34 @@ window.onerror = function(msg, file, lineNr) {
    return false;
 }
 
-function startGame(debugging) {
-  if (debugging) {
+function initElm() {
+  if (debug) {
     return Elm.debugFullscreen(Elm.Main, "Main.elm");
   } else {
     return Elm.embed(Elm.Main, mainDiv, { downstream : "" });
   }
 }
 
-loggedInNick = #{maybe Null String mauth};
-nick         = localStorage.getItem("nick");
-ident        = Number(localStorage.getItem("ident")); // Number(null) =  = 0
-token        = localStorage.getItem("token");
-
-function authenticate() {
-  if (token) return joinCached();
-  else  return joinFetching();
+function setIdentity(nick, ident, token) {
+  localStorage.setItem("nick", nick);
+  localStorage.setItem("ident", ident);
+  localStorage.setItem("token", token);
 }
 
-function joinCached() {
-  return ({ "type": "join", "nick" : nick, "ident": ident, "token": token });
-}
+function startGame(doJoin) {
+  socket = new WebSocket("ws://84.248.82.156:8001");
 
-function joinFetching() {
-  window.location.replace(window.location.search.replace("?", "@{AuthTokenR}?"));
-}
-
-doJoin = authenticate();
-
-socket.onopen = function () {
-
-  waitDiv.hidden = true;
-  mainDiv.hidden = false;
-  game = startGame();
+  socket.onopen = function () {
+    waitDiv.hidden = true;
+    mainDiv.hidden = false;
+    game = initElm();
+    game.ports.upstream.subscribe(function(e) {
+      var d = JSON.parse(e);
+      if (debug) console.log("out", d);
+      if (d.type !== "noop") socket.send(e);
+    });
+    socket.send(JSON.stringify(doJoin));
+  }
 
   socket.onclose = function () {
     game.dispose();
@@ -58,27 +52,26 @@ socket.onopen = function () {
      var data = JSON.parse(e.data);
 
       if (data.type == "identity") {
-          localStorage.setItem("nick", data.nick);
-          localStorage.setItem("ident", data.ident);
-          localStorage.setItem("auth-token", data.token);
-          console.log("set my info to", data.nick, data.ident, data.token);
+        setIdentity(data.nick, data.ident, data.token);
       }
-
       if (data.type == "invalid") {
-        console.log(data);
+        console.log(data); // TODO alert box
       } else {
         if (debug) console.log(data);
       }
-
      game.ports.downstream.send(e.data);
   }
-
-  game.ports.upstream.subscribe(function(e) {
-    var d = JSON.parse(e);
-    if (debug) console.log("out", d);
-    if (d.type !== "noop") socket.send(e);
-  });
-
-  socket.send(JSON.stringify(doJoin));
 }
 
+// MAIN -------------------------------------------------------
+
+loggedInNick = #{maybe Null String mauth};
+nick         = localStorage.getItem("nick");
+ident        = Number(localStorage.getItem("ident")); // Number(null) =  = 0
+token        = localStorage.getItem("token");
+
+if (token) { // join with cached creds
+  startGame({ "type": "join", "nick" : nick, "ident": ident, "token": token });
+} else { // else go fetch token
+  window.location.replace(window.location.search.replace("?", "@{AuthTokenR}?"));
+}

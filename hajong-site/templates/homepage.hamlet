@@ -22,15 +22,24 @@
        rather complex game.
 
 <aside>
-  <h1>Play
-  <p>
+  <h1>Play now
+  <div#controls-normal>
     $maybe user <- muser
-      <button.btn.btn-full>New game
+      <button.btn.btn-full href=@{LobbyR}>Go play
       <a.btn.btn-full href=@{AuthR LogoutR}>Log out
       <i>Logged in as #{user}
     $nothing
+      <p>Login or create an account.
       <a.btn.btn-full href=@{AuthR LoginR}>Log in
-      <a.btn.btn-full href=@{AuthR newAccountR}>Register an account
+      <a.btn.btn-full href=@{AuthR newAccountR}>Create new account
       <form action=@{LobbyR} method=get>
-        <input type=text name=anon>
-        <input.btn.btn-full type=submit value="Play with a nick">
+        <p>Or give a nickname and play anonymously
+        <input.btn-full type=text name=anon>
+        <input.btn.btn-full style="margin-left:0" type=submit value="Anonymous login">
+
+  <div#controls-anon hidden>
+    <button.btn.btn-full href=@{LobbyR}>Go play
+    <p>Playing anonymously as #
+      <b#nick>
+    <button.btn.btn-full onclick="discardinfo()">Forget me
+    

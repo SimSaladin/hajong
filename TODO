@@ -14,6 +14,7 @@ x = done, / = half done, ! = needs testing
    [ ] ask for new round when enough non-related tiles
    [ ] other
 [ ] (game) yaku tests
+[ ] ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4", "P5"] - riichi, bug?
 [!] (game) "harder yaku" checks
 [!] (game) final scoring and possible next rounds
 [!] (game) honba in scoring
@@ -23,7 +24,6 @@ x = done, / = half done, ! = needs testing
 [!] (game, elm, server) tsumo
 [!] minshoukan
 [!] ankan
-[ ] ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4", "P5"] - riichi, bug?
 
 # elm
 [ ] (elm) chat/dialog
@@ -32,17 +32,17 @@ x = done, / = half done, ! = needs testing
 [ ] (elm) ankan mentsu view
 [ ] (elm) error prompts
 [/] (elm) real tiles
-[ ] (web) BUG game ended and back in lobby -> cannot join games
+[?] (web) BUG game ended and back in lobby -> cannot join games
 [!] (elm) show honba
 [ ] (elm) undisplay riichi when clicked
 [ ] (elm) riichi options: order right way
 
 # worker
 [ ] (worker) pause
-[ ] (server, elm) DealResults JSON parsing
+[x] (server, elm) DealResults JSON parsing
 
 # site
-[ ] nick set
+[x] nick set
 [ ] (site) gravatar
 [/] (server) worker logging in file
 [ ] (site) webrtc

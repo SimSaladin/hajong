@@ -1,5 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 ------------------------------------------------------------------------------
 -- |
@@ -166,20 +167,25 @@ partClient t i = use (seReserved.at i) >>= \case
         Just c  -> seReserved.at i <.= Just (c&cParted.~Just t)
         Nothing -> return Nothing
 
--- | New (maybe anon)
+-- | New anonymous, new registered or previous registered.
 newPlayerRecord :: Text -> Text -> Bool -> Update ServerDB (Either Text (Int, ClientRecord))
 newPlayerRecord nick token reg = do
     taken <- use (seNicks.at nick)
     rec   <- use sePlayerRecord
-    case newId rec of
-        Just (i, rec')
-            | isJust taken -> return (Left "Nick is taken")
-            | otherwise -> do sePlayerRecord  .= rec'
-                              seNicks.at nick .= Just i
-                              let c = ClientRecord nick token reg Nothing Nothing Nothing
-                              seReserved.at i .= Just c
-                              return (Right (i, c))
-        Nothing -> return (Left "Server is full")
+    case (taken, newId rec) of
+        -- nick is taken
+        (Just i, _)         -> do Just c <- use (seReserved.at i)
+                                  if | not reg        -> return (Left "Nick is taken")
+                                     | c^.cRegistered -> return (Right (i, c))
+                                     | otherwise      -> return (Left "Nick is used by someone anonymous") -- TODO overwrite his nick?
+        -- server has room
+        (_, Just (i, rec')) -> do sePlayerRecord  .= rec'
+                                  seNicks.at nick .= Just i
+                                  let c = ClientRecord nick token reg Nothing Nothing Nothing
+                                  seReserved.at i .= Just c
+                                  return (Right (i, c))
+        -- server is full
+        (_, Nothing)        -> return (Left "Server is full")
 
 newAnon :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
 newAnon nick token = newPlayerRecord nick token False
