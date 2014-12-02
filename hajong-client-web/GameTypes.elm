@@ -87,7 +87,6 @@ data Event = JoinServer  { nick : String, ident : Int }
            | LoungeInfo  { lounge : LoungeData }
 
             -- To server only
-           | CreateGame String
            | ForceStart  { ident : Int }
            | InGameAction GameAction
            | Noop -- TODO work around elm WS lib signal limitations

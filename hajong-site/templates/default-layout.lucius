@@ -78,3 +78,11 @@ label {
 input[type="submit"] {
   margin-left:8em;
 }
+
+/* Game only */
+#alerted {
+  padding:1em;
+  margin:1em;
+  background:red;
+  color:white;
+}

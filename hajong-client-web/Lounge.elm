@@ -14,22 +14,17 @@ import Graphics.Input.Field as Field
 data ButtonState = Submit | Clear
 
 -- {{{ Controls ----------------------------------------
-type Controls = { chosen : Maybe GameInfo
-                , topic  : Field.Content
-                }
+type Controls = { chosen : Maybe GameInfo }
 
 controls : Signal Controls
 controls = Controls <~ chosenGame.signal
-                     ~ topic.signal
 -- }}}
 
 -- {{{ Events ------------------------------------------
 events : Signal Event
 events = merges
-    [ Events.createGame <~ newGameEvent
-    , maybeEvent (Events.joinGame << .ident) joined
-    , forceStartEvent
-    ]
+    [ maybeEvent (Events.joinGame << .ident) joined
+    , forceStartEvent ]
 -- }}}
 
 -- {{{ Display -----------------------------------------
@@ -40,22 +35,12 @@ doDraw o = flow down
     [ maybe (spacer 10 10 |> color red) (waitView << Util.lookupGameInfo o.game) o.game.gameWait
     , toText "Lounge" |> bold |> centered
     , blockElement 250 400 (gameListView o)
-        `beside` spacer 5 5 `beside`
-        blockElement 250 400 (gameCreateView o)
-    , spacer 5 5
     ]
 
 waitView gameinfo = color lightOrange <| flow right
     [ toText "Waiting for " |> leftAligned
     , gameInfoView gameinfo
     , forceStartButton gameinfo.ident
-    ]
-
-gameCreateView o = flow down
-    [ toText "Create a game" |> bold |> centered
-    , topicField o.topic
-    , createButton
-    , spacer 5 5
     ]
 
 gameListView o = flow down
@@ -93,18 +78,6 @@ forceStart = input Nothing
 
 forceStartEvent    = maybeEvent Events.forceStart forceStart.signal
 forceStartButton n = button forceStart.handle (Just n) "Force start"
--- }}}
-
--- {{{ New Game (settings) -----------------------------
-topic  = input Field.noContent -- TODO: generalize to settings
-create = input Clear
-
--- | New game settings; sampled when create-game button
-newGameEvent = .string <~ sampleOn (isSubmit create.signal) topic.signal
-
-createButton = button create.handle Submit "Create"
-topicField   = Field.field Field.defaultStyle topic.handle identity "Topic"
-
 -- }}}
 
 -- {{{ Join game ---------------------------------------

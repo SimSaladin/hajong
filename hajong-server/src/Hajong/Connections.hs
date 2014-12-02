@@ -39,7 +39,6 @@ data Event = JoinServer Nick Int Text -- auth token to server
 
            | LoungeInfo Lounge
            | GameCreated (Int, Text, [Nick]) -- id, name, nicks
-           | CreateGame Text
            | JoinGame Int Nick -- ^ game num, nick
            | PartGame Nick
            | ForceStart Int
@@ -158,7 +157,6 @@ instance ToJSON Event where
     toJSON (PartGame nick)         = atType "game-part"    ["nick"    .= nick] -- TODO client
     toJSON (InGamePrivateEvent x)  = atType "game-event"   ["events"  .= [x] ]
     toJSON (InGameEvents xs)       = atType "game-event"   ["events"  .= xs  ]
-    toJSON (CreateGame name)       = atType "game-create"  ["name"    .= name]
     toJSON (ForceStart nth)        = atType "game-fstart"  ["ident"   .= nth]
     toJSON (InGameAction _)        = atType "game-action"  (error "InGameAction toJSON not implemented")
 
@@ -252,7 +250,6 @@ instance FromJSON Event where
             "game-secret"  -> fail "From server only event" -- InGamePrivateEvent <$> undefined
             "game-public"  -> fail "From server only event" -- InGameEvents       <$> undefined
             "game-action"  -> InGameAction       <$> parseJSON v
-            "game-create"  -> CreateGame         <$> o .: "topic"
             "game-fstart"  -> ForceStart         <$> o .: "ident"
             _              -> pure (Invalid ("Unknown or unsupported type: " <> t))
     parseJSON _ = pure (Invalid "Top-level object expected")

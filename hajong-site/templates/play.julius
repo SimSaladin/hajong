@@ -4,13 +4,8 @@ var socket;
 
 var mainDiv = document.getElementById('game');
 var waitDiv = document.getElementById('wait');
+var alertedDiv = document.getElementById('alerted');
 mainDiv.hidden = true;
-
-window.onerror = function(msg, file, lineNr) {
-   alert(msg + file + lineNr);
-   game.destroy();
-   return false;
-}
 
 function initElm() {
   if (debug) {
@@ -18,6 +13,14 @@ function initElm() {
   } else {
     return Elm.embed(Elm.Main, mainDiv, { downstream : "" });
   }
+}
+
+function alerted(data, fatal) {
+  console.log(data);
+  alertedDiv.innerHTML = data.content;
+  if (!fatal && alertedDiv.hidden)
+    setTimeout(function(){ alertedDiv.hidden = true; }, 8000);
+  alertedDiv.hidden = false;
 }
 
 function setIdentity(nick, ident, token) {
@@ -55,7 +58,7 @@ function startGame(doJoin) {
         setIdentity(data.nick, data.ident, data.token);
       }
       if (data.type == "invalid") {
-        console.log(data); // TODO alert box
+        alerted(data);
       } else {
         if (debug) console.log(data);
       }
@@ -63,8 +66,15 @@ function startGame(doJoin) {
   }
 }
 
+window.onerror = function(msg, file, lineNr) {
+  alerted("FATAL ERROR: " + msg + file + lineNr + " please report this.", true);
+  game.destroy();
+  return false;
+}
+
 // MAIN -------------------------------------------------------
 
+joinToGame   = null; //  TODO
 loggedInNick = #{maybe Null String mauth};
 nick         = localStorage.getItem("nick");
 ident        = Number(localStorage.getItem("ident")); // Number(null) =  = 0

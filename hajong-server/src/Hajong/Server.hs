@@ -469,32 +469,12 @@ handleEventOf c event = case event of
     JoinServer{}      -> uniError "Already joined (and nick change not implemented)"
     PartServer reason -> liftIO $ throwIO $ PartedException (getNick c) (getIdent c) reason
     Message _ msg     -> putLounge $ Message (getNick c) msg
-    CreateGame name   -> createGame name
     JoinGame n _      -> joinGame n
     ForceStart n      -> forceStart n
     InGameAction a    -> handleGameAction a
     _                 -> uniError $ "Event not allowed or not implemented (" <> tshow event <> ")"
 
 -- ** Actions
-
-createGame :: Text -> Server ()
-createGame name = do
-    let settings  = GameSettings name
-        gamestate = newEmptyGS (dummyClient "") name
-        game      = Game settings (gamestate <&> getIdent)
-    res <- update' $ InsertGame game
-    case res of
-        Right gid -> do
-            c       <- view seClient
-            ss      <- ask
-            running <- createWorker game >>= forkWorker gid
-            let running' = running & gClients .~ singletonMap (getIdent c) c
-
-            atomically $ modifyTVar' (ss^.seWorkers) (at gid .~ Just running')
-            putLounge $ GameCreated (gid, name, running^..gClients.folded <&> getNick)
-            joinGame gid
-
-        Left err -> uniError err
 
 joinGame :: Int -> Server ()
 joinGame gid = do

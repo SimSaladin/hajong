@@ -4,9 +4,6 @@ import GameTypes (..)
 
 -- Create Events ------------------------------------------------------------
 
-createGame : String -> Event
-createGame topic = CreateGame topic
-
 joinGame : Int -> Event
 joinGame n = JoinGame { nick = "", ident = n }
 

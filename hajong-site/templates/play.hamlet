@@ -1,7 +1,7 @@
 
 <article>
+  <div id="alerted" hidden>
   <div id="wait">Connecting...
-
   <div id="game" style="height:100%">
 
 <aside>
