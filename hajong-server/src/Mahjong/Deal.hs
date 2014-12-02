@@ -116,8 +116,8 @@ runTurn' pk ta = do
         TurnAnkan tile       -> ankanOn tile h >>= updateHand pk
         TurnTileDraw False _ -> drawWall h >>= updateHand pk
         TurnTileDraw True  _ -> drawDeadWall h >>= updateHand pk
-        TurnTsumo            -> handWin h >>= updateHand pk
-        TurnShouminkan tile  -> shouminkanOn tile h
+        TurnTsumo            -> handWin Nothing h >>= updateHand pk
+        TurnShouminkan tile  -> shouminkanOn tile h >>= updateHand pk
 
     if ta == TurnTsumo then Just <$> endTsumo
                        else return Nothing
@@ -127,18 +127,15 @@ runTurn' pk ta = do
 drawWall :: DealM m => Hand -> m Hand
 drawWall hand = do
     unless (canDraw hand) (throwError "Cannot draw from wall")
-    mt <- preview (sWall._head)
-    maybe (throwError "No tiles left in wall") (`toHand` hand) mt
+    preview (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
 
 drawDeadWall :: DealM m => Hand -> m Hand
-drawDeadWall hand = do
-    mw <- preview (sWall._last)
-    case mw of
-        Nothing -> throwError "No tiles in wall!"
-        Just tow -> do
-            t <- view (sWanpai.singular _head)
-            tellEvent $ DealFlipDora t (Just tow)
-            t `toHandWanpai` hand
+drawDeadWall hand = preview (sWall._last) >>= \case
+    Nothing  -> throwError "Wall is empty"
+    Just tow -> do
+        t <- view (sWanpai.singular _head)
+        tellEvent $ DealFlipDora t (Just tow)
+        t `toHandWanpai` hand
 
 doRiichi :: DealM m => Kaze -> m ()
 doRiichi pk = do

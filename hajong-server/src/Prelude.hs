@@ -35,6 +35,9 @@ if' cond th el = if cond then th else el
 (?) :: Monad m => Maybe a -> e -> EitherT e m a
 mr ? err = maybe (left err) return mr
 
+(?!) :: Maybe a -> String -> a
+mr ?! err = fromMaybe (error ("Game bug: was not Just: " ++ err)) mr
+
 liftE :: CanError m => Either Text a -> m a
 liftE = either throwError return
 

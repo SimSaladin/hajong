@@ -42,7 +42,7 @@ data HandPublic = HandPublic
 data Hand = Hand
           { _handConcealed :: [Tile]
           , _handPick :: Maybe Tile
-          , _handFuriten :: Maybe Bool -- ^ Just (temporary?)
+          , _handFuriten :: Maybe Bool -- ^ Just (temporary?) - TODO updating this field
           , _handPublic :: HandPublic
           , _hCanTsumo :: Bool
           } deriving (Show, Read, Eq)
