@@ -1,10 +1,12 @@
+/* {{{ globals */
 var game;
 var debug; // set to true to debug events
 var socket;
-
 var mainDiv = document.getElementById('game');
 var waitDiv = document.getElementById('wait');
 var alertedDiv = document.getElementById('alerted');
+/* }}} */
+
 mainDiv.hidden = true;
 
 function initElm() {
@@ -15,13 +17,20 @@ function initElm() {
   }
 }
 
+/* {{{ Errors */
 function alerted(data, fatal) {
   console.log(data);
-  alertedDiv.innerHTML = data.content;
+  alertedDiv.innerHTML = data;
   if (!fatal && alertedDiv.hidden)
     setTimeout(function(){ alertedDiv.hidden = true; }, 8000);
   alertedDiv.hidden = false;
 }
+window.onerror = function(msg, file, lineNr) {
+  alerted("FATAL ERROR: " + msg + file + lineNr + " please report this.", true);
+  game.destroy();
+  return false;
+}
+/* }}} */
 
 function setIdentity(nick, ident, token) {
   localStorage.setItem("nick", nick);
@@ -46,19 +55,17 @@ function startGame(doJoin) {
 
   socket.onclose = function () {
     game.dispose();
-    mainDiv.hidden    = true;
-    waitDiv.hidden    = false;
-    waitDiv.innerHTML = "Connection to server has been lost! Please refresh this page";
+    mainDiv.hidden = true;
+    alerted("Connection to server has been lost! Please refresh this page", true);
   }
 
   socket.onmessage = function (e) {
      var data = JSON.parse(e.data);
-
       if (data.type == "identity") {
         setIdentity(data.nick, data.ident, data.token);
       }
       if (data.type == "invalid") {
-        alerted(data);
+        alerted(data.content);
       } else {
         if (debug) console.log(data);
       }
@@ -66,22 +73,17 @@ function startGame(doJoin) {
   }
 }
 
-window.onerror = function(msg, file, lineNr) {
-  alerted("FATAL ERROR: " + msg + file + lineNr + " please report this.", true);
-  game.destroy();
-  return false;
-}
-
 // MAIN -------------------------------------------------------
 
-joinToGame   = null; //  TODO
+joinToGame   = #{maybe Null (Number . fromIntegral) mgid};
 loggedInNick = #{maybe Null String mauth};
 nick         = localStorage.getItem("nick");
 ident        = Number(localStorage.getItem("ident")); // Number(null) =  = 0
 token        = localStorage.getItem("token");
 
 if (token) { // join with cached creds
-  startGame({ "type": "join", "nick" : nick, "ident": ident, "token": token });
+  startGame({ "type": "join", "nick" : nick, "ident": ident, "token": token
+            , "game": joinToGame });
 } else { // else go fetch token
   window.location.replace("@{AuthTokenR}" + window.location.search.replace("", ""));
 }

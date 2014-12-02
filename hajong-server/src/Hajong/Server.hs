@@ -327,20 +327,26 @@ initiateHandshake = do
     c <- view seClient
     event <- receive c
     case event of
-        JoinServer nick ident token
+        JoinServer nick ident token mgame
             | length nick > 24 -> uniError "Maximum nick length is 24 characters"
-            | otherwise        -> withClient c{getNick = nick, getIdent = ident} (handshake token)
+            | otherwise        -> withClient c{getNick = nick, getIdent = ident} (handshake token mgame)
         _                      -> uniError "Received an invalid Event"
 
-handshake :: Text -> Server ()
-handshake token = do
+handshake :: Text -> Maybe Int -> Server ()
+handshake token mgame = do
     c <- view seClient
     $logInfo $ "New client " <> tshow (getIdent c) <> " (" <> getNick c <> ")"
     time <- liftIO getCurrentTime
     res <- update' $ ConnectClient time (getIdent c) token
     case res of
-        Right (i, cr) -> withClient c{getIdent=i} (afterHandshake cr)
-        Left err      -> uniError $ "Handshake failed: " <> err
+        Left err -> uniError $ "Handshake failed: " <> err
+        Right (i, cr)
+            | Just g <- cr^.cInGame, Just g' <- mgame
+            , g /= g'   -> uniError "You are already in another game"
+            | otherwise -> let cr' | isJust mgame = cr&cInGame.~mgame
+                                   | otherwise    = cr
+                               c'                 = c { getIdent = i }
+                               in withClient c' $ afterHandshake cr'
 
 -- | After a successful handshake
 afterHandshake :: ClientRecord -> Server ()
@@ -430,7 +436,7 @@ connects cr = do
                     modifyTVar' (ss^.seLounge) (insertSet c)
     updateLounge
 
-    putLounge (liftA3 JoinServer getNick getIdent (pure "") c)
+    putLounge $ JoinServer (getNick c) (getIdent c) "" (cr^.cInGame)
     case cr^.cInGame of
         Nothing  -> return ()
         Just gid -> handleEventOf c (JoinGame gid (getNick c))

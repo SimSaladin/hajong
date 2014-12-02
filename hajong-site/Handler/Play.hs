@@ -20,12 +20,14 @@ import qualified Data.UUID.V4 as UUID
 
 -- | Attempt to join the game
 getPlayR :: Int -> Handler Html
-getPlayR ident = G.getGame ident >>= maybe notFound (playLayout . Just)
+getPlayR = playLayout . Just
 
+-- | Current game, or if in none then the public lobby.
 getLobbyR :: Handler Html
 getLobbyR = playLayout Nothing
 
-playLayout :: Maybe G.Game -> Handler Html
+-- | Maybe game to join to.
+playLayout :: Maybe Int -> Handler Html
 playLayout mgid = do
     mauth <- maybeAuthId
     defaultLayout $ do
@@ -33,7 +35,16 @@ playLayout mgid = do
         addScriptRemote "http://elm-lang.org/elm-runtime.js"
         addScript $ StaticR js_elm_game_js
         $(widgetFile "play")
+{-# INLINE playLayout #-}
 
+-- | Creating games
+postNewGameR :: Handler Html
+postNewGameR = do
+    -- new uuid
+    _ident  <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
+    redirect $ GameR undefined -- TODO
+
+-- | Modify game settings
 getGameR, postGameR :: Int -> Handler Html
 getGameR        = postGameR
 postGameR ident = do
@@ -42,12 +53,7 @@ postGameR ident = do
         setTitle $ toHtml $ "Configure game " <> show ident
         $(widgetFile "game-conf")
 
-postNewGameR :: Handler Html
-postNewGameR = do
-    -- new uuid
-    _ident  <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
-    redirect $ GameR undefined -- TODO
-
+-- | List all (ended) games
 getGamesR :: Handler Html
 getGamesR = do
     games <- runDB $ selectList [] []
@@ -55,6 +61,7 @@ getGamesR = do
         setTitle "Past Games"
         $(widgetFile "game-history")
 
+-- | Authenticate for games
 getAuthTokenR :: Handler Html
 getAuthTokenR = do
     user <- maybeAuthId
@@ -64,6 +71,7 @@ getAuthTokenR = do
         (Nothing, Just nick) -> G.getNewAnonUser    nick >>= processAuthRes
         _                    -> do setMessage "That requires login"; redirect $ AuthR LoginR
 
+-- | This set localStorage and redirects.
 processAuthRes :: Either Text (Int, G.ClientRecord) -> Handler Html
 processAuthRes res = case res of 
     Left err -> do setMessage $ toHtml err; redirect HomeR

@@ -17,10 +17,17 @@ import Data.Acid
 
 getAcid = appGameState <$> getYesod
 
+-- | By GameId
 getGame :: Int -> Handler (Maybe G.Game)
 getGame gid = do
     acid <- getAcid
     liftIO $ acid `query` G.GetGame gid
+
+-- | The game the player is currently up to.
+getClientRecord :: Int -> Handler (Maybe G.ClientRecord)
+getClientRecord uid = do
+    acid <- getAcid
+    liftIO $ acid `query` G.GetClientRecord uid
 
 -- | By username, try adding to the server. If full, return Nothing. If
 -- success, return (ident, token).

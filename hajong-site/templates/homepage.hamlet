@@ -24,11 +24,18 @@
 <aside>
   <h1>Play now
   <div#controls-normal>
+
     $maybe user <- muser
-      <button.btn.btn-full href=@{LobbyR}>Go play
-      <a.btn.btn-full href=@{AuthR LogoutR}>Log out
+      <!-- logged in and registered -->
+
+      <button.btn.btn-full href=@{LobbyR}>Go to lobby
+      <button.btn.btn-full href=@{NewGameR}>Create a new game
+
       <i>Logged in as #{user}
+      <a.btn.btn-full href=@{AuthR LogoutR}>Log out
+
     $nothing
+      <!-- not logged in -->
       <p>Login or create an account.
       <a.btn.btn-full href=@{AuthR LoginR}>Log in
       <a.btn.btn-full href=@{AuthR newAccountR}>Create new account
@@ -38,7 +45,11 @@
         <input.btn.btn-full style="margin-left:0" type=submit value="Anonymous login">
 
   <div#controls-anon hidden>
-    <button.btn.btn-full href=@{LobbyR}>Go play
+    <!-- logged in anonymous -->
+
+    <button.btn.btn-full href=@{LobbyR}>Go to lobby
+    <button.btn.btn-full href=@{NewGameR}>Create a new game
+
     <p>Playing anonymously as #
       <b#nick>
     <button.btn.btn-full onclick="discardinfo()">Forget me
