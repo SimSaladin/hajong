@@ -73,5 +73,5 @@ token        = localStorage.getItem("token");
 if (token) { // join with cached creds
   startGame({ "type": "join", "nick" : nick, "ident": ident, "token": token });
 } else { // else go fetch token
-  window.location.replace(window.location.search.replace("?", "@{AuthTokenR}?"));
+  window.location.replace("@{AuthTokenR}" + window.location.search.replace("", ""));
 }
