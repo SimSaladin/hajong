@@ -79,9 +79,9 @@ handAutoDiscard hand
 
 handWin :: CanError m => Maybe Shout -> Hand -> m Hand
 handWin ms h
-    | not (complete h) = throwError "Cannot win with an incomplete hand"
-    | furiten h        = throwError "You are furiten"
-    | otherwise        = return $ setAgari ms h
+    | not (complete h)       = throwError "Cannot win with an incomplete hand"
+    | isJust ms && furiten h = throwError "You are furiten"
+    | otherwise              = return $ setAgari ms h
 
 -- * Kan
 
@@ -200,7 +200,18 @@ canRiichiWith t h = null (h^.handPublic.handCalled) && tenpai (L.delete t tiles)
     where tiles = h^.handConcealed ++ maybe [] return (h^.handPick)
 
 furiten :: Hand -> Bool
-furiten _ = False -- TODO
+furiten h = any (`elem` (h^..handPublic.handDiscards.each.dcTile)) . concatMap getAgari
+          . filter tenpai $ getGroupings h
+
+getAgari :: Grouping -> [Tile]
+getAgari xs | [t] <- leftovers xs                                 = [t]
+            | [GroupWait Shuntsu _ ws] <- filter isShuntsuWait xs = ws
+            | otherwise                                           = concatMap (either return id) $ waits xs
+            --  XXX: Is this correct in evry case?
+
+isShuntsuWait :: TileGroup -> Bool
+isShuntsuWait (GroupWait Shuntsu _ _) = True
+isShuntsuWait _                       = False
 
 setAgari :: Maybe Shout -> Hand -> Hand
 setAgari ms h = h & handPublic.handAgari .~ mt & handPublic.handAgariCall .~ mc 
