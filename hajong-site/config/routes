@@ -5,7 +5,7 @@
 /robots.txt RobotsR GET
 
 /           HomeR    GET
-/new-game   NewGameR     POST
+/new-game   NewGameR GET POST
 /games      GamesR   GET
 /game/#Int  GameR    GET POST
 /play       LobbyR   GET

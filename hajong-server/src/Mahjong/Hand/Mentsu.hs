@@ -116,10 +116,10 @@ fromShout s@Shout{..} = setShout $ case shoutKind of
 -- | @shuntsuWith tiles@ attempts to build a shuntsu from `tiles`. Note
 -- that `tiles` __must be in order of succession__.
 shuntsuWith :: [Tile] -> Maybe Mentsu
-shuntsuWith [x, y, z] = shuntsu x <$ do
-    succMay x >>= guard . (== y)
-    succMay y >>= guard . (== z)
-shuntsuWith _ = Nothing
+shuntsuWith = go . sort where
+    go [x, y, z] = shuntsu x <$ do succMay x >>= guard . (== y)
+                                   succMay y >>= guard . (== z)
+    go _ = Nothing
 
 -- | Promote an open koutsu to a shouminkantsu
 promoteToKantsu :: Mentsu -> Mentsu

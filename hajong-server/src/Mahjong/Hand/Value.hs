@@ -30,7 +30,7 @@ data Value = Value
     { _vaYaku  :: [Yaku]
     , _vaFu    :: Fu
     , _vaHan   :: Han
-    , _vaValue :: Points
+    , _vaValue :: Points -- ^ Basic points (non-dealer and not rounded)
     , _vaNamed :: Maybe Text
     } deriving (Show, Read)
 
@@ -38,8 +38,12 @@ makeLenses ''Value
 
 -- ** Calculating
 
+
+-- |
+-- >>> getValue (ValueInfo {vRound = Ton, vPlayer = Ton, vRiichi = True, vConcealed = True, vDiscarded = ["N" ,"W" ,"G!","S7","P9","M6","S2","R!","S9","P1"], vMentsu = [], vWinWith = "P2", vWinCalled = Nothing, vTiles = ["S5","P6","S6","P5","P4","S4","M5","S2","P3","P7","S7","S3","M5","P2"], vIppatsu = False, vDoubleRiichi = False, vTilesLeft = 29, vFromWanpai = False})
+-- Value {_vaYaku = [Yaku {yakuHan = 1, yakuName = "Menzen Tsumo"},Yaku {yakuHan = 1, yakuName = "Riichi"}], _vaFu = 20, _vaHan = 2, _vaValue = 320, _vaNamed = Nothing}
 getValue :: ValueInfo -> Value
-getValue vi = traceShow vi $ Value yaku fu han val name
+getValue vi = Value yaku fu han val name
   where
     yaku        = getYaku vi
     fu          = getFu yaku vi
@@ -91,7 +95,7 @@ mentsuValue (Mentsu mk t ms) = product [gokind mk, gotile, goshout ms]
 
 -- ** Meta
 
--- | Calculate basic points.
+-- | Calculate basic points or apply limit.
 valued :: [Yaku] -> Han -> Fu -> (Points, Maybe Text)
 valued yaku han fu
     | han <= 4  = if' (basic >= 2000) mangan (basic, Nothing)

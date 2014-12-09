@@ -5,4 +5,4 @@ main = doctest
     , "-XOverloadedStrings", "-XTemplateHaskell", "-XDeriveDataTypeable"
     , "-XLambdaCase", "-XRankNTypes", "-XNoImplicitPrelude"
     , "-isrc"
-    , "src/Mahjong/Deal.hs" ]
+    , "src/Mahjong/Hand/Value.hs", "src/Mahjong/Kyoku.hs" ]

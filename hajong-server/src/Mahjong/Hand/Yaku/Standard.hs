@@ -163,8 +163,8 @@ menzenTsumo = do
     concealedHand
     ValueInfo{..} <- yakuState
     if isNothing vWinCalled
-        then yakuFail
-        else return (Yaku 1 "Menzen Tsumo")
+        then return (Yaku 1 "Menzen Tsumo")
+        else yakuFail
 
 riichi :: YakuCheck Yaku
 riichi = do

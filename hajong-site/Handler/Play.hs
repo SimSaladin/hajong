@@ -41,7 +41,6 @@ playLayout mgid = do
 -- | Creating games
 getNewGameR, postNewGameR :: Handler Html
 getNewGameR  = do
-    _ <- requireAuthId
     -- TODO require not already in a game
     (formWidget, formEnctype) <- generateFormPost newGameForm
     defaultLayout $ do

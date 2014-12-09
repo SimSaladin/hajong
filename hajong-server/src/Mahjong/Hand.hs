@@ -171,7 +171,7 @@ shoutsOn np t p hand
     normalShuntsu     = nextKaze np == p
     ih                = sort (_handConcealed hand) -- NOTE: sort
     toShout (mk, xs)  = do
-        guard $ xs `isInfixOf` ih
+        guard $ xs `isSubListOf` ih
         s <- case mk of
                 Jantou  -> [Ron]
                 Kantsu  -> [Kan]
@@ -231,3 +231,6 @@ tileFromHand tile hand
     | Just tile' <- hand ^. handPick, tile == tile'         = return $ handPick .~ Nothing $ hand
     | (xs, _ : ys) <- break (== tile) (_handConcealed hand) = return $ handConcealed .~ (xs ++ ys) $ hand
     | otherwise                                             = throwError "Tile not in hand"
+
+isSubListOf :: Eq a => [a] -> [a] -> Bool
+isSubListOf xs ys = length ys - length (ys L.\\ xs) == length xs

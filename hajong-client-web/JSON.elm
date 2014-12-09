@@ -324,4 +324,5 @@ parseTurnAction (Object o) = case "type" .: o |> parseString of
     "discard"    -> TurnTileDiscard (parseDiscard (Object o))
     "ankan"      -> TurnAnkan       ("tile"   .: o |> parseTile)
     "shouminkan" -> TurnShouminkan  ("tile"   .: o |> parseTile)
+    "tsumo"      -> TurnTsumo
 -- }}}

@@ -189,25 +189,13 @@ endRon sp tp = do
     win <- toWinner sp
     oja <- view pOja
     let basic = win^._3.vhValue.vaValue
-    dealEnds $ DealRon [win] [(tp, negate $ roundPoints $ basic * if' (tp == oja) 6 4 + h * 100)]
+    dealEnds $ DealRon [win] [(tp, negate $ roundKyokuPoints $ basic * if' (tp == oja) 6 4 + h * 100)]
 
+-- | Broadcast results with pass-through.
 dealEnds :: InKyoku m => KyokuResults -> m KyokuResults
 dealEnds results = do
     tell $ DealEnded results : payPoints results
     return results
-
-toWinner :: InKyoku m => Player -> m Winner
-toWinner p = do
-    pk <- playerToKaze p
-    h  <- handOf' pk
-    d  <- ask
-    let vh  = valueHand pk h d
-    return (p, roundPoints $ if' (p == _pOja d) 6 4 * (vh^.vhValue.vaValue) + _pHonba d * 300, vh)
-
-tsumoPayers :: Int -> Player -> Points -> [Player] -> [Payer]
-tsumoPayers honba oja basic payers
-    | oja `elem` payers = map (\p -> (p, negate $ roundPoints $ basic * if' (p == oja) 2 1 + honba * 100)) payers
-    | otherwise         = map (        , negate $ roundPoints $ basic * 2                  + honba * 100) payers
 
 -- ** Scoring
 
@@ -220,10 +208,32 @@ payPoints res = case res of
         g (p, v)    = GamePoints p (- v)
         g' (p, v)   = GamePoints p v
 
-roundPoints :: Points -> Points
-roundPoints x = case x `divMod` 100 of
-    (a, b) | b > 0     -> a + 1
-           | otherwise -> a
+-- |
+-- >>> roundKyokuPoints 150
+-- 200
+--
+-- >>> roundKyokuPoints 500
+-- 500
+roundKyokuPoints :: Points -> Points
+roundKyokuPoints x = case x `divMod` 100 of
+    (a, b) | b > 0     -> (a + 1) * 100
+           | otherwise -> a * 100
+
+-- |
+-- >>> tsumoPayers 0 (Player 0) 320 [Player 1, Player 2, Player 3]
+-- [(Player 1,-700),(Player 2,-700),(Player 3,-700)]
+tsumoPayers :: Int -> Player -> Points -> [Player] -> [Payer]
+tsumoPayers honba oja basic payers
+    | oja `elem` payers = map (\p -> (p, negate $ roundKyokuPoints $ basic * if' (p == oja) 2 1 + honba * 100)) payers
+    | otherwise         = map (        , negate $ roundKyokuPoints $ basic * 2                  + honba * 100) payers
+
+toWinner :: InKyoku m => Player -> m Winner
+toWinner p = do
+    pk <- playerToKaze p
+    h  <- handOf' pk
+    d  <- ask
+    let vh  = valueHand pk h d
+    return (p, roundKyokuPoints $ if' (p == _pOja d) 6 4 * (vh^.vhValue.vaValue) + _pHonba d * 300, vh)
 
 -- * Final scoring
 
