@@ -136,13 +136,11 @@ isKantsu  = (== Kantsu)  . mentsuKind
 
 -- On shouts
 
-possibleShouts :: Bool -> Tile -> [(MentsuKind, [Tile])]
-possibleShouts withShuntsu x = (Koutsu, [x, x])
+possibleShouts :: Tile -> [(MentsuKind, [Tile])]
+possibleShouts x = (Koutsu, [x, x])
     : (Kantsu, [x, x, x])
     : (Jantou, [x])
-    : (if withShuntsu then shuntsus else [])
-  where
-    shuntsus = catMaybes
+    : catMaybes
         [ succMay x >>= \y -> succMay y >>= \z -> return (Shuntsu, [y, z]) --  x . .
         , predMay x >>= \y -> succMay x >>= \z -> return (Shuntsu, [y, z]) --  . x .
         , predMay x >>= \y -> predMay y >>= \z -> return (Shuntsu, [y, z]) --  . . x

@@ -117,14 +117,12 @@ runTurn' pk ta = do
             h' <- discard d h
             endTurn (d^.dcTile)
             updateHand pk h'
-        TurnAnkan tile       -> ankanOn tile h >>= updateHand pk
-        TurnTileDraw False _ -> drawWall h >>= updateHand pk
-        TurnTileDraw True  _ -> drawDeadWall h >>= updateHand pk
-        TurnTsumo            -> handWin Nothing h >>= updateHand pk
-        TurnShouminkan tile  -> shouminkanOn tile h >>= updateHand pk
-
-    if ta == TurnTsumo then Just <$> endTsumo
-                       else return Nothing
+            return Nothing
+        TurnAnkan tile       -> ankanOn tile h >>= updateHand pk >> return Nothing
+        TurnTileDraw False _ -> drawWall h >>= updateHand pk >> return Nothing
+        TurnTileDraw True  _ -> drawDeadWall h >>= updateHand pk >> return Nothing
+        TurnTsumo            -> handWin Nothing h >>= updateHand' pk (Just <$> endTsumo)
+        TurnShouminkan tile  -> shouminkanOn tile h >>= updateHand pk >> return Nothing
 
 -- *** Player in turn
 
@@ -290,14 +288,17 @@ buildPlayerState deal pk = flip appEndo deal $ mconcat
 
 -- | Set the hand of player
 updateHand :: InKyoku m => Kaze -> Hand -> m ()
-updateHand pk new = do
-    p <- kazeToPlayer pk
+updateHand pk = updateHand' pk (return ())
+
+updateHand' :: InKyoku m => Kaze -> m a -> Hand -> m a
+updateHand' pk ma new = do
+    p   <- kazeToPlayer pk
     old <- handOf' pk
-
-    when (old /= new) $ tellEvent (DealPrivateHandChanged p pk new)
-
+    when (old /= new)
+        $ tellEvent (DealPrivateHandChanged p pk new)
     when (_handPublic old /= _handPublic new)
         $ tellEvent (DealPublicHandChanged pk $ _handPublic new)
+    local (sHands.at pk .~ Just new) ma
 
 tellEvent :: InKyoku m => GameEvent -> m ()
 tellEvent ev = tell [ev]

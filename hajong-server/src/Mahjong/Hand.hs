@@ -166,8 +166,9 @@ shoutsOn :: Kaze -- ^ Shout from (player in turn)
          -> [Shout]
 shoutsOn np t p hand
     | np == p   = [] -- You're not shouting the thing you just discarded from yourself, right?
-    | otherwise = concatMap toShout $ possibleShouts (nextKaze np == p) t
+    | otherwise = concatMap toShout $ possibleShouts t
   where
+    normalShuntsu     = nextKaze np == p
     ih                = sort (_handConcealed hand) -- NOTE: sort
     toShout (mk, xs)  = do
         guard $ xs `isInfixOf` ih
@@ -176,11 +177,11 @@ shoutsOn np t p hand
                 Kantsu  -> [Kan]
                 Koutsu  -> [Pon, Ron]
                 Shuntsu -> [Chi, Ron]
+        when (s == Chi) $ guard normalShuntsu
         when (hand^.handPublic.handRiichi) $ guard (s == Ron)
         guard $ if s == Ron
-                then complete
-                    ( toMentsu mk t xs : (hand^.handPublic.handCalled), _handConcealed hand L.\\ xs )
-                else mk /= Jantou
+            then complete ( toMentsu mk t xs : (hand^.handPublic.handCalled), _handConcealed hand L.\\ xs )
+            else mk /= Jantou
         return $ Shout s np t xs
 
 -- | From wall (not wanpai).
