@@ -203,11 +203,15 @@ furiten :: Hand -> Bool
 furiten h = any (`elem` (h^..handPublic.handDiscards.each.dcTile)) . concatMap getAgari
           . filter tenpai $ getGroupings h
 
+-- | If there is a shuntsu wait, that is the only possible agari. If there
+-- is a single leftover tile that is the agari. otherwise any of the koutsu
+-- waits can be completed (thus agari).
+--
+--  TODO: chiitoitsu etc missing
 getAgari :: Grouping -> [Tile]
-getAgari xs | [t] <- leftovers xs                                 = [t]
-            | [GroupWait Shuntsu _ ws] <- filter isShuntsuWait xs = ws
+getAgari xs | [GroupWait Shuntsu _ ws] <- filter isShuntsuWait xs = ws
+            | [t] <- leftovers xs                                 = [t]
             | otherwise                                           = concatMap (either return id) $ waits xs
-            --  XXX: Is this correct in evry case?
 
 isShuntsuWait :: TileGroup -> Bool
 isShuntsuWait (GroupWait Shuntsu _ _) = True
