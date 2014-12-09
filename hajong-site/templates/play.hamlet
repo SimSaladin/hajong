@@ -1,17 +1,11 @@
 
-<article>
-  <div id="alerted" hidden>
-  <div id="wait">Connecting...
-  <div id="game" style="height:100%">
+<p>
+  $maybe user <- mauth
+    Playing as <b>#{user}</b>
+  $nothing
+    <i>Playing anonymously
 
-<aside>
-  <h1>
-  <p>
-    $maybe user <- mauth
-      Playing as <b>#{user}</b>
-    $nothing
-      <i>Playing anonymously
-  <p>
-    <form#newgameform method=POST enctype=#{formEnctype} action=@{NewGameR}>
-      ^{formWidget}
-      <input.btn.btn-full type=submit value=Create>
+<div id="alerted" hidden>
+<div id="wait">Connecting...
+<div id="game" style="height:100%">
+

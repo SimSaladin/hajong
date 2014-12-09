@@ -15,6 +15,7 @@ module Hajong.Server where
 
 ------------------------------------------------------------------------------
 import           Hajong.Connections
+import           Hajong.Client
 import           Hajong.Worker
 import           Mahjong
 
@@ -58,8 +59,8 @@ data ClientRecord = ClientRecord
 -- identifier and a passphrase.
 data ServerDB = ServerDB
     { _sePlayerRecord  :: Record              -- ^ Identifiers, connected or in game
-    , _seReserved      :: IntMap ClientRecord -- ^ Reserved places and nicks, "valid until"
-    , _seNicks         :: Map Nick Int
+    , _seReserved      :: IntMap ClientRecord -- ^ Reserved player spots, "valid until"
+    , _seNicks         :: Map Nick Int        -- ^ Reserved nicks
     , _seGameRecord    :: Record              -- ^ Temp game id's
     , _seGames         :: IntMap Game
     } deriving (Show, Typeable)
@@ -116,8 +117,8 @@ $(deriveSafeCopy 0 'base ''Honor)
 $(deriveSafeCopy 0 'base ''Number)
 $(deriveSafeCopy 0 'base ''Sangen)
 $(deriveSafeCopy 0 'base ''TileKind)
-$(deriveSafeCopy 0 'base ''Deal)
-$(deriveSafeCopy 0 'base ''DealResults)
+$(deriveSafeCopy 0 'base ''Kyoku)
+$(deriveSafeCopy 0 'base ''KyokuResults)
 $(deriveSafeCopy 0 'base ''AbortiveDraw)
 $(deriveSafeCopy 0 'base ''Hand)
 $(deriveSafeCopy 0 'base ''Value)
@@ -157,7 +158,7 @@ dumpDB = ask
 connectClient :: UTCTime -> Int -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
 connectClient time mi token = use (seReserved.at mi) >>= \case
     Nothing                     -> return (Left "Unknown identity")
-    Just c | token == c^.cToken -> do let c' = c&cJoined.~Just time
+    Just c | token == c^.cToken -> do let c' = c&cJoined.~Just time&cParted.~Nothing
                                       seReserved.at mi <.= Just c'
                                       return (Right (mi, c'))
            | otherwise          -> return $ Left "Auth token didn't match"
@@ -206,10 +207,10 @@ destroyGame :: Int -> Update ServerDB [ClientRecord]
 destroyGame gid = do seGameRecord %= freeId gid
                      cs <- preuse (seGames.at gid._Just.gaState.gamePlayers)
                      seGames.at gid .= Nothing
-                     forM (maybe [] (^..each) cs) $ \i -> do
+                     rs <- forM (maybe [] (^..each) cs) $ \i -> do
                         seReserved.at i._Just.cInGame .= Nothing
-                        Just c <- use (seReserved.at i)
-                        return c
+                        use (seReserved.at i)
+                     return (catMaybes rs)
 
 insertGame :: Game -> Update ServerDB (Either Text Int)
 insertGame game = do
@@ -398,6 +399,9 @@ uniError txt = view seClient >>= (`unicastError` txt)
 
 update' ev = view db >>= \d -> liftIO (update d ev)
 query'  ev = view db >>= \d -> liftIO (query d ev)
+
+multicast :: MonadIO m => GameState Client -> Event -> m ()
+multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
 
 -- | Send updated lounge to everyone there
 updateLounge :: Server ()

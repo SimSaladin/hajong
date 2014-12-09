@@ -19,6 +19,7 @@ module Mahjong.Hand
 
 import qualified Data.List as L
 
+import           Import
 import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Value
 import Mahjong.Hand.Algo
@@ -138,7 +139,7 @@ shoutFromHand sk shout hand =
 
 -- * Valued hand
 
-valueHand :: Kaze -> Hand -> Deal -> ValuedHand
+valueHand :: Kaze -> Hand -> Kyoku -> ValuedHand
 valueHand player h deal = ValuedHand (h^.handPublic.handCalled) (h^.handConcealed) (getValue vi)
   where vi = ValueInfo
             (deal^.pRound)

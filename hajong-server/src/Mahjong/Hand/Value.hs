@@ -14,6 +14,7 @@
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Value where
 
+import Import
 import Mahjong.Hand.Yaku
 import Mahjong.Hand.Mentsu
 import Mahjong.Tiles

@@ -10,6 +10,7 @@
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Yaku.Standard where
 
+import           Import
 import Mahjong.Hand.Yaku.Builder
 import Mahjong.Hand.Mentsu (Shout(..), ShoutKind(..))
 import Mahjong.Hand.Algo (shantenBy, chiitoitsuShanten)

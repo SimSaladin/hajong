@@ -2,16 +2,17 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 ------------------------------------------------------------------------------
 -- |
--- Module         : Mahjong.Deal
+-- Module         : Mahjong.Kyoku
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Mahjong.Deal where
+module Mahjong.Kyoku where
 
 ------------------------------------------------------------------------------
+import           Import
 import           Mahjong.Tiles
 import           Mahjong.Hand
 import           Mahjong.Hand.Algo (tenpai)
@@ -24,11 +25,11 @@ import qualified Data.List as L (delete)
 
 -- | Context of game and deal flow.
 --
--- @Deal@ data type is read-only. Modifications must be encoded in
+-- @Kyoku@ data type is read-only. Modifications must be encoded in
 -- 'GameEvent's. This way it is trivial to keep clients' public states in
 -- sync.
-type DealM m =
-    ( MonadReader Deal m
+type InKyoku m =
+    ( MonadReader Kyoku m
     , MonadWriter [GameEvent] m
     , MonadError Text m
     , Functor m
@@ -36,11 +37,14 @@ type DealM m =
     , Monad m
     )
 
+handOf :: Kaze -> Lens Kyoku Kyoku (Maybe Hand) (Maybe Hand)
+handOf pk = sHands.at pk
+
 ----------------------------------------------------------------------------------------
 
 -- * Logic
 
-startDeal :: DealM m => m ()
+startDeal :: InKyoku m => m ()
 startDeal = do
     deal <- ask
     imapM_ (\p (pk,_,_) -> tellEvent . DealStarts p pk $ buildPlayerState deal pk)
@@ -48,25 +52,25 @@ startDeal = do
     view pTurn >>= startTurn
 
 -- | n seconds
-turnWaiting :: DealM m => Int -> m ()
+turnWaiting :: InKyoku m => Int -> m ()
 turnWaiting n = do
     tk <- view pTurn
     tp <- kazeToPlayer tk
     rt <- handOf' tk <&> handCanRiichiWith
     tellEvent $ DealWaitForTurnAction (tp, tk, n, rt)
 
-startTurn :: DealM m => Kaze -> m ()
+startTurn :: InKyoku m => Kaze -> m ()
 startTurn = tellEvent . DealTurnBegins
 
-advanceTurn :: DealM m => m ()
+advanceTurn :: InKyoku m => m ()
 advanceTurn = startTurn . nextKaze =<< view pTurn
 
 -- | If win(s) were declared, wall was exhausted or four kans were declared
--- (and TODO declarer is not in the yakuman tenpai): return "DealResults".
+-- (and TODO declarer is not in the yakuman tenpai): return "KyokuResults".
 --
 -- Otherwise the turn is passed to next player as if the player in turn
 -- discarded previously.
-advanceAfterDiscard :: DealM m => m (Maybe DealResults)
+advanceAfterDiscard :: InKyoku m => m (Maybe KyokuResults)
 advanceAfterDiscard = do
     tilesLeft <- view pWallTilesLeft
     dora      <- view pDora
@@ -75,7 +79,7 @@ advanceAfterDiscard = do
           | otherwise                          -> advanceTurn >> return Nothing
 
 -- | @advanceWithShout shout shouter@
-advanceWithShout :: DealM m => Shout -> Player -> m (Maybe DealResults)
+advanceWithShout :: InKyoku m => Shout -> Player -> m (Maybe KyokuResults)
 advanceWithShout shout sp = do
     sk <- playerToKaze sp
     tk <- view pTurn
@@ -96,11 +100,11 @@ advanceWithShout shout sp = do
 
 -- | Attempt to run a @TurnAction@ as the given player. Fails if it is not
 -- his turn or the action would be invalid.
-runTurn :: DealM m => Player -> TurnAction -> m (Maybe DealResults)
+runTurn :: InKyoku m => Player -> TurnAction -> m (Maybe KyokuResults)
 runTurn tp ta = flip runTurn' ta =<< playerToKaze tp
 
 -- | Like 'runTurn' but takes a kaze.
-runTurn' :: DealM m => Kaze -> TurnAction -> m (Maybe DealResults)
+runTurn' :: InKyoku m => Kaze -> TurnAction -> m (Maybe KyokuResults)
 runTurn' pk ta = do
     view pTurn >>= (`when` throwError "Not your turn") . (/= pk)
     publishTurnAction pk ta
@@ -124,12 +128,12 @@ runTurn' pk ta = do
 
 -- *** Player in turn
 
-drawWall :: DealM m => Hand -> m Hand
+drawWall :: InKyoku m => Hand -> m Hand
 drawWall hand = do
     unless (canDraw hand) (throwError "Cannot draw from wall")
     preview (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
 
-drawDeadWall :: DealM m => Hand -> m Hand
+drawDeadWall :: InKyoku m => Hand -> m Hand
 drawDeadWall hand = preview (sWall._last) >>= \case
     Nothing  -> throwError "Wall is empty"
     Just tow -> do
@@ -137,7 +141,7 @@ drawDeadWall hand = preview (sWall._last) >>= \case
         tellEvent $ DealFlipDora t (Just tow)
         t `toHandWanpai` hand
 
-doRiichi :: DealM m => Kaze -> m ()
+doRiichi :: InKyoku m => Kaze -> m ()
 doRiichi pk = do
     p <- kazeToPlayer pk
     np <- view $ pPlayers.at p.singular _Just._2.to (\a -> a - 1000)
@@ -145,23 +149,23 @@ doRiichi pk = do
     tell [DealRiichi pk, GamePoints p np]
 
 -- | Set sWaitingShouts to players who could shout the discard.
-endTurn :: DealM m => Tile -> m ()
+endTurn :: InKyoku m => Tile -> m ()
 endTurn dt = waitingShouts dt >>= tell . map DealWaitForShout
 
 -- *** Automatic actions
 
-autoDiscard :: DealM m => m ()
+autoDiscard :: InKyoku m => m ()
 autoDiscard = do
     tk <- view pTurn
     void $ runTurn' tk . TurnTileDiscard =<< handAutoDiscard =<< handOf' tk
 
-autoDraw, autoDrawWanpai :: DealM m => m ()
+autoDraw, autoDrawWanpai :: InKyoku m => m ()
 autoDraw = void . flip runTurn' (TurnTileDraw False Nothing) =<< view pTurn
 autoDrawWanpai = void . flip runTurn' (TurnTileDraw True Nothing) =<< view pTurn
 
 -- ** Results
 
-endDraw :: DealM m => m DealResults
+endDraw :: InKyoku m => m KyokuResults
 endDraw = do
     hands <- view sHands
     let x@(tp, np) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
@@ -171,7 +175,7 @@ endDraw = do
     np' <- mapM kazeToPlayer np
     dealEnds $ DealDraw (map (,r) tp') (map (,p) np')
 
-endTsumo :: DealM m => m DealResults
+endTsumo :: InKyoku m => m KyokuResults
 endTsumo = do
     honba   <- view pHonba
     tk      <- view pTurn
@@ -181,7 +185,7 @@ endTsumo = do
     win     <- toWinner tp
     dealEnds $ DealTsumo [win] (tsumoPayers honba oja (win^._3.vhValue.vaValue) $ L.delete tp players)
 
-endRon :: DealM m => Player -> Player -> m DealResults
+endRon :: InKyoku m => Player -> Player -> m KyokuResults
 endRon sp tp = do
     h   <- view pHonba
     win <- toWinner sp
@@ -189,12 +193,12 @@ endRon sp tp = do
     let basic = win^._3.vhValue.vaValue
     dealEnds $ DealRon [win] [(tp, negate $ roundPoints $ basic * if' (tp == oja) 6 4 + h * 100)]
 
-dealEnds :: DealM m => DealResults -> m DealResults
+dealEnds :: InKyoku m => KyokuResults -> m KyokuResults
 dealEnds results = do
     tell $ DealEnded results : payPoints results
     return results
 
-toWinner :: DealM m => Player -> m Winner
+toWinner :: InKyoku m => Player -> m Winner
 toWinner p = do
     pk <- playerToKaze p
     h  <- handOf' pk
@@ -207,27 +211,69 @@ tsumoPayers honba oja basic payers
     | oja `elem` payers = map (\p -> (p, negate $ roundPoints $ basic * if' (p == oja) 2 1 + honba * 100)) payers
     | otherwise         = map (        , negate $ roundPoints $ basic * 2                  + honba * 100) payers
 
+-- ** Scoring
+
+payPoints :: KyokuResults -> [GameEvent]
+payPoints res = case res of
+    DealAbort{}  -> []
+    DealDraw{..} -> map g' dTenpais ++ map g dNooten
+    _            -> map f (dWinners res) ++ map g (dPayers res)
+  where f (p, v, _) = GamePoints p v
+        g (p, v)    = GamePoints p (- v)
+        g' (p, v)   = GamePoints p v
+
 roundPoints :: Points -> Points
 roundPoints x = case x `divMod` 100 of
     (a, b) | b > 0     -> a + 1
            | otherwise -> a
 
+-- * Final scoring
+
+-- |
+-- >>> finalPoints (Map.fromList [(Player 0,25000), (Player 1,25000), (Player 2,25000), (Player 3,25000)])
+-- fromList [(Player 0,35),(Player 1,5),(Player 2,-15),(Player 3,-25)]
+--
+-- >>> finalPoints (Map.fromList [(Player 0, 35700), (Player 1, 32400), (Player 2, 22200), (Player 3, 9700)])
+-- fromList [(Player 0,46),(Player 1,12),(Player 2,-18),(Player 3,-40)]
+finalPoints :: Map Player Points -> GameResults
+finalPoints xs = final & _head._2 -~ sumOf (each._2) final -- fix sum to 0
+                       & Map.fromList
+    where
+        target = 30000              -- TODO configurable target score
+        oka    = 5000 * 4           -- TODO could be something else
+        uma    = [20, 10, -10, -20] -- TODO This too
+        final  = Map.toList xs & sortBy (flip $ comparing snd)
+                               & each._2 -~ target
+                               & _head._2 +~ oka
+                               & each._2 %~ roundFinalPoints
+                               & zipWith (\s (p, s') -> (p, s + s')) uma
+
+-- |
+-- >>> roundFinalPoints 15000
+-- 15
+-- >>> roundFinalPoints (-5000)
+-- -5
+roundFinalPoints :: Int -> Int
+roundFinalPoints x = case x `divMod` 1000 of
+    (r, b) | b >= 500 -> r + 1
+           | otherwise -> r
+
 ----------------------------------------------------------------------------------------
 
 -- * Events
 
-tellPlayerState :: DealM m => Player -> m ()
+tellPlayerState :: InKyoku m => Player -> m ()
 tellPlayerState p = do
     pk <- playerToKaze p
     deal <- ask
     tellEvent . DealStarts p pk $ buildPlayerState deal pk
 
-updatePlayerNick :: DealM m => Player -> Text -> m ()
+updatePlayerNick :: InKyoku m => Player -> Text -> m ()
 updatePlayerNick p nick = playerToKaze p >>= \pk -> tellEvent (DealNick p pk nick)
 
 -- | Build the player's "@GamePlayer@" record, or the state of the game as
 -- seen by the player (hide "Deal" but show the player's own hand).
-buildPlayerState :: Deal -> Kaze -> AsPlayer
+buildPlayerState :: Kyoku -> Kaze -> AsPlayer
 buildPlayerState deal pk = flip appEndo deal $ mconcat
     [ Endo $ sEvents .~ []
     , Endo $ sHands %~ imap (\k -> if' (k == pk) id maskPublicHand)
@@ -243,7 +289,7 @@ buildPlayerState deal pk = flip appEndo deal $ mconcat
                         xs -> Just (Right xs)
 
 -- | Set the hand of player
-updateHand :: DealM m => Kaze -> Hand -> m ()
+updateHand :: InKyoku m => Kaze -> Hand -> m ()
 updateHand pk new = do
     p <- kazeToPlayer pk
     old <- handOf' pk
@@ -253,54 +299,40 @@ updateHand pk new = do
     when (_handPublic old /= _handPublic new)
         $ tellEvent (DealPublicHandChanged pk $ _handPublic new)
 
-tellEvent :: DealM m => GameEvent -> m ()
+tellEvent :: InKyoku m => GameEvent -> m ()
 tellEvent ev = tell [ev]
 
 -- | Turn a possibly sensitive TurnAction to a non-sensitive (fully public)
 -- DealEvent.
-publishTurnAction :: DealM m => Kaze -> TurnAction -> m ()
+publishTurnAction :: InKyoku m => Kaze -> TurnAction -> m ()
 publishTurnAction pk ra = tellEvent $ case ra of
     TurnTileDraw b _ -> DealTurnAction pk (TurnTileDraw b Nothing)
     _                -> DealTurnAction pk ra
-
-payPoints :: DealResults -> [GameEvent]
-payPoints res = case res of
-    DealAbort{}  -> []
-    DealDraw{..} -> map g' dTenpais ++ map g dNooten
-    _            -> map f (dWinners res) ++ map g (dPayers res)
-  where f (p, v, _) = GamePoints p v
-        g (p, v)    = GamePoints p (- v)
-        g' (p, v)   = GamePoints p v
 
 ----------------------------------------------------------------------------------------
 
 -- * Query info
 
-kazeToPlayer :: DealM m => Kaze -> m Player
+kazeToPlayer :: InKyoku m => Kaze -> m Player
 kazeToPlayer k = do
     mp <- view pPlayers <&> ifind (\_ x -> x^._1 == k)
     maybe (throwError "Player not found") (return . fst) mp
 
-playerToKaze :: DealM m => Player -> m Kaze
+playerToKaze :: InKyoku m => Player -> m Kaze
 playerToKaze p = do
     rp <- view pPlayers
     let mk = rp ^. at p
     maybe (throwError "Player not found") (return . (^._1)) mk
 
-handOf' :: DealM m => Kaze -> m Hand
+handOf' :: InKyoku m => Kaze -> m Hand
 handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") return
 
 ----------------------------------------------------------------------------------------
 
--- * Functions
-
-handOf :: Kaze -> Lens Deal Deal (Maybe Hand) (Maybe Hand)
-handOf pk = sHands.at pk
-
 -- * Kyoku ends
 
 -- | Advance the game to next deal, or end it.
-nextDeal :: Deal -> IO (Either GameResults Deal)
+nextDeal :: Kyoku -> IO (Either GameResults Kyoku)
 nextDeal deal = case maybeGameResults deal of
     Just r  -> return (Left r)
     Nothing -> do
@@ -340,8 +372,8 @@ nextDeal deal = case maybeGameResults deal of
 
 -- | Results are returned if west or higher round has just ended and
 -- someone is winning (over 30000 points).
-maybeGameResults :: Deal -> Maybe GameResults
-maybeGameResults Deal{..}
+maybeGameResults :: Kyoku -> Maybe GameResults
+maybeGameResults Kyoku{..}
     | minimumOf (traversed._2) _pPlayers < Just 0 = score
     | otherwise = do
         guard (_pRound >= Nan)
@@ -351,53 +383,15 @@ maybeGameResults Deal{..}
   where
     score = return . finalPoints $ view _2 <$> _pPlayers
 
--- ** Waiting
+-- * Apply events
 
-filterCouldShout :: Tile -- ^ Tile to shout
-                 -> Kaze -- ^ Whose tile
-                 -> Map Kaze Hand
-                 -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
-filterCouldShout dt np =
-    sortBy (shoutPrecedence np)
-    . concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
-  where flatten (k, xs) = map (k,) xs
-
-waitingShouts :: DealM m => Tile -> m [WaitShout]
-waitingShouts dt = do
-    let secs = 15 -- ^ TODO hard-coded limit
-
-    lastTile <- view pWallTilesLeft <&> (== 0)
-    shouts'  <- filterCouldShout dt <$> view pTurn <*> view sHands
-
-    let shouts = map (liftA2 (,) (^?!_head._1) (^..each._2))
-                $ groupBy ((==) `on` view _1)
-                $ if' lastTile (filter ((`elem` [Ron, Chankan]) . shoutKind . snd)) id shouts'
-
-    players <- mapM (kazeToPlayer . fst) shouts
-
-    return $ zipWith (\p (k, xs) -> (p, k, secs, xs)) players shouts
-
-finalPoints :: Map Player Points -> GameResults
-finalPoints xs =
-    let ((winner, _, total), xs') = imapAccumR
-            (\p (p',ps',tot) ps -> if' (ps > ps') ((p, ps,tot), go ps)
-                                       ((p',ps',tot + go ps), go ps))
-                                       (error "", 0, 0) xs
-    in xs' & ix winner .~ (- total)
-  where
-    go x = case x `divMod` 1000 of
-        (r, b) | r > 30000 && b > 0 -> r + 1 - 30
-               | otherwise          -> r - 30
-
--- ** Client functions
-
-dealGameEvent :: GameEvent -> Deal -> Deal
+dealGameEvent :: GameEvent -> Kyoku -> Kyoku
 dealGameEvent ev = appEndo . mconcat $ case ev of
     DealTurnBegins p
             -> [ Endo $ pTurn .~ p
                , Endo $ sWaiting .~ Nothing ]
     DealTurnAction p ta
-            -> [ Endo $ dealTurnAction p ta ]
+            -> [ dealTurnAction p ta ]
     DealTurnShouted p _shout
             -> [ Endo $ pTurn .~ p
                 {-, Endo $ sHands.ix p %~
@@ -441,8 +435,8 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
     GamePoints pk ps
             -> [ Endo $ pPlayers.ix pk._2 +~ ps ]
 
-dealTurnAction :: Kaze -> TurnAction -> Deal -> Deal
-dealTurnAction p ta = appEndo . mconcat $ case ta of 
+dealTurnAction :: Kaze -> TurnAction -> Endo Kyoku
+dealTurnAction p ta = mconcat $ case ta of 
     TurnTileDiscard dc
             -> [ Endo $ sHands.ix p.handPublic.handDiscards %~ (|> dc)
                , if' (dc^.dcRiichi) (Endo $ sHands.ix p.handPublic.handRiichi .~ True) mempty ]
@@ -459,3 +453,29 @@ dealTurnAction p ta = appEndo . mconcat $ case ta of
                          . filtered isShoum %~ promoteToKantsu ]
     TurnTsumo
             -> [] -- XXX: should something happen?
+
+-- * Waiting
+
+filterCouldShout :: Tile -- ^ Tile to shout
+                 -> Kaze -- ^ Whose tile
+                 -> Map Kaze Hand
+                 -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
+filterCouldShout dt np =
+    sortBy (shoutPrecedence np)
+    . concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
+  where flatten (k, xs) = map (k,) xs
+
+waitingShouts :: InKyoku m => Tile -> m [WaitShout]
+waitingShouts dt = do
+    let secs = 15 -- TODO hard-coded limit
+
+    lastTile <- view pWallTilesLeft <&> (== 0)
+    shouts'  <- filterCouldShout dt <$> view pTurn <*> view sHands
+
+    let shouts = map (liftA2 (,) (^?!_head._1) (^..each._2))
+                $ groupBy ((==) `on` view _1)
+                $ if' lastTile (filter ((`elem` [Ron, Chankan]) . shoutKind . snd)) id shouts'
+
+    players <- mapM (kazeToPlayer . fst) shouts
+
+    return $ zipWith (\p (k, xs) -> (p, k, secs, xs)) players shouts

@@ -1,0 +1,28 @@
+<h1>Status
+
+<h2>Active players
+<ul>
+  $forall (i, cr) <- IM.toList _seReserved
+    <li><b>#{i}</b> (#{_cNick cr}) &mdash; #
+      $if _cRegistered cr
+        <b>registered
+      $else
+        <i>anonymous
+      &mdash; #
+      $maybe p <- _cParted cr
+        <i>Disconnected
+        \ #{show p}
+      $nothing
+        <b>Connected
+        \ #{show (_cJoined cr)}
+
+<h2>Reserved nicks
+<ul>
+  $forall (n, i) <- M.toList _seNicks
+    <li>#{i} &mdash; #{n}
+
+
+<h2>Games
+<ul>
+  $forall (i, g) <- IM.toList _seGames
+    <li>#{i} &mdash; #{show g}

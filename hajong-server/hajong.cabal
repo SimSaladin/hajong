@@ -29,9 +29,10 @@ library
   hs-source-dirs:      src
   exposed-modules:     Hajong.Server
                      , Hajong.Worker
+                     , Hajong.Client
                      , Hajong.Connections
                      , Mahjong
-                     , Mahjong.Deal
+                     , Mahjong.Kyoku
                      , Mahjong.Hand
                      , Mahjong.Hand.Algo
                      , Mahjong.Hand.Algo.WaitTree
@@ -43,10 +44,9 @@ library
                      , Mahjong.Round
                      , Mahjong.State
                      , Mahjong.Tiles
+                     , Import
                      -- , Hajong.Client.CLI
                      -- , Hajong.Client.PrettyPrint
-
-  other-modules:       Prelude
 
   build-depends:       base                    >=4.6
                      , lens                    >=4.0
@@ -87,8 +87,16 @@ library
                      , Rank2Types
                      , LambdaCase
                      , DeriveDataTypeable
+                     , NoImplicitPrelude
   default-language:    Haskell2010
   ghc-options:         -threaded -Wall
+
+test-suite doctests
+  type:             exitcode-stdio-1.0
+  ghc-options:      -threaded
+  main-is:          doctests.hs
+  build-depends:    base, doctest >= 0.8
+  default-language: Haskell2010
 
 test-suite test
   type:                exitcode-stdio-1.0

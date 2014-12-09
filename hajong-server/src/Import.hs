@@ -1,14 +1,14 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 ------------------------------------------------------------------------------
 -- |
--- Module         : Prelude
+-- Module         : Import
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Prelude (module Prelude, module X) where
+module Import (module Import, module X) where
 
 ------------------------------------------------------------------------------
 import           ClassyPrelude                as X hiding (Index, (<.>), uncons, unsnoc, cons, snoc)

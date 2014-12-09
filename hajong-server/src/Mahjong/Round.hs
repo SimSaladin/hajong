@@ -14,7 +14,7 @@
 module Mahjong.Round where
 
 ------------------------------------------------------------------------------
--- import           Mahjong.Deal
+import           Import
 import           Mahjong.State
 
 ------------------------------------------------------------------------------
@@ -30,7 +30,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as P
 data GameState playerID = GameState
                    { _gamePlayers :: Map Player playerID
                    , _gameName    :: Text
-                   , _gameDeal    :: Maybe Deal -- maybe in running game
+                   , _gameDeal    :: Maybe Kyoku -- maybe in running game
                    } deriving (Show, Read, Functor)
 
 instance P.Pretty p => P.Pretty (GameState p) where
@@ -52,7 +52,7 @@ makeLenses ''GameState
 -- * RoundM
 
 -- | Concrete instance of "Mahjong.Round.RoundM".
-type RoundM = RWST Deal [GameEvent] Deal (Either Text)
+type RoundM = RWST Kyoku [GameEvent] Kyoku (Either Text)
 
 -- | Execute a round action in the "GameState".
 --
@@ -63,7 +63,7 @@ type RoundM = RWST Deal [GameEvent] Deal (Either Text)
 -- RoundM-actions do not explicitly modify the public state (RiichiPublic),
 -- so **it is important you apply the changes implied by the events on the
 -- state!** Haskell clients may use "@applyRoundEvents@".
-runRoundM :: RoundM r -> GameState p -> Either Text (r, Deal, [GameEvent])
+runRoundM :: RoundM r -> GameState p -> Either Text (r, Kyoku, [GameEvent])
 runRoundM m = maybe (Left "No active round!") run . _gameDeal
     where run rs = runRWST m rs rs
 

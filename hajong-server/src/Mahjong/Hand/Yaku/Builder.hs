@@ -13,6 +13,7 @@ module Mahjong.Hand.Yaku.Builder where
 import           Control.Monad.Free
 import           Control.Monad.State
 
+import           Import
 import           Mahjong.Hand.Mentsu
 import           Mahjong.Tiles (Tile(..), Number(..))
 import qualified Mahjong.Tiles as T

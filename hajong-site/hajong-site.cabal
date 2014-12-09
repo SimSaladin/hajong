@@ -21,6 +21,7 @@ library
                      Settings.Development
                      Handler.Home
                      Handler.Play
+                     Handler.Status
                      GameServer
 
     if flag(dev) || flag(library-only)
@@ -79,6 +80,7 @@ library
                  , yesod-auth-account
                  , concurrent-extra
                  , websockets
+                 , containers
 
     -- see https://github.com/yesodweb/yesod/issues/814
     if !os(windows)

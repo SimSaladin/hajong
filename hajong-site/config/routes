@@ -13,3 +13,4 @@
 /token      AuthTokenR GET
 
 /support    SupportR GET POST
+/status StatusR GET

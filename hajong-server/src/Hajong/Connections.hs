@@ -16,12 +16,10 @@
 module Hajong.Connections where
 
 ------------------------------------------------------------------------------
-import           Mahjong
+import           Mahjong hiding ((.=))
 
 ------------------------------------------------------------------------------
-import           Prelude hiding ((.=))
 import qualified Data.Map as M
-import           Control.Monad.Logger
 import qualified Network.WebSockets         as WS
 import           Data.Aeson hiding (Value)
 import qualified Data.Aeson as A
@@ -31,6 +29,8 @@ import qualified Data.Binary as B
 import           Data.Text.Binary ()
 
 ------------------------------------------------------------------------------
+
+type Nick = Text
 
 -- * Event
 
@@ -78,9 +78,7 @@ instance WS.WebSocketsData InternalResult where
 instance B.Binary InternalEvent
 instance B.Binary InternalResult
 
--- * Clients
-
-type Nick = Text
+-- * Games and lounge
 
 data GameSettings = GameSettings { gameTitle :: Text }
                   deriving (Show, Read, Typeable, Generic)
@@ -90,53 +88,7 @@ data Lounge = Lounge
             { _loungeNicksIdle :: Set Nick
             , _loungeGames     :: IntMap (GameSettings, Set Nick)
             } deriving (Show, Read)
-
 makeLenses ''Lounge
-
--- | NOTE: Client equality is decided by getNick exclusively, and show
--- = unpack . getNick.
-data Client = Client
-            { getNick  :: Nick
-            , getIdent :: Int -- ^ 0 if none set
-            , isReal   :: Bool
-            , isReady  :: Bool
-            , unicast  :: (WS.WebSocketsData e, MonadIO m) => e -> m ()
-            , receive  :: (WS.WebSocketsData e, MonadIO m) => m e
-            }
-
-instance Eq Client where (==) = (==) `on` getIdent
-instance Ord Client where (<=) = (<=) `on` getIdent
-instance Show Client where show = unpack . getNick
-
-instance IsPlayer Client where
-    isBot = not . isReal
-    playerReady = isReady
-    playerNick = getNick
-
-dummyClient :: Nick -> Client
-dummyClient nick = Client nick 0 False False (const (return ())) (error "called receive of dummy Client")
-
--- * Sending to client(s)
-
-multicast :: MonadIO m => GameState Client -> Event -> m ()
-multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
-    -- TODO Just move this to server already
-
-unicastError :: (MonadLogger m, MonadIO m) => Client -> Text -> m ()
-unicastError c txt = do
-    $logError $ "Client error [" ++ getNick c ++ "]: " <> txt
-    unicast c $ Invalid txt
-
-clientEither :: (MonadLogger m, MonadIO m) => Client -> Either Text a -> (a -> m ()) -> m ()
-clientEither client (Left err) _ = unicastError client err
-clientEither _ (Right a) f  = f a
-
--- * Web socket specific
-
-websocketClient :: Nick -> WS.Connection -> Client
-websocketClient nick conn = Client nick 0 True True
-    (liftIO . WS.sendTextData conn)
-    (liftIO $ WS.receiveData conn)
 
 -- Helpers -------------------------------------------------------------------
 
@@ -147,7 +99,7 @@ atEvent t xs = object ("event" .= t : xs)
 -- Deal as a player
 
 -- Adds "mypos", "player", "hands", "myhand", "event".
-dealAsPlayer :: Text -> Deal -> Kaze -> Player -> A.Value
+dealAsPlayer :: Text -> Kyoku -> Kaze -> Player -> A.Value
 dealAsPlayer ev deal pk p =
     let Object d = toJSON deal
         Object o = object
@@ -233,7 +185,7 @@ instance ToJSON Honor where
     toJSON (Sangenpai s) = toJSON (tshow s)
     toJSON (Kazehai k) = toJSON k
 
-instance ToJSON Deal where
+instance ToJSON Kyoku where
     toJSON x = object
         [ "round"      .= _pRound x
         , "deal"       .= _pDeal x
@@ -258,7 +210,7 @@ $(deriveJSON (aesonOptions 6) ''Mentsu)
 $(deriveJSON (aesonOptions 0) ''MentsuKind)
 $(deriveJSON (aesonOptions 0) ''ShoutKind)
 $(deriveJSON (aesonOptions 5) ''Shout)
-$(deriveJSON (aesonOptions' 1 4) ''DealResults)
+$(deriveJSON (aesonOptions' 1 4) ''KyokuResults)
 $(deriveJSON (aesonOptions 4) ''Yaku)
 $(deriveJSON (aesonOptions 3) ''Value)
 $(deriveJSON (aesonOptions 3) ''ValuedHand)

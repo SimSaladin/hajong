@@ -33,6 +33,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as P
 
 import Mahjong.Hand.Mentsu
 import Mahjong.Tiles
+import           Import
 
 -- Types
 

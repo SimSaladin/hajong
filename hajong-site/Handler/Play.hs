@@ -31,7 +31,6 @@ getLobbyR = playLayout Nothing
 playLayout :: Maybe Int -> Handler Html
 playLayout mgid = do
     mauth <- maybeAuthId
-    (formWidget, formEnctype) <- generateFormPost newGameForm
     defaultLayout $ do
         setTitle "Playing"
         addScriptRemote "http://elm-lang.org/elm-runtime.js"
@@ -40,7 +39,15 @@ playLayout mgid = do
 {-# INLINE playLayout #-}
 
 -- | Creating games
-postNewGameR :: Handler Html
+getNewGameR, postNewGameR :: Handler Html
+getNewGameR  = do
+    _ <- requireAuthId
+    -- TODO require not already in a game
+    (formWidget, formEnctype) <- generateFormPost newGameForm
+    defaultLayout $ do
+        setTitle "Create a game"
+        $(widgetFile "new-game")
+
 postNewGameR = do
     -- uuid <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
     ((FormSuccess settings,_), _) <- runFormPost newGameForm
@@ -55,7 +62,7 @@ newGameForm = renderDivs $ G.GameSettings
 getGameR, postGameR :: Int -> Handler Html
 getGameR        = postGameR
 postGameR ident = do
-    let v = undefined -- TODO
+    game <- G.getGame ident >>= maybe notFound return
     defaultLayout $ do
         setTitle $ toHtml $ "Configure game " <> show ident
         $(widgetFile "game-conf")

@@ -26,15 +26,15 @@
   <div#controls-normal>
 
     $maybe user <- muser
-      <!-- logged in and registered -->
 
+      <!-- logged in and registered -->
       <a.btn.btn-full href=@{LobbyR}>Go to lobby
       <a.btn.btn-full href=@{NewGameR}>Create a new game
-
       <i>Logged in as #{user}
       <a.btn.btn-full href=@{AuthR LogoutR}>Log out
 
     $nothing
+
       <!-- not logged in -->
       <p>Login or create an account.
       <a.btn.btn-full href=@{AuthR LoginR}>Log in
@@ -45,11 +45,10 @@
         <input.btn.btn-full style="margin-left:0" type=submit value="Anonymous login">
 
   <div#controls-anon hidden>
-    <!-- logged in anonymous -->
 
+    <!-- logged in anonymous -->
     <a.btn.btn-full href=@{LobbyR}>Go to lobby
     <a.btn.btn-full href=@{NewGameR}>Create a new game
-
     <p>Playing anonymously as #
       <b#nick>
     <button.btn.btn-full onclick="discardinfo()">Forget me

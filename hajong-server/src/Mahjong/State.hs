@@ -11,6 +11,7 @@
 module Mahjong.State where
 
 ------------------------------------------------------------------------------
+import           Import
 import           Mahjong.Tiles
 import           Mahjong.Hand.Mentsu
 import           Mahjong.Hand.Algo
@@ -67,10 +68,10 @@ newtype Player = Player Int deriving (Show, Read, Eq, Ord)
 
 -- * Points, results
 
-data DealResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
-                 | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
-                 | DealDraw  { dTenpais :: [(Player, Points)], dNooten :: [Payer] }
-                 | DealAbort { dReason :: AbortiveDraw }
+data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
+                  | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
+                  | DealDraw  { dTenpais :: [(Player, Points)], dNooten :: [Payer] }
+                  | DealAbort { dReason :: AbortiveDraw }
                   deriving (Show, Read, Typeable)
 
 data AbortiveDraw = Unrelated9
@@ -83,13 +84,13 @@ data AbortiveDraw = Unrelated9
 type Winner = (Player, Points, ValuedHand)
 type Payer  = (Player, Points)
 
--- * Deal
+-- * Kyoku (one hand)
 
 -- | Game state, including current round state.
 --
 -- Fields starting @_p@ are for public consumption and @_s@ for internal
 -- only.
-data Deal = Deal
+data Kyoku = Kyoku
     -- always public
     { _pRound         :: Kaze
     , _pDeal          :: Int
@@ -101,7 +102,7 @@ data Deal = Deal
     , _pPlayers       :: Map Player (Kaze, Points, Text)
     , _pHonba         :: Int
     , _pRiichi        :: Int -- ^ Points in table for riichi
-    , _pResults       :: Maybe DealResults
+    , _pResults       :: Maybe KyokuResults
     , _pDeals         :: [(Kaze, Int)] -- ^ Previous deals in decreasing order by time
 
     -- secret
@@ -113,7 +114,7 @@ data Deal = Deal
     } deriving (Show, Read, Typeable)
 
 -- | Deal from a player's perspective
-type AsPlayer = Deal 
+type AsPlayer = Kyoku 
 
 -- | Left for turn, right for shout(s)
 type Waiting = Either WaitTurnAction [WaitShout]
@@ -123,8 +124,8 @@ type WaitTurnAction = (Player, Kaze, Int, [Tile])
 
 -- Pretty instances 
 
-instance P.Pretty Deal where
-    pretty Deal{..} = P.pretty _pDeals P.<$$>
+instance P.Pretty Kyoku where
+    pretty Kyoku{..} = P.pretty _pDeals P.<$$>
         P.string "wall:"   P.<+> P.hang 0 (prettyList' _sWall) P.<$$>
         P.string "wanpai:" P.<+> P.hang 0 (prettyList' _sWanpai) P.<$$>
         P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)
@@ -160,7 +161,7 @@ data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a rou
                | DealFlipDora Tile (Maybe Tile) -- ^ New dora, tile from wall to wanpai
                | DealNick Player Kaze Text
                | DealRiichi Kaze
-               | DealEnded DealResults
+               | DealEnded KyokuResults
                | GamePoints Player Int -- ^ New points
                deriving (Show, Read, Typeable)
 
@@ -185,7 +186,7 @@ makeLenses ''Discard
 makeLenses ''HandPublic
 makeLenses ''Hand
 makeLenses ''ValuedHand
-makeLenses ''Deal
+makeLenses ''Kyoku
 
 -- * Game
 
@@ -199,10 +200,10 @@ fourPlayers = Player <$> [0 .. 3]
 -- | A new round with given player names.
 newRound :: [Player] -- ^ Players, from Ton to Shaa
          -> [Text]   -- ^ Names
-         -> IO Deal
+         -> IO Kyoku
 newRound players names = do
     oja <- (players L.!!) <$> randomRIO (0, 3)
-    dealTiles $ Deal
+    dealTiles $ Kyoku
         { _pDeal          = 1
         , _pDeals         = []
         , _pDora          = []
@@ -223,7 +224,7 @@ newRound players names = do
         , _sWaiting       = Nothing
         }
 
-dealTiles :: Deal -> IO Deal
+dealTiles :: Kyoku -> IO Kyoku
 dealTiles deal = go <$> shuffleM riichiTiles
   where
     go tiles = deal

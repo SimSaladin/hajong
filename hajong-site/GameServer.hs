@@ -9,6 +9,7 @@
 ------------------------------------------------------------------------------
 module GameServer
     ( getGame, getRegisteredUser, getNewAnonUser, G.Game, G.ClientRecord(..)
+    , getAcid
     ) where
 
 import Import hiding (update)
@@ -36,7 +37,6 @@ getRegisteredUser user = do
     acid <- getAcid
     token <- liftIO G.randomToken
     liftIO $ acid `update` G.AddRegisteredUser user token
-
 getNewAnonUser nick = do
     acid <- getAcid
     token <- liftIO G.randomToken

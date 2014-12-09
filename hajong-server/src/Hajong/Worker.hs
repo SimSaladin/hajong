@@ -25,17 +25,17 @@ module Hajong.Worker
     ) where
 
 ------------------------------------------------------------------------------
+import           Hajong.Connections
+import           Hajong.Client
+import           Mahjong
+
+------------------------------------------------------------------------------
 import           Control.Concurrent
 import           Control.Monad.Logger
 import           Control.Concurrent.Async
 import           Data.Maybe (fromJust)
 import           System.Log.FastLogger
 import qualified Data.List as L
-
-------------------------------------------------------------------------------
-import           Hajong.Connections hiding (multicast)
-import qualified Hajong.Connections as Con (multicast)
-import           Mahjong
 
 ------------------------------------------------------------------------------
 default (Text)
@@ -100,12 +100,13 @@ unsafeRoundM = roundM >=> either failed go
 
 -- * Update state and emit events
 
--- | Documentation for 'multicast'
+-- | Send to everyone in game.
 multicast :: Event -> Worker ()
-multicast ev = rview wGame >>= (`Con.multicast` ev)
+multicast ev = do gs <- rview wGame
+                  mapM_ (`unicast` ev) (gs^.gamePlayers^..each)
 
 -- | The game state has changed.
-updateState :: Deal -> [GameEvent] -> Worker ()
+updateState :: Kyoku -> [GameEvent] -> Worker ()
 updateState deal events = rmodify wGame $
     gameDeal._Just .~ foldl' (flip dealGameEvent) deal events
 
@@ -359,7 +360,7 @@ waitForShouts = do
 -- ** End game
 
 -- | The round ended.
-endDeal :: DealResults -> WCont
+endDeal :: KyokuResults -> WCont
 endDeal results = do
     $logInfo $ "Deal ended (" ++ tshow results ++ ")"
     let secs = 15 -- TODO Configurable

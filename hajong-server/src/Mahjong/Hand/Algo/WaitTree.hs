@@ -28,6 +28,7 @@ import           Data.List.HT (removeEach)
 import           Data.Either (isLeft)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
+import           Import
 import Mahjong.Tiles
 import Mahjong.Hand.Mentsu
 import Mahjong.Hand.Algo

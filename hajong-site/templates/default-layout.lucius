@@ -85,3 +85,8 @@ label {
   background:red;
   color:white;
 }
+
+#game {
+  background:rgb(230,240,230);
+  padding:0.5em;
+}

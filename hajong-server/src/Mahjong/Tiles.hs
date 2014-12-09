@@ -12,7 +12,7 @@
 ------------------------------------------------------------------------------
 module Mahjong.Tiles where
 
-import Prelude hiding ((<>))
+import Import hiding ((<>))
 import Text.PrettyPrint.ANSI.Leijen (string, (<>), displayS, renderCompact)
 
 -- * Types

@@ -1,0 +1,6 @@
+
+<h1>New game
+<p>
+  <form#newgameform method=POST enctype=#{formEnctype} action=@{NewGameR}>
+    ^{formWidget}
+    <input.btn.btn-full type=submit value=Create>
