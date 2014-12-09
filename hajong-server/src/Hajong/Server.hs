@@ -84,11 +84,11 @@ data RunningGame = RunningGame
     , _gClients        :: IntMap Client
     } deriving (Typeable)
 
-data PartedException = PartedException Nick Int Text deriving (Show, Typeable)
+data PartedException = PartedException Text deriving (Show, Typeable)
 instance Exception PartedException
 
-newtype Server a = Server
-    { unServer :: ReaderT ServerSt IO a }
+--
+newtype Server a = Server { unServer :: ReaderT ServerSt IO a }
     deriving ( Functor, Applicative, Monad, MonadIO, MonadReader ServerSt )
 
 -- * Lenses
@@ -234,7 +234,7 @@ $(makeAcidic ''ServerDB [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB
 -- | Invoke the 'workerWatcher' and the websocket 'app'.
 runServerMain :: ServerSt -> IO ()
 runServerMain st = do
-    void $ runServer st restartGames
+    runServer st restartGames
     void . forkIO $ runServer st workerWatcher
     WS.runServer "0.0.0.0" 8001 $ wsApp st
 
@@ -281,10 +281,10 @@ withClient c = local (seClient.~c)
 
 -- * Games and workers
 
-restartGames :: Server (IntMap RunningGame)
+restartGames :: Server ()
 restartGames = do
     ss <- ask
-    query' GetGames >>= imapM startGame >>= atomically . swapTVar (ss^.seWorkers)
+    void $ query' GetGames >>= imapM startGame >>= atomically . swapTVar (ss^.seWorkers)
 
 startGame :: Int -> Game -> Server RunningGame
 startGame gid game = do
@@ -318,9 +318,7 @@ forkWorker gid wd = do
 wsApp :: ServerSt -> WS.ServerApp
 wsApp st pending = do
     conn  <- WS.acceptRequest pending
-    runClient (websocketClient "anonymous" conn) st initiateHandshake `catch` \case
-        WS.CloseRequest _ _ -> return ()
-        _                   -> return ()
+    runClient (websocketClient "anonymous" conn) st initiateHandshake
 
 initiateHandshake :: Server ()
 initiateHandshake = do
@@ -330,6 +328,7 @@ initiateHandshake = do
         JoinServer nick ident token mgame
             | length nick > 24 -> uniError "Maximum nick length is 24 characters"
             | otherwise        -> withClient c{getNick = nick, getIdent = ident} (handshake token mgame)
+        InternalControl secret -> internalConnect secret
         _                      -> uniError "Received an invalid Event"
 
 handshake :: Text -> Maybe Int -> Server ()
@@ -352,11 +351,11 @@ handshake token mgame = do
 afterHandshake :: ClientRecord -> Server ()
 afterHandshake cr = do
     go <- ask <&> runServer
-    liftIO $ (go (connects cr) `finally` go disconnects) `catch` \case
-        PartedException nick i reason -> go $ do
-            time <- liftIO getCurrentTime
-            update' $ PartClient time i
-            putLounge $ Message "" (nick <> " has left the server [" <> reason <> "]")
+    liftIO $
+        (go (connects cr) `catch` \case
+            WS.CloseRequest _ _ -> throwIO (PartedException "Connection vanished")
+            x                   -> throwIO (PartedException (tshow x))
+        ) `catch` (go . disconnects)
 
 -- * Worker Watcher
 
@@ -391,7 +390,7 @@ putWorker rg = atomically . putTMVar (rg^.gWorker.wInput)
 putLounge :: Event -> Server ()
 putLounge ev = rview seLounge >>= mapM_ (`unicast` ev)
 
-uni :: Event -> Server ()
+uni :: WS.WebSocketsData e => e -> Server ()
 uni ev = view seClient >>= (`unicast` ev)
 
 uniError :: Text -> Server ()
@@ -448,11 +447,13 @@ talkClient = do
     forever $ receive c >>= handleEventOf c
 
 -- | Client disconnect rituals.
-disconnects :: Server ()
-disconnects = do
+disconnects :: PartedException -> Server ()
+disconnects (PartedException reason) = do
     c <- view seClient
     let i = getIdent c
     $logInfo $ "Client disconnected (" <> tshow i <> ")"
+
+    cleanupClient reason
 
     ss <- ask
     Just cr <- query' $ GetClientRecord i
@@ -470,11 +471,18 @@ disconnects = do
         Nothing  -> return ()
     putLounge (PartServer $ getNick c)
 
+cleanupClient :: Text -> Server ()
+cleanupClient reason = do
+    c <- view seClient
+    time <- liftIO getCurrentTime
+    update' $ PartClient time (c&getIdent)
+    putLounge $ Message "" (getNick c <> " has left the server [" <> reason <> "]")
+
 handleEventOf :: Client -> Event -> Server ()
 handleEventOf c event = case event of
     JoinServer{}      -> uniError "Already joined (and nick change not implemented)"
-    PartServer reason -> liftIO $ throwIO $ PartedException (getNick c) (getIdent c) reason
-    Message _ msg     -> putLounge $ Message (getNick c) msg
+    PartServer reason -> liftIO $ throwIO $ PartedException reason
+    Message _ msg     -> putLounge $ Message (getNick c) msg -- TODO this should go to current game or lounge if in no game
     JoinGame n _      -> joinGame n
     ForceStart n      -> forceStart n
     InGameAction a    -> handleGameAction a
@@ -513,6 +521,27 @@ handleGameAction :: GameAction -> Server ()
 handleGameAction action = withInGame $ \n -> withRunningGame n $ \gr -> do
     c <- view seClient
     putWorker gr (c `WorkerGameAction` action)
+
+createGame :: GameSettings -> Server ()
+createGame settings = do
+    let game = Game settings (newEmptyGS 0 "") -- TODO makes no sense
+    res <- update' (InsertGame game)
+    case res of
+        Left err -> uni $ InternalError err
+        Right g  -> do rg <- startGame g game
+                       ws <- view seWorkers
+                       atomically $ modifyTVar ws (insertMap g rg)
+                       uni $ InternalGameCreated g 
+
+
+-- * Internal
+
+internalConnect :: Text -> Server ()
+internalConnect secret = do
+    -- TODO Check secret
+    c <- view seClient
+    forever $ receive c >>= \case
+        InternalNewGame settings -> createGame settings
 
 ------------------------------------------------------------------------------
 

@@ -48,6 +48,9 @@ nav a.active {
    input[type=email], input[type=text], textarea {
       min-width:30em;
    }
+  input[type="submit"] {
+    margin-left:8em;
+  }
 }
 
 .form-group {
@@ -73,10 +76,6 @@ form > div {
 label {
   display:inline-block;
   min-width:8em;
-}
-
-input[type="submit"] {
-  margin-left:8em;
 }
 
 /* Game only */

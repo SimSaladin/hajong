@@ -12,6 +12,7 @@ module Handler.Play where
 
 import           Import
 import qualified GameServer   as G
+import qualified Hajong.Connections as G
 
 import           Data.Time (getCurrentTime)
 import qualified Data.Text    as T
@@ -30,6 +31,7 @@ getLobbyR = playLayout Nothing
 playLayout :: Maybe Int -> Handler Html
 playLayout mgid = do
     mauth <- maybeAuthId
+    (formWidget, formEnctype) <- generateFormPost newGameForm
     defaultLayout $ do
         setTitle "Playing"
         addScriptRemote "http://elm-lang.org/elm-runtime.js"
@@ -40,9 +42,14 @@ playLayout mgid = do
 -- | Creating games
 postNewGameR :: Handler Html
 postNewGameR = do
-    -- new uuid
-    _ident  <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
-    redirect $ GameR undefined -- TODO
+    -- uuid <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
+    ((FormSuccess settings,_), _) <- runFormPost newGameForm
+    G.InternalGameCreated gid <- goGame $ G.InternalNewGame settings
+    redirect $ GameR gid
+
+newGameForm :: Form G.GameSettings
+newGameForm = renderDivs $ G.GameSettings
+    <$> areq textField "Game title" Nothing
 
 -- | Modify game settings
 getGameR, postGameR :: Int -> Handler Html

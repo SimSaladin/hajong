@@ -23,7 +23,15 @@ import Network.Wai.Logger (clockDateCacher)
 import Network
 import Data.Default (def)
 import Yesod.Core.Types (loggerSet, Logger (Logger))
+
+import Control.Monad
+import Control.Exception
+import Control.Concurrent
+import Control.Concurrent.Lock
+import Control.Concurrent.MVar
 import qualified Hajong.Server as G
+import qualified Hajong.Connections as G
+import qualified Network.WebSockets as WS
 
 -- Import all relevant handler modules here.
 -- Don't forget to add new modules to your cabal file!
@@ -74,6 +82,16 @@ makeFoundation conf = do
     st <- G.openServerDB (UnixSocket "/tmp/hajong.socket") 
     putStrLn "Hajong socket opened"
 
+    lock <- new
+    inv  <- newEmptyMVar
+    outv <- newEmptyMVar
+    forkIO $ (`finally` putStrLn "Internal control has died.") $
+        WS.runClient "localhost" 8001 "/" $ \conn -> do
+            WS.sendTextData conn (G.InternalControl "")
+            forever $ do
+                takeMVar inv >>= WS.sendTextData conn
+                WS.receiveData conn >>= putMVar outv
+
     let logger = Yesod.Core.Types.Logger loggerSet' getter
         mkFoundation p = App
             { settings = conf
@@ -83,6 +101,9 @@ makeFoundation conf = do
             , persistConfig = dbconf
             , appLogger = logger
             , appGameState = st
+            , appGameLock = lock
+            , gameIn = inv
+            , gameOut = outv
             }
         tempFoundation = mkFoundation $ error "connPool forced in tempFoundation"
         logFunc = messageLoggerSource tempFoundation logger

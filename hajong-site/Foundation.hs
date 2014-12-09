@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RecordWildCards #-}
 module Foundation where
 
 import Prelude
@@ -21,6 +22,10 @@ import Text.Hamlet (hamletFile)
 import Yesod.Core.Types (Logger)
 import Data.Acid
 import qualified Hajong.Server as G
+import qualified Hajong.Connections as G
+import Control.Concurrent.Lock
+import Control.Concurrent.MVar
+import qualified Network.WebSockets as WS
 
 -- | The site argument for your application. This can be a good place to
 -- keep settings and values requiring initialization before your application
@@ -34,6 +39,9 @@ data App = App
     , persistConfig :: Settings.PersistConf
     , appLogger :: Logger
     , appGameState :: AcidState G.ServerDB
+    , appGameLock :: Lock
+    , gameIn :: MVar G.InternalEvent
+    , gameOut :: MVar G.InternalResult
     }
 
 instance HasHttpManager App where
@@ -135,9 +143,9 @@ instance RenderMessage App FormMessage where
 getExtra :: Handler Extra
 getExtra = fmap (appExtra . settings) getYesod
 
--- Note: previous versions of the scaffolding included a deliver function to
--- send emails. Unfortunately, there are too many different options for us to
--- give a reasonable default. Instead, the information is available on the
--- wiki:
---
--- https://github.com/yesodweb/yesod/wiki/Sending-email
+goGame :: G.InternalEvent -> Handler G.InternalResult
+goGame ev = do
+    App{..} <- getYesod
+    liftIO $ with appGameLock $ do
+        putMVar gameIn ev
+        takeMVar gameOut

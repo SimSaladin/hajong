@@ -28,8 +28,8 @@
     $maybe user <- muser
       <!-- logged in and registered -->
 
-      <button.btn.btn-full href=@{LobbyR}>Go to lobby
-      <button.btn.btn-full href=@{NewGameR}>Create a new game
+      <a.btn.btn-full href=@{LobbyR}>Go to lobby
+      <a.btn.btn-full href=@{NewGameR}>Create a new game
 
       <i>Logged in as #{user}
       <a.btn.btn-full href=@{AuthR LogoutR}>Log out
@@ -47,8 +47,8 @@
   <div#controls-anon hidden>
     <!-- logged in anonymous -->
 
-    <button.btn.btn-full href=@{LobbyR}>Go to lobby
-    <button.btn.btn-full href=@{NewGameR}>Create a new game
+    <a.btn.btn-full href=@{LobbyR}>Go to lobby
+    <a.btn.btn-full href=@{NewGameR}>Create a new game
 
     <p>Playing anonymously as #
       <b#nick>

@@ -1,0 +1,13 @@
+loggedInNick = #{maybe Null String muser};
+nick = localStorage.getItem("nick")
+
+if (!loggedInNick && nick) {
+  document.getElementById("controls-normal").hidden = true;
+  document.getElementById("controls-anon").hidden = false;
+  document.getElementById("nick").innerHTML = nick;
+}
+
+function discardinfo() {
+  localStorage.clear();
+  document.location.reload();
+}

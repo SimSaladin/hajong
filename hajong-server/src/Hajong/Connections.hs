@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 ------------------------------------------------------------------------------
 -- |
 -- Module         : Hajong.Connections
@@ -26,6 +27,8 @@ import           Data.Aeson hiding (Value)
 import qualified Data.Aeson as A
 import           Data.Aeson.TH
 import           Data.Aeson.Types (Pair)
+import qualified Data.Binary as B
+import           Data.Text.Binary ()
 
 ------------------------------------------------------------------------------
 
@@ -46,14 +49,42 @@ data Event = JoinServer Nick Int Text (Maybe Int) -- nick, ident, token, game to
            | InGamePrivateEvent GameEvent
            | InGameEvents [GameEvent]
            | InGameAction GameAction
+
+           | InternalControl Text
            deriving (Show, Read)
+
+-- | Uses the aeson instances
+instance WS.WebSocketsData Event where
+    toLazyByteString   = encode
+    fromLazyByteString = either (Invalid . ("Malformed event: " ++) . pack) id . eitherDecode
+
+data InternalEvent = InternalNewGame GameSettings
+                   deriving (Show, Read, Generic)
+
+data InternalResult = InternalGameCreated Int
+                    | InternalError Text
+                    deriving (Show, Read, Generic)
+
+-- | Uses Binary
+instance WS.WebSocketsData InternalEvent where
+    toLazyByteString   = B.encode
+    fromLazyByteString = B.decode
+
+-- | Uses Binary
+instance WS.WebSocketsData InternalResult where
+    toLazyByteString   = B.encode
+    fromLazyByteString = B.decode
+
+instance B.Binary InternalEvent
+instance B.Binary InternalResult
 
 -- * Clients
 
 type Nick = Text
 
 data GameSettings = GameSettings { gameTitle :: Text }
-                  deriving (Show, Read, Typeable)
+                  deriving (Show, Read, Typeable, Generic)
+instance B.Binary GameSettings
 
 data Lounge = Lounge
             { _loungeNicksIdle :: Set Nick
@@ -69,8 +100,8 @@ data Client = Client
             , getIdent :: Int -- ^ 0 if none set
             , isReal   :: Bool
             , isReady  :: Bool
-            , unicast  :: MonadIO m => Event -> m ()
-            , receive  :: MonadIO m => m Event
+            , unicast  :: (WS.WebSocketsData e, MonadIO m) => e -> m ()
+            , receive  :: (WS.WebSocketsData e, MonadIO m) => m e
             }
 
 instance Eq Client where (==) = (==) `on` getIdent
@@ -106,10 +137,6 @@ websocketClient :: Nick -> WS.Connection -> Client
 websocketClient nick conn = Client nick 0 True True
     (liftIO . WS.sendTextData conn)
     (liftIO $ WS.receiveData conn)
-
-instance WS.WebSocketsData Event where
-    toLazyByteString   = encode
-    fromLazyByteString = either (Invalid . ("Malformed event: " ++) . pack) id . eitherDecode
 
 -- Helpers -------------------------------------------------------------------
 
@@ -159,6 +186,7 @@ instance ToJSON Event where
     toJSON (InGameEvents xs)       = atType "game-event"   ["events"  .= xs  ]
     toJSON (ForceStart nth)        = atType "game-fstart"  ["ident"   .= nth]
     toJSON (InGameAction _)        = atType "game-action"  (error "InGameAction toJSON not implemented")
+    toJSON (InternalControl s)     = atType "internal"     ["secret"  .= s]
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
@@ -251,6 +279,7 @@ instance FromJSON Event where
             "game-public"  -> fail "From server only event" -- InGameEvents       <$> undefined
             "game-action"  -> InGameAction       <$> parseJSON v
             "game-fstart"  -> ForceStart         <$> o .: "ident"
+            "internal"     -> InternalControl    <$> o .: "secret"
             _              -> pure (Invalid ("Unknown or unsupported type: " <> t))
     parseJSON _ = pure (Invalid "Top-level object expected")
 

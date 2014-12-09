@@ -11,3 +11,7 @@
       Playing as <b>#{user}</b>
     $nothing
       <i>Playing anonymously
+  <p>
+    <form#newgameform method=POST enctype=#{formEnctype} action=@{NewGameR}>
+      ^{formWidget}
+      <input.btn.btn-full type=submit value=Create>
