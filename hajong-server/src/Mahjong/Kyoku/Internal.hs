@@ -1,90 +1,30 @@
-{-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
--- |
--- Module         : Mahjong.State
+-- | 
+-- Module         : Mahjong.Kyoku.Internal
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Mahjong.State where
+module Mahjong.Kyoku.Internal where
 
 ------------------------------------------------------------------------------
 import           Import
 import           Mahjong.Tiles
+import           Mahjong.Configuration
 import           Mahjong.Hand.Mentsu
-import           Mahjong.Hand.Algo
-import           Mahjong.Hand.Value
-
 ------------------------------------------------------------------------------
-import qualified Data.Map as Map
-import qualified Data.List as L
-import           System.Random.Shuffle (shuffleM)
-import           System.Random (randomRIO)
-import qualified Text.PrettyPrint.ANSI.Leijen as P
-
+import           Mahjong.Hand.Internal
+------------------------------------------------------------------------------
+import qualified Data.Map                       as Map
+import qualified Data.List                      as L
+import           System.Random.Shuffle          (shuffleM)
+import           System.Random                  (randomRIO)
+import qualified Text.PrettyPrint.ANSI.Leijen   as P
 ------------------------------------------------------------------------------
 
--- * Hand
-
-data HandPublic = HandPublic
-                { _handCalled :: [Mentsu]
-                , _handDiscards :: [Discard]
-                , _handRiichi :: Bool
-                , _handDrawWanpai :: Bool -- ^ Should draw from wanpai
-                , _hLastFromWanpai :: Bool
-                , _handAgari :: Maybe Tile
-                , _hIppatsu :: Bool
-                , _handAgariCall :: Maybe Shout
-                , _hDoubleRiichi :: Bool
-                } deriving (Show, Read, Eq)
-
-data Hand = Hand
-          { _handConcealed :: [Tile]
-          , _handPick :: Maybe Tile
-          , _handFuriten :: Maybe Bool -- ^ Just (temporary?) - TODO updating this field
-          , _handPublic :: HandPublic
-          , _hCanTsumo :: Bool
-          } deriving (Show, Read, Eq)
-
-data Discard = Discard { _dcTile :: Tile, _dcTo :: Maybe Kaze, _dcRiichi :: Bool }
-             deriving (Show, Read, Eq)
-
--- | A hand that won.
-data ValuedHand = ValuedHand
-    { _vhMentsu :: [Mentsu]
-    , _vhTiles  :: [Tile]
-    , _vhValue  :: Value
-    } deriving (Show, Read)
-
--- * Players
-
--- | Numerical identifier for players (@[0..3]@). Note that we use 'Kaze'
--- to specifify players in-game (so the logic is simpler), and use `Player'
--- in more general settings (obviously because players change positions
--- between hands).
-newtype Player = Player Int deriving (Show, Read, Eq, Ord)
-
--- * Points, results
-
-data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
-                  | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
-                  | DealDraw  { dTenpais :: [(Player, Points)], dNooten :: [Payer] }
-                  | DealAbort { dReason :: AbortiveDraw }
-                  deriving (Show, Read, Typeable)
-
-data AbortiveDraw = Unrelated9
-                  | SuufontsuRenta -- ^ All four winds
-                  | SuuchaRiichi -- ^ All players riichi
-                  | SuukanSanra -- ^ Fourth kon declared (or fifth if one player declared all four)
-                  | Sanchahou -- ^ Three players ron
-                  deriving (Show, Read, Typeable)
-
-type Winner = (Player, Points, ValuedHand)
-type Payer  = (Player, Points)
-
--- * Kyoku (one hand)
+-- * Types
 
 -- | Game state, including current round state.
 --
@@ -122,33 +62,7 @@ type Waiting = Either WaitTurnAction [WaitShout]
 type WaitShout = (Player, Kaze, Int, [Shout])
 type WaitTurnAction = (Player, Kaze, Int, [Tile])
 
--- Pretty instances 
-
-instance P.Pretty Kyoku where
-    pretty Kyoku{..} = P.pretty _pDeals P.<$$>
-        P.string "wall:"   P.<+> P.hang 0 (prettyList' _sWall) P.<$$>
-        P.string "wanpai:" P.<+> P.hang 0 (prettyList' _sWanpai) P.<$$>
-        P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)
-
-instance Pretty Hand where
-    pretty h =
-        prettyList' (_handConcealed h) P.<+>
-        maybe "" (("|-" P.<+>) . pretty) (_handPick h)
-
-instance Pretty HandPublic where
-    pretty = do
-        -- FIXME
-        tilenum <- (length . _handCalled) <&> (13 -) . (*3)
-        return $ P.string $ unwords $ replicate tilenum "_"
-
--- Other instances
-
-instance HasGroupings Hand where
-    getGroupings h = getGroupings $ (,)
-        <$> _handCalled . _handPublic
-        <*> (liftA2 (\mp c -> maybe c (: c) mp) _handPick _handConcealed) $ h
-
--- * Actions and events
+-- ** Actions and events
 
 data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a round
                | DealWaitForShout WaitShout -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
@@ -179,20 +93,61 @@ data GameAction = GameTurn TurnAction
                 | GameDontCare -- ^ About shouting last discarded tile
                 deriving (Eq, Show, Read, Typeable)
 
--- * Lenses
+-- ** Points, results
 
---
-makeLenses ''Discard
-makeLenses ''HandPublic
-makeLenses ''Hand
-makeLenses ''ValuedHand
-makeLenses ''Kyoku
+data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
+                  | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
+                  | DealDraw  { dTenpais :: [(Player, Points)], dNooten :: [Payer] }
+                  | DealAbort { dReason :: AbortiveDraw }
+                  deriving (Show, Read, Typeable)
 
--- * Game
+data AbortiveDraw = Unrelated9
+                  | SuufontsuRenta -- ^ All four winds
+                  | SuuchaRiichi -- ^ All players riichi
+                  | SuukanSanra -- ^ Fourth kon declared (or fifth if one player declared all four)
+                  | Sanchahou -- ^ Three players ron
+                  deriving (Show, Read, Typeable)
 
-type GameResults = Map Player Points
+type Winner = (Player, Points, ValuedHand)
+type Payer  = (Player, Points)
 
--- * Initialize state
+-- ** Hand value
+
+-- | A hand that won.
+data ValuedHand = ValuedHand
+    { _vhMentsu :: [Mentsu]
+    , _vhTiles  :: [Tile]
+    , _vhValue  :: Value
+    } deriving (Show, Read)
+
+type Fu = Int
+
+type Han = Int
+
+type Points = Int
+
+-- | Hand value
+data Value = Value
+    { _vaYaku  :: [Yaku]
+    , _vaFu    :: Fu
+    , _vaHan   :: Han
+    , _vaValue :: Points -- ^ Basic points (non-dealer and not rounded)
+    , _vaNamed :: Maybe Text
+    } deriving (Show, Read)
+
+data Yaku = Yaku
+    { _yHan    :: Int -- TODO lens like naming to aeson/json
+    , _yName   :: Text
+    } deriving (Show, Read)
+
+-- | Required info to calculate the value from a hand.
+data ValueInfo = ValueInfo
+    { _vKyoku  :: Kyoku
+    , _vPlayer :: Kaze
+    , _vHand   :: Hand -- TODO Fix this data type to a specific grouping? 
+    } deriving (Show, Read)
+
+-- * Construct state
 
 fourPlayers :: [Player]
 fourPlayers = Player <$> [0 .. 3]
@@ -239,8 +194,19 @@ dealTiles deal = go <$> shuffleM riichiTiles
            ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
            (dora : wanpai, wall)   = splitAt 14 xs
 
--- | A hand that contains provided tiles in starting position
-initHand :: [Tile] -> Hand
-initHand tiles = Hand tiles Nothing Nothing
-    (HandPublic [] [] False False False Nothing False Nothing False)
-    False
+-- * Lenses
+
+--
+makeLenses ''Kyoku
+makeLenses ''ValueInfo
+makeLenses ''ValuedHand
+makeLenses ''Value
+makeLenses ''Yaku
+
+-- Instances
+
+instance P.Pretty Kyoku where
+    pretty Kyoku{..} = P.pretty _pDeals P.<$$>
+        P.string "wall:"   P.<+> P.hang 0 (prettyList' _sWall) P.<$$>
+        P.string "wanpai:" P.<+> P.hang 0 (prettyList' _sWanpai) P.<$$>
+        P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)

@@ -26,14 +26,19 @@ module Mahjong.Hand.Algo
     Wait, Grouping, TileGroup(..),
     ) where
 
+------------------------------------------------------------------------------
+import           Import
+import           Mahjong.Hand.Internal
+import           Mahjong.Hand.Mentsu
+import           Mahjong.Tiles
+
+------------------------------------------------------------------------------
 import           Data.Maybe (fromJust)
 import           Data.List (delete, nub)
 import qualified Data.List as L
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 
-import Mahjong.Hand.Mentsu
-import Mahjong.Tiles
-import           Import
+------------------------------------------------------------------------------
 
 -- Types
 
@@ -182,6 +187,11 @@ instance HasGroupings [x] => HasGroupings [[x]] where
                           ss     = map (minimumEx . map shanten') gs
                           min_ss = minimumEx ss
                           in concatMap fst . filter ((== min_ss) . snd) $ zip gs ss
+
+instance HasGroupings Hand where
+    getGroupings h = getGroupings $ (,)
+        <$> _handCalled . _handPublic
+        <*> (liftA2 (\mp c -> maybe c (: c) mp) _handPick _handConcealed) $ h
 
 shanten :: HasGroupings x => x -> Shanten
 shanten = shantenBy shanten'

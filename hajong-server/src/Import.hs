@@ -20,11 +20,9 @@ import           Control.Monad.State.Class    as X
 import           Control.Monad.Writer.Class   as X
 import           Control.Monad.Trans.Either   as X
 import           Data.Aeson.TH
-
 ------------------------------------------------------------------------------
 import qualified Text.PrettyPrint.ANSI.Leijen as P
-import           Text.PrettyPrint.ANSI.Leijen as X (Pretty(..))
-
+import           Text.PrettyPrint.ANSI.Leijen as X (Pretty(..), (<+>), string)
 ------------------------------------------------------------------------------
 
 type CanError m = (MonadError Text m, Functor m)

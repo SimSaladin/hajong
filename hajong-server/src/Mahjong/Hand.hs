@@ -12,20 +12,27 @@
 -- (@Hand@), and functions that operate on a hand.
 ------------------------------------------------------------------------------
 module Mahjong.Hand
-    ( module Mahjong.Hand
+    ( Hand(..), HandPublic(..)
+    , module Mahjong.Hand
+    , module Mahjong.Hand.Algo
     , module Mahjong.Hand.Mentsu
     , module Mahjong.Hand.Value
+    , module Mahjong.Hand.Yaku
     ) where
 
+------------------------------------------------------------------------------
 import qualified Data.List as L
-
+------------------------------------------------------------------------------
 import           Import
-import Mahjong.Hand.Mentsu
-import Mahjong.Hand.Value
-import Mahjong.Hand.Algo
-import Mahjong.Hand.Yaku
-import Mahjong.Tiles
-import Mahjong.State
+import           Mahjong.Tiles
+import           Mahjong.Kyoku.Internal
+------------------------------------------------------------------------------
+import           Mahjong.Hand.Algo
+import           Mahjong.Hand.Mentsu
+import           Mahjong.Hand.Value
+import           Mahjong.Hand.Yaku
+import           Mahjong.Hand.Internal
+------------------------------------------------------------------------------
 
 -- | Hide private info from the data type.
 maskPublicHand :: Hand -> Hand
@@ -232,5 +239,14 @@ tileFromHand tile hand
     | (xs, _ : ys) <- break (== tile) (_handConcealed hand) = return $ handConcealed .~ (xs ++ ys) $ hand
     | otherwise                                             = throwError "Tile not in hand"
 
+-- |
+-- >>> [1..5] `isSubListOf` [1..9]
+-- True
+--
+-- >>> [1,1,1] `isSubListOf` [1,2,1,1]
+-- True
+--
+-- >>> [1,1] `isSubListOf` [1, 2, 3]
+-- False
 isSubListOf :: Eq a => [a] -> [a] -> Bool
 isSubListOf xs ys = length ys - length (ys L.\\ xs) == length xs

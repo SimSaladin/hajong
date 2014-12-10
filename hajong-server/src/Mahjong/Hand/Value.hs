@@ -14,40 +14,27 @@
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Value where
 
-import Import
-import Mahjong.Hand.Yaku
-import Mahjong.Hand.Mentsu
-import Mahjong.Tiles
-
--- * Hand value
-
-type Fu     = Int
-type Han    = Int
-type Points = Int
-
--- | Hand value
-data Value = Value
-    { _vaYaku  :: [Yaku]
-    , _vaFu    :: Fu
-    , _vaHan   :: Han
-    , _vaValue :: Points -- ^ Basic points (non-dealer and not rounded)
-    , _vaNamed :: Maybe Text
-    } deriving (Show, Read)
-
-makeLenses ''Value
+------------------------------------------------------------------------------
+import            Import
+import            Mahjong.Kyoku.Internal
+import            Mahjong.Tiles
+------------------------------------------------------------------------------
+import            Mahjong.Hand.Internal
+import            Mahjong.Hand.Yaku
+import            Mahjong.Hand.Mentsu
+------------------------------------------------------------------------------
 
 -- ** Calculating
 
-
 -- |
 -- >>> getValue (ValueInfo {vRound = Ton, vPlayer = Ton, vRiichi = True, vConcealed = True, vDiscarded = ["N" ,"W" ,"G!","S7","P9","M6","S2","R!","S9","P1"], vMentsu = [], vWinWith = "P2", vWinCalled = Nothing, vTiles = ["S5","P6","S6","P5","P4","S4","M5","S2","P3","P7","S7","S3","M5","P2"], vIppatsu = False, vDoubleRiichi = False, vTilesLeft = 29, vFromWanpai = False})
--- Value {_vaYaku = [Yaku {yakuHan = 1, yakuName = "Menzen Tsumo"},Yaku {yakuHan = 1, yakuName = "Riichi"}], _vaFu = 20, _vaHan = 2, _vaValue = 320, _vaNamed = Nothing}
+-- Value {_vaYaku = [Yaku {_yHan = 1, _yName = "Menzen Tsumo"},Yaku {_yHan = 1, _yName = "Riichi"}], _vaFu = 20, _vaHan = 2, _vaValue = 320, _vaNamed = Nothing}
 getValue :: ValueInfo -> Value
 getValue vi = Value yaku fu han val name
   where
     yaku        = getYaku vi
     fu          = getFu yaku vi
-    han         = (each.to yakuHan) `sumOf` yaku
+    han         = (each.yHan) `sumOf` yaku
     (val, name) = valued yaku han fu
 
 getYaku :: ValueInfo -> [Yaku]
@@ -56,9 +43,9 @@ getYaku vi = mapMaybe (runYakuCheck vi) allStandard
 -- | Calculate fu points.
 getFu :: [Yaku] -> ValueInfo -> Fu
 getFu ys
-  | any (\y -> yakuName y == "Chiitoitsu") ys = const 25
-  | otherwise = rounded . sum . sequence [ sum . map mentsuValue . vMentsu
-                                         , waitValue, baseFu ]
+  | any (\y -> _yName y == "Chiitoitsu") ys = const 25
+  | otherwise = rounded . sum . sequence
+    [ sum . map mentsuValue . vMentsu, waitValue, baseFu ]
     where rounded = (* 10) . fst . (`divMod` 10)
 
 baseFu :: ValueInfo -> Fu
@@ -103,7 +90,7 @@ valued yaku han fu
     | han <= 7  = haneman
     | han <= 10 = baiman
     | han <= 12 = sanbaiman
-    | anyOf (each.to yakuHan) (== 13) yaku = yakuman
+    | anyOf (each.yHan) (== 13) yaku = yakuman
     | otherwise = kazoeYakuman
   where basic        = fu * (2 ^ (2 + han))
         mangan       = (2000, Just "Mangan")
@@ -112,3 +99,4 @@ valued yaku han fu
         sanbaiman    = (6000, Just "Sanbaiman")
         kazoeYakuman = (8000, Just "Kazoe-yakuman")
         yakuman      = (8000, Just "Yakuman")
+

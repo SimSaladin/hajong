@@ -8,17 +8,14 @@
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Yaku
-    ( Yaku(..)
+    ( runYakuCheck, allStandard) where
 
-    -- * Check
-    , ValueInfo(..), runYakuCheck
-
-    -- * Available yaku
-    , allStandard
-    ) where
-
+------------------------------------------------------------------------------
 import Mahjong.Hand.Yaku.Builder
 import Mahjong.Hand.Yaku.Standard
+------------------------------------------------------------------------------
+import Mahjong.Kyoku.Internal
+------------------------------------------------------------------------------
 
 allStandard :: [YakuCheck Yaku]
 allStandard = 

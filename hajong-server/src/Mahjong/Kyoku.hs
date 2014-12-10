@@ -15,13 +15,13 @@ module Mahjong.Kyoku where
 import           Import
 import           Mahjong.Tiles
 import           Mahjong.Hand
-import           Mahjong.Hand.Algo (tenpai)
-import           Mahjong.State
-
+------------------------------------------------------------------------------
+import           Mahjong.Kyoku.Internal
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
 import           Data.Monoid (Endo(..))
 import qualified Data.List as L (delete)
+------------------------------------------------------------------------------
 
 -- | Context of game and deal flow.
 --
@@ -122,7 +122,7 @@ runTurn' pk ta = do
         TurnTileDraw False _ -> drawWall h >>= updateHand pk >> return Nothing
         TurnTileDraw True  _ -> drawDeadWall h >>= updateHand pk >> return Nothing
         TurnTsumo            -> handWin Nothing h >>= updateHand' pk (Just <$> endTsumo)
-        TurnShouminkan tile  -> shouminkanOn tile h >>= updateHand pk >> return Nothing
+        TurnShouminkan tile  -> shouminkanOn tile h >>= updateHand' pk (runTurn' pk (TurnTileDraw True (error "not used")))
 
 -- *** Player in turn
 
@@ -398,72 +398,86 @@ maybeGameResults Kyoku{..}
 
 dealGameEvent :: GameEvent -> Kyoku -> Kyoku
 dealGameEvent ev = appEndo . mconcat $ case ev of
-    DealTurnBegins p
-            -> [ Endo $ pTurn .~ p
-               , Endo $ sWaiting .~ Nothing ]
-    DealTurnAction p ta
-            -> [ dealTurnAction p ta ]
-    DealTurnShouted p _shout
-            -> [ Endo $ pTurn .~ p
-                {-, Endo $ sHands.ix p %~
-                      ( handPublic.handCalled %~ (|> fromShout shout)
-                      . handConcealed %~ (L.\\ shoutTo shout)
-                      . if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
-                      )
-               , Endo $ sHands.ix (shoutFrom shout)
-                      . handPublic.handDiscards._last.dcTo .~ Just p -}
-               ]
+
+    DealTurnBegins p ->
+        [ Endo $ pTurn .~ p
+        , Endo $ sWaiting .~ Nothing ]
+
+    DealTurnAction p ta ->
+        [ dealTurnAction p ta ]
+
+    DealTurnShouted p _shout ->
+        [ Endo $ pTurn .~ p
+         {-, Endo $ sHands.ix p %~
+               ( handPublic.handCalled %~ (|> fromShout shout)
+               . handConcealed %~ (L.\\ shoutTo shout)
+               . if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
+               )
+        , Endo $ sHands.ix (shoutFrom shout)
+               . handPublic.handDiscards._last.dcTo .~ Just p -}
+        ]
 
     -- TODO get rid these in favor of finer control
-    DealPublicHandChanged pk hp -> [ Endo $ sHands.ix pk.handPublic .~ hp ]
-    DealPrivateHandChanged _ pk h -> [ Endo $ sHands.ix pk .~ h ]
+    DealPublicHandChanged pk hp ->
+        [ Endo $ sHands.ix pk.handPublic .~ hp ]
 
-    DealEnded how
-            -> [ Endo $ pResults .~ Just how ]
-    DealNick p _ nick
-            -> [ Endo $ pPlayers.ix p._3 .~ nick ]
+    DealPrivateHandChanged _ pk h ->
+        [ Endo $ sHands.ix pk .~ h ]
+
+    DealEnded how ->
+        [ Endo $ pResults .~ Just how ]
+
+    DealNick p _ nick ->
+        [ Endo $ pPlayers.ix p._3 .~ nick ]
 
     -- player-private
     DealStarts _ _ new
         | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
         | otherwise           -> [ Endo $ const new ]
-    DealWaitForShout ws
-            -> [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
-    DealWaitForTurnAction wt
-            -> [ Endo $ sWaiting .~ Just (Left wt) ]
-    DealRiichi pk
-            -> [ Endo $ do
-                    let isShout DealTurnShouted{} = True
-                        isShout _ = False
-                    db <- liftA2 (&&) (^?!sHands.at pk._Just.handPublic.handDiscards.to null)
-                                      (view sEvents <&> not . any isShout)
-                    sHands.ix pk.handPublic %~ (handRiichi .~ True) . (hDoubleRiichi .~ db)
-               , Endo $ pRiichi +~ 1000
-               ]
-    DealFlipDora td mtw
-            -> [ Endo $ pDora %~ (|> td)
-               , Endo $ maybe id (over sWanpai . flip snoc) mtw ]
-    GamePoints pk ps
-            -> [ Endo $ pPlayers.ix pk._2 +~ ps ]
+
+    DealWaitForShout ws ->
+        [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
+
+    DealWaitForTurnAction wt ->
+        [ Endo $ sWaiting .~ Just (Left wt) ]
+
+    DealRiichi pk ->
+        [ Endo $ do
+             let isShout DealTurnShouted{} = True
+                 isShout _ = False
+             db <- liftA2 (&&) (^?!sHands.at pk._Just.handPublic.handDiscards.to null)
+                               (view sEvents <&> not . any isShout)
+             sHands.ix pk.handPublic %~ (handRiichi .~ True) . (hDoubleRiichi .~ db)
+        , Endo $ pRiichi +~ 1000 ]
+
+    DealFlipDora td mtw ->
+        [ Endo $ pDora %~ (|> td)
+        , Endo $ maybe id (over sWanpai . flip snoc) mtw ]
+
+    GamePoints pk ps ->
+        [ Endo $ pPlayers.ix pk._2 +~ ps ]
 
 dealTurnAction :: Kaze -> TurnAction -> Endo Kyoku
 dealTurnAction p ta = mconcat $ case ta of 
-    TurnTileDiscard dc
-            -> [ Endo $ sHands.ix p.handPublic.handDiscards %~ (|> dc)
-               , if' (dc^.dcRiichi) (Endo $ sHands.ix p.handPublic.handRiichi .~ True) mempty ]
-    TurnTileDraw w mt
-            -> [ Endo $ pWallTilesLeft -~ 1
-               , Endo $ sWall %~ if' w initEx tailEx
-               , Endo $ sHands.ix p.handPick .~ mt
-               ]
-    TurnAnkan tile
-            -> [ Endo $ sHands.ix p.handPublic.handCalled %~ (|> kantsu tile) ]
-    TurnShouminkan t
-            -> [ let isShoum m = mentsuKind m == Koutsu && mentsuTile m == t
-                 in Endo $ sHands.ix p.handPublic.handCalled.each
-                         . filtered isShoum %~ promoteToKantsu ]
-    TurnTsumo
-            -> [] -- XXX: should something happen?
+
+    TurnTileDiscard dc ->
+        [ Endo $ sHands.ix p.handPublic.handDiscards %~ (|> dc)
+        , if' (dc^.dcRiichi) (Endo $ sHands.ix p.handPublic.handRiichi .~ True) mempty ]
+
+    TurnTileDraw w mt ->
+        [ Endo $ pWallTilesLeft -~ 1
+        , Endo $ sWall %~ if' w initEx tailEx
+        , Endo $ sHands.ix p.handPick .~ mt ]
+
+    TurnAnkan tile ->
+        [ Endo $ sHands.ix p.handPublic.handCalled %~ (|> kantsu tile) ]
+
+    TurnShouminkan t ->
+        let isShoum m = mentsuKind m == Koutsu && mentsuTile m == t
+        in [ Endo $ sHands.ix p.handPublic.handCalled.each . filtered isShoum %~ promoteToKantsu ]
+
+    TurnTsumo ->
+        [] -- XXX: should something happen?
 
 -- * Waiting
 

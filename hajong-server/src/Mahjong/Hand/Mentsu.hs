@@ -26,8 +26,8 @@ module Mahjong.Hand.Mentsu
 
     ) where
 
-import Mahjong.Tiles
 import           Import
+import           Mahjong.Tiles
 
 -- Types
 

@@ -32,17 +32,19 @@ library
                      , Hajong.Client
                      , Hajong.Connections
                      , Mahjong
-                     , Mahjong.Kyoku
+                     , Mahjong.Configuration
                      , Mahjong.Hand
                      , Mahjong.Hand.Algo
                      , Mahjong.Hand.Algo.WaitTree
                      , Mahjong.Hand.Mentsu
                      , Mahjong.Hand.Value
+                     , Mahjong.Hand.Internal
                      , Mahjong.Hand.Yaku
                      , Mahjong.Hand.Yaku.Builder
                      , Mahjong.Hand.Yaku.Standard
+                     , Mahjong.Kyoku
+                     , Mahjong.Kyoku.Internal
                      , Mahjong.Round
-                     , Mahjong.State
                      , Mahjong.Tiles
                      , Import
                      -- , Hajong.Client.CLI
@@ -88,6 +90,7 @@ library
                      , LambdaCase
                      , DeriveDataTypeable
                      , NoImplicitPrelude
+                     , RecordWildCards
   default-language:    Haskell2010
   ghc-options:         -threaded -Wall
 

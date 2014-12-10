@@ -15,16 +15,16 @@ module Mahjong.Round where
 
 ------------------------------------------------------------------------------
 import           Import
-import           Mahjong.State
-
+import           Mahjong.Kyoku
 ------------------------------------------------------------------------------
 import           Control.Monad.RWS
 import qualified Data.Map as Map
 import qualified Text.PrettyPrint.ANSI.Leijen as P
-
 ------------------------------------------------------------------------------
 
 -- * GameState
+
+type GameResults = Map Player Points
 
 -- | "GameState" records all information of a single game.
 data GameState playerID = GameState

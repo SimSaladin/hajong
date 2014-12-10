@@ -8,40 +8,41 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Mahjong.Hand.Yaku.Builder where
+module Mahjong.Hand.Yaku.Builder
+    ( YakuCheck, runYakuCheck
 
-import           Control.Monad.Free
-import           Control.Monad.State
+    -- * Checkers
+    , concealedHandDegrade, concealedHand, openHand, yakuState, allMentsuOfKind, yakuFail
 
+    -- * Matching mentsu
+
+    -- ** Any
+    , anyKoutsu, anyKantsu, anyShuntsu, anyJantou, anyMentsu
+    , anyKoutsuKantsu, anyMentsuJantou
+
+    -- *** Stateful
+    , anyShuntsu', anyMentsu', anyKoutsuKantsu', anyMentsuJantou'
+
+    -- ** Specific
+    , terminal, honor, sangenpai, suited, anyTile, concealed
+    , sameTile, sameNumber, sameSuit, ofNumber
+
+    -- ** Combinators
+    , (&.), (|.), propNot
+    ) where
+
+------------------------------------------------------------------------------
 import           Import
-import           Mahjong.Hand.Mentsu
 import           Mahjong.Tiles (Tile(..), Number(..))
 import qualified Mahjong.Tiles as T
-
-data Yaku = Yaku
-          { yakuHan :: Int
-          , yakuName :: Text
-          } deriving (Show, Read)
-
--- | Required info to calculate the value from a hand.
-data ValueInfo = ValueInfo
-               { vRound :: T.Kaze
-               , vPlayer :: T.Kaze
-               , vRiichi :: Bool
-               , vConcealed :: Bool
-               , vDiscarded :: [Tile] -- ^ To check furiten
-               , vMentsu :: [Mentsu]
-               , vWinWith :: Tile
-
-               , vWinCalled :: Maybe Shout -- ^ Called
-               , vTiles :: [Tile] -- ^ Concealed tiles, including agari
-               , vIppatsu :: Bool
-               , vDoubleRiichi :: Bool
-               , vTilesLeft :: Int
-               , vFromWanpai :: Bool
-               } deriving (Show, Read)
-
--- * YakuCheck
+import           Mahjong.Hand.Mentsu
+------------------------------------------------------------------------------
+import           Mahjong.Hand.Internal
+import           Mahjong.Kyoku.Internal
+------------------------------------------------------------------------------
+import           Control.Monad.Free
+import           Control.Monad.State
+------------------------------------------------------------------------------
 
 type YakuCheck = Free Check
 
@@ -64,20 +65,23 @@ data Check next = YakuMentsu MentsuProp next
                 deriving (Functor)
 
 runYakuCheck :: ValueInfo -> YakuCheck Yaku -> Maybe Yaku
-runYakuCheck info = fmap fst . (`runStateT` vMentsu info) . iterM f
+runYakuCheck info = fmap fst . (`runStateT` groups) . iterM f
     where
         f :: Check (StateT [Mentsu] Maybe Yaku) -> StateT [Mentsu] Maybe Yaku
         f (YakuMentsu  mp s)            = get >>= lift . findMatch mp >>= putRes >>  s
         f (YakuMentsu' mp s)            = get >>= lift . findMatch mp >>= putRes >>= s
         f (YakuStateful s)              = s info
-        f (YakuHandConcealedDegrades s) = if vConcealed info then s else (\x -> x { yakuHan = yakuHan x - 1 }) <$> s
-        f (YakuHandConcealed s)         = if vConcealed info then s else lift Nothing
-        f (YakuHandOpen s)              = if vConcealed info then lift Nothing else s
+        f (YakuHandConcealedDegrades s) = if isconc then s            else s <&> (yHan -~ 1)
+        f (YakuHandConcealed s)         = if isconc then s            else lift Nothing
+        f (YakuHandOpen s)              = if isconc then lift Nothing else s
         f YakuFailed                    = lift Nothing
 
         putRes (xs, t) = put xs >> return t
 
--- ** @MentsuProp@s
+        groups = info^.vHand.handPublic.handCalled -- TODO this is not complete; should iterate possibilites
+        isconc = info^.vHand.handPublic.hIsConcealed
+
+-- @MentsuProp@s
 
 data MentsuProp = TileTerminal
                 | TileSameAs Tile
@@ -105,7 +109,7 @@ data MentsuProp = TileTerminal
 (|.) = TileOr
 infixl 1 &., |.
 
--- ** @Check@ primitives
+-- @Check@ primitives
 
 -- | Value degrades by one if open.
 concealedHandDegrade :: YakuCheck ()
@@ -153,7 +157,7 @@ anyKoutsuKantsu' tkind = liftF $ YakuMentsu' (MentsuKoutsuKantsu &. tkind) id
 anyShuntsu'      tkind = liftF $ YakuMentsu' (MentsuShuntsu      &. tkind) id
 anyMentsuJantou' tkind = liftF $ YakuMentsu' (MentsuAnyJantou    &. tkind) id
 
--- *** Mentsu properties
+-- Mentsu properties
 
 -- | Tile kinds.
 terminal, honor, sangenpai, suited, anyTile, concealed :: MentsuProp
@@ -176,7 +180,7 @@ ofNumber = TileNumber
 propNot :: MentsuProp -> MentsuProp
 propNot = TileNot
 
--- ** Check MentsuProps directly.
+-- Check MentsuProps directly.
 
 -- | Find a match in a list of mentsu. Returns the matches identifier tile and leftovers.
 findMatch :: MentsuProp -> [Mentsu] -> Maybe ([Mentsu], Tile)

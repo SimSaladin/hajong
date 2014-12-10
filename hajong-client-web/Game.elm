@@ -407,6 +407,8 @@ processTurnAction player action gs =
             { gs | roundState <- Just { rs | hands <- Util.listModify player
                (\h -> { h | called <- h.called ++ [ kantsu tile ] }) rs.hands }
             }
+         TurnShouminkan tile -> gs
+         TurnTsumo           -> gs
 
 kantsu : Tile -> Mentsu
 kantsu t = Mentsu Kantsu t Nothing
