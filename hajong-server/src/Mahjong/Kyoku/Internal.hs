@@ -95,6 +95,10 @@ data GameAction = GameTurn TurnAction
 
 -- ** Points, results
 
+type PointsStatus = Map Player Points
+
+newtype FinalPoints = FinalPoints PointsStatus deriving (Show, Read)
+
 data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                   | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
                   | DealDraw  { dTenpais :: [(Player, Points)], dNooten :: [Payer] }
@@ -116,7 +120,7 @@ type Payer  = (Player, Points)
 -- | A hand that won.
 data ValuedHand = ValuedHand
     { _vhMentsu :: [Mentsu]
-    , _vhTiles  :: [Tile]
+    , _vhTiles  :: [Tile] -- ^ TODO: is this all tiles(?)
     , _vhValue  :: Value
     } deriving (Show, Read)
 
@@ -144,7 +148,7 @@ data Yaku = Yaku
 data ValueInfo = ValueInfo
     { _vKyoku  :: Kyoku
     , _vPlayer :: Kaze
-    , _vHand   :: Hand -- TODO Fix this data type to a specific grouping? 
+    , _vHand   :: Hand
     } deriving (Show, Read)
 
 -- * Construct state

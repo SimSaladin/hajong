@@ -12,12 +12,17 @@
 -- (@Hand@), and functions that operate on a hand.
 ------------------------------------------------------------------------------
 module Mahjong.Hand
-    ( Hand(..), HandPublic(..)
+    ( Hand(..)
+    , HandPublic(..)
+    , Discard(..)
     , module Mahjong.Hand
     , module Mahjong.Hand.Algo
     , module Mahjong.Hand.Mentsu
     , module Mahjong.Hand.Value
     , module Mahjong.Hand.Yaku
+    -- * Lenses
+    , handPublic, handDiscards, handRiichi, handPick, handCalled, hDoubleRiichi
+    , dcTile, dcRiichi, dcTo
     ) where
 
 ------------------------------------------------------------------------------
@@ -148,20 +153,7 @@ shoutFromHand sk shout hand =
 
 valueHand :: Kaze -> Hand -> Kyoku -> ValuedHand
 valueHand player h deal = ValuedHand (h^.handPublic.handCalled) (h^.handConcealed) (getValue vi)
-  where vi = ValueInfo
-            (deal^.pRound)
-            player
-            (h^.handPublic.handRiichi)
-            (h^.handPublic.handCalled.to null)
-            (h^.handPublic.handDiscards^..each.dcTile)
-            (h^.handPublic.handCalled)
-            (h^.handPublic.handAgari.to (?! "handAgari not set"))
-            (h^.handPublic.handAgariCall)
-            (h^.handConcealed ++ maybe [] return (h^.handPick))
-            (h^.handPublic.hIppatsu)
-            (h^.handPublic.hDoubleRiichi)
-            (deal^.pWallTilesLeft)
-            (h^.handPublic.hLastFromWanpai)
+  where vi = ValueInfo deal player h
 
 -- * Utility
 

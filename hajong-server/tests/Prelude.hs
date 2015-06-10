@@ -104,11 +104,11 @@ instance Arbitrary Shout where
 
 instance Arbitrary GameEvent where
     arbitrary = oneof
-        [ RoundTurnBegins <$> arbitrary
-        , RoundTurnAction <$> arbitrary <*> arbitrary
-        , RoundTurnShouted <$> arbitrary <*> arbitrary
-        , RoundHandChanged <$> arbitrary <*> arbitrary
-        , RoundEnded <$> arbitrary
+        [ DealTurnBegins <$> arbitrary
+        , DealTurnAction <$> arbitrary <*> arbitrary
+        , DealTurnShouted <$> arbitrary <*> arbitrary
+        , DealHandChanged <$> arbitrary <*> arbitrary
+        , DealEnded <$> arbitrary
         ]
 
 instance Arbitrary Event where

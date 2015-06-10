@@ -24,6 +24,19 @@ import            Mahjong.Hand.Yaku
 import            Mahjong.Hand.Mentsu
 ------------------------------------------------------------------------------
 
+-- vRound          = vKyoku.pRound
+-- inRiichi        = vHand.handPublic.handRiichi
+calledMentsu    = vHand.handPublic.handCalled
+-- fullyConcealed  = vHand.handPublic.handCalled.to null -- TODO difference to shout
+-- discardedTiles  = vHand.handPublic.handDiscards^..each.dcTile
+winTile         = vHand.handPublic.handAgari.to (?! "winTile: handAgari not set")
+winWithCall     = vHand.handPublic.handAgariCall
+-- concealedTiles  = vHand.to (liftA2 (++) _handConcealed (maybe [] return . _handPick))
+-- isIppatsu       = vHand.handPublic.hIppatsu
+-- isDoubleRiichi  = vHand.handPublic.hDoubleRiichi
+-- tilesLeft       = vKyoku.pWallTilesLeft
+-- agariFromWanpai = vHand.handPublic.hLastFromWanpai
+
 -- ** Calculating
 
 -- |
@@ -42,19 +55,20 @@ getYaku vi = mapMaybe (runYakuCheck vi) allStandard
 
 -- | Calculate fu points.
 getFu :: [Yaku] -> ValueInfo -> Fu
-getFu ys
-  | any (\y -> _yName y == "Chiitoitsu") ys = const 25
-  | otherwise = rounded . sum . sequence
-    [ sum . map mentsuValue . vMentsu, waitValue, baseFu ]
+getFu ys | any (\y -> _yName y == "Chiitoitsu") ys = const 25
+         | otherwise = rounded . sum . sequence
+             [ sum . map mentsuValue . view calledMentsu
+             , waitValue
+             , baseFu ]
     where rounded = (* 10) . fst . (`divMod` 10)
 
 baseFu :: ValueInfo -> Fu
-baseFu vi | Just _ <- vWinCalled vi = 30
-          | otherwise               = 20
+baseFu vi | Just _ <- vi^.winWithCall = 30
+          | otherwise                 = 20
 
 waitValue :: ValueInfo -> Fu
-waitValue = go <$> vWinWith <*> map mentsuTiles . filter (not . mentsuShouted) . vMentsu
-    where go t = fromMaybe 0 . maximumMay . map (waitFu t)
+waitValue = go <$> view winTile <*> map mentsuTiles . filter (not . mentsuShouted) . view calledMentsu
+    where go tile = fromMaybe 0 . maximumMay . map (waitFu tile)
 
 waitFu :: Tile -> [Tile] -> Fu
 waitFu t xs = case xs of
@@ -66,19 +80,16 @@ waitFu t xs = case xs of
 
 mentsuValue :: Mentsu -> Fu
 mentsuValue (Mentsu mk t ms) = product [gokind mk, gotile, goshout ms]
-    where
-        gokind Koutsu = 2
-        gokind Kantsu = 8
-        gokind _      = 0
+  where
+    gokind Koutsu = 2
+    gokind Kantsu = 8
+    gokind _      = 0
 
-        gotile
-            | not (isSuited t) ||
-              isNothing (succMay t) || isNothing (predMay t)
-                        = 2
-            | otherwise = 1
+    gotile | not (isSuited t) || isNothing (succMay t) || isNothing (predMay t) = 2
+           | otherwise                                                          = 1
 
-        goshout Nothing  = 2
-        goshout (Just _) = 1
+    goshout Nothing  = 2
+    goshout (Just _) = 1
 
 -- ** Meta
 

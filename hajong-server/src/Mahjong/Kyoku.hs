@@ -9,12 +9,16 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module Mahjong.Kyoku where
+module Mahjong.Kyoku
+    ( module Mahjong.Kyoku
+    , module Mahjong.Kyoku.Internal
+    ) where
 
 ------------------------------------------------------------------------------
 import           Import
 import           Mahjong.Tiles
 import           Mahjong.Hand
+import           Mahjong.Configuration
 ------------------------------------------------------------------------------
 import           Mahjong.Kyoku.Internal
 ------------------------------------------------------------------------------
@@ -243,9 +247,9 @@ toWinner p = do
 --
 -- >>> finalPoints (Map.fromList [(Player 0, 35700), (Player 1, 32400), (Player 2, 22200), (Player 3, 9700)])
 -- fromList [(Player 0,46),(Player 1,12),(Player 2,-18),(Player 3,-40)]
-finalPoints :: Map Player Points -> GameResults
+finalPoints :: PointsStatus -> FinalPoints
 finalPoints xs = final & _head._2 -~ sumOf (each._2) final -- fix sum to 0
-                       & Map.fromList
+                       & Map.fromList & FinalPoints
     where
         target = 30000              -- TODO configurable target score
         oka    = 5000 * 4           -- TODO could be something else
@@ -343,7 +347,7 @@ handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") r
 -- * Kyoku ends
 
 -- | Advance the game to next deal, or end it.
-nextDeal :: Kyoku -> IO (Either GameResults Kyoku)
+nextDeal :: Kyoku -> IO (Either FinalPoints Kyoku)
 nextDeal deal = case maybeGameResults deal of
     Just r  -> return (Left r)
     Nothing -> do
@@ -383,12 +387,12 @@ nextDeal deal = case maybeGameResults deal of
 
 -- | Results are returned if west or higher round has just ended and
 -- someone is winning (over 30000 points).
-maybeGameResults :: Kyoku -> Maybe GameResults
+maybeGameResults :: Kyoku -> Maybe FinalPoints
 maybeGameResults Kyoku{..}
     | minimumOf (traversed._2) _pPlayers < Just 0 = score
     | otherwise = do
         guard (_pRound >= Nan)
-        guard (_pPlayers ^? at _pOja._Just._1 == Just Pei)
+        guard (_pPlayers ^? at _pOja._Just._1 == Just Nan)
         guard (maximumOf (traversed._2) _pPlayers > Just 30000)
         score
   where

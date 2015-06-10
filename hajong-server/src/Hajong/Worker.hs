@@ -51,7 +51,7 @@ data WorkerData = WorkerData
                 } deriving (Typeable)
 
 -- | Result from a dying worker thread.
-type WorkerResult = Either SomeException GameResults
+type WorkerResult = Either SomeException FinalPoints
                -- ^ Left only on an unexpected event, a bug.
 
 data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
@@ -64,7 +64,7 @@ newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerData IO) a }
                    deriving ( Functor, Applicative, Monad, MonadIO
                             , MonadLogger, MonadReader WorkerData)
 
-type WCont = Worker GameResults
+type WCont = Worker FinalPoints
 
 -- ** Lenses
 
@@ -74,7 +74,7 @@ makeLenses ''WorkerData
 -- * Entry points
 
 -- | Fork a new worker thread
-startWorker :: (Either SomeException GameResults -> IO ()) -> WorkerData -> IO ThreadId
+startWorker :: (Either SomeException FinalPoints -> IO ()) -> WorkerData -> IO ThreadId
 startWorker ends wdata = runWCont wdata waitPlayersAndBegin `forkFinally` ends
 
 -- * Unwrap monads

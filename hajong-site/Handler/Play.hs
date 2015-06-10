@@ -33,8 +33,7 @@ playLayout mgid = do
     mauth <- maybeAuthId
     defaultLayout $ do
         setTitle "Playing"
-        addScriptRemote "http://elm-lang.org/elm-runtime.js"
-        addScript $ StaticR js_elm_game_js
+        addScript $ StaticR js_elm_js
         $(widgetFile "play")
 {-# INLINE playLayout #-}
 
