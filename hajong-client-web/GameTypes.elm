@@ -1,80 +1,85 @@
 module GameTypes where
 
+import Time exposing (Time)
 import Dict
-import Set (Set)
+import Set exposing (Set)
 import Set
 
 -- {{{ GameState -------------------------------------------------------------
-type GameState = { status     : Status
-                 , mynick     : String
-                 , myid       : Int
-                 , lounge     : LoungeData
-                 , gameWait   : Maybe Int
-                 , updated    : Time
+type alias GameState =
+   { status     : Status
+   , mynick     : String
+   , myid       : Int
+   , lounge     : LoungeData
+   , gameWait   : Maybe Int
+   , updated    : Time
 
-                  -- In-Game
-                 , roundState     : Maybe RoundState
-                 , waitTurnAction : Maybe WaitRecord
-                 , waitShout      : Maybe (WaitRecord, [Shout])
-                 , turnBegan      : Time
-                 , riichiWith     : [Tile]
+    -- In-Game
+   , roundState     : Maybe RoundState
+   , waitTurnAction : Maybe WaitRecord
+   , waitShout      : Maybe (WaitRecord, List Shout)
+   , turnBegan      : Time
+   , riichiWith     : List Tile
 
-                 -- Debug
-                 , eventlog   : [Event]
-                 , debuglog   : [String]
-                 }
-data Status = InLounge | InGame
+   -- Debug
+   , eventlog   : List Event
+   , debuglog   : List String
+   }
 
-type WaitRecord = { seconds : Int, added : Time }
+type Status = InLounge | InGame
+
+type alias WaitRecord = { seconds : Int, added : Time }
 -- }}}
 
 -- {{{ RoundState ------------------------------------------------------------
 
-type Player = Int
+type alias Player = Int
 
 -- This duplicates Hajong.Game.Round.GamePlayer
-type RoundState = 
-        { mypos     : Kaze
-        , round     : Kaze
-        , turn      : Kaze
-        , player    : Player
-        , oja       : Player
-        , firstoja  : Player
-        , tilesleft : Int
-        , dora      : [Tile]
-        , hands     : [(Kaze, HandPublic)]
-        , players   : [(Kaze, (Player, Int, String))]
-        , myhand    : Hand
-        , results   : Maybe RoundResult
-        , deal      : Int
-        , honba : Int
-        , inTable : Int
-        , prevDeals : [(Kaze, Int)]
-        }
+type alias RoundState = 
+   { mypos     : Kaze
+   , round     : Kaze
+   , turn      : Kaze
+   , player    : Player
+   , oja       : Player
+   , firstoja  : Player
+   , tilesleft : Int
+   , dora      : List Tile
+   , hands     : List (Kaze, HandPublic)
+   , players   : List (Kaze, (Player, Int, String))
+   , myhand    : Hand
+   , results   : Maybe RoundResult
+   , deal      : Int
+   , honba     : Int
+   , inTable   : Int
+   , prevDeals : List (Kaze, Int)
+   }
 
-data RoundResult = DealTsumo { winners : [Winner], payers : [Payer] }
-                 | DealRon   { winners : [Winner], payers : [Payer] }
-                 | DealDraw  { tenpai  : [Payer], nooten : [Payer] }
+type RoundResult = DealTsumo { winners : List Winner, payers : List Payer }
+                 | DealRon   { winners : List Winner, payers : List Payer }
+                 | DealDraw  { tenpai  : List Payer,  nooten : List Payer }
 
-type Winner = { player : Player, points : Points, valuehand : Valued }
-type Payer  = { player : Player, points : Points }
+type alias Winner = { player : Player, points : Points, valuehand : Valued }
+type alias Payer  = { player : Player, points : Points }
 
-type Points = Int
-type Yaku = { han : Int, name : String }
-type Fu = Int
-type Han = Int
+type alias Points = Int
+type alias Yaku = { han : Int, name : String }
+type alias Fu = Int
+type alias Han = Int
 
-type Valued = { mentsu : [Mentsu], tiles : [Tile], value : HandValue }
+type alias Valued = { mentsu : List Mentsu, tiles : List Tile, value : HandValue }
 
-type HandValue = { yaku : [Yaku]
-               , fu : Fu
-               , han : Han
-               , points : Points
-               , named : Maybe String }
+type alias HandValue =
+   { yaku : List Yaku
+   , fu : Fu
+   , han : Han
+   , points : Points
+   , named : Maybe String }
+
 -- }}}
 
 -- {{{ Event -----------------------------------------------------------------
-data Event = JoinServer  { nick : String, ident : Int }
+type Event = JoinServer  { nick : String, ident : Int }
            | PartServer  { nick : String }
            | Identity    { nick : String }
            | Message     { from : String, content : String } -- ^ from, content
@@ -83,7 +88,7 @@ data Event = JoinServer  { nick : String, ident : Int }
            -- FROM server only
            | Invalid     { content : String }
            | GameCreated { game : GameInfo }
-           | InGameEvents [GameEvent]
+           | InGameEvents (List GameEvent)
            | LoungeInfo  { lounge : LoungeData }
 
             -- To server only
@@ -91,9 +96,9 @@ data Event = JoinServer  { nick : String, ident : Int }
            | InGameAction GameAction
            | Noop -- TODO work around elm WS lib signal limitations
 
-data GameEvent = RoundPrivateStarts            RoundState
-               | RoundPrivateWaitForShout      { seconds : Int, shouts : [Shout] }
-               | RoundPrivateWaitForTurnAction { player : Player, seconds : Int, riichiWith : [Tile]}
+type GameEvent = RoundPrivateStarts            RoundState
+               | RoundPrivateWaitForShout      { seconds : Int, shouts : List Shout }
+               | RoundPrivateWaitForTurnAction { player : Player, seconds : Int, riichiWith : List Tile}
                | RoundPrivateChange            { hand : Hand }
                | RoundTurnBegins               { player_kaze : Kaze }
                | RoundTurnAction               { player_kaze : Kaze, action : TurnAction }
@@ -108,32 +113,36 @@ data GameEvent = RoundPrivateStarts            RoundState
 -- }}}
 
 -- {{{ Actions ---------------------------------------------------------------
-data TurnAction = TurnTileDiscard Discard
+type TurnAction = TurnTileDiscard Discard
                 | TurnTileDraw Bool (Maybe Tile) -- ^ From wanpai? - sensitive!
                 | TurnAnkan Tile
                 | TurnShouminkan Tile
                 | TurnTsumo
 
-data GameAction = GameTurn TurnAction
+type GameAction = GameTurn TurnAction
                 | GameShout Shout
                 | GameDontCare -- ^ About shouting last discarded tile
 -- }}}
 
 -- {{{ Lounge ----------------------------------------------------------------
-type LoungeData = { idle : Set String
-                  , games : [GameInfo]
-                  }
-type GameInfo = { ident : Int, topic : String, players : Set String}
+type alias LoungeData =
+   { idle : Set String
+   , games : List GameInfo }
+
+type alias GameInfo =
+   { ident : Int
+   , topic : String
+   , players : Set String }
 
 defaultLounge = { idle = Set.empty, games = [] }
 -- }}}
 
 -- {{{ Tiles -----------------------------------------------------------------
-data Tile   = Suited Suit Int Bool | Honor Honor
-data Suit   = ManTile | PinTile | SouTile
-data Honor  = Kazehai Kaze | Sangenpai Sangen
-data Kaze   = Ton | Nan | Shaa | Pei
-data Sangen = Haku | Hatsu | Chun
+type Tile   = Suited Suit Int Bool | Honor Honor
+type Suit   = ManTile | PinTile | SouTile
+type Honor  = Kazehai Kaze | Sangenpai Sangen
+type Kaze   = Ton | Nan | Shaa | Pei
+type Sangen = Haku | Hatsu | Chun
 
 readKaze x = case x of
     "Ton"  -> Ton
@@ -174,41 +183,44 @@ sangenNth k = case k of
    Hatsu -> 1
    Chun  -> 2
 
-sortTiles = sortWith tileOrder
+sortTiles = List.sortWith tileOrder
 -- }}}
 
 -- {{{ Hands -----------------------------------------------------------------
-type Hand = HandPublic' { concealed : [Tile]
-                        , pick      : Maybe Tile
-                        , furiten   : Maybe Bool
-                        , canTsumo  : Bool
-                        }
+type alias Hand = HandPublic'
+   { concealed : List Tile
+   , pick      : Maybe Tile
+   , furiten   : Maybe Bool
+   , canTsumo  : Bool }
 
-type HandPublic = HandPublic' {}
+type alias HandPublic = HandPublic' {}
 
-type HandPublic' a =
+type alias HandPublic' a =
    { a
-   | called      : [Mentsu]
-   , discards    : [Discard]
-   , riichi      : Bool
-   }
+   | called      : List Mentsu
+   , discards    : List Discard
+   , riichi      : Bool }
 
-type Discard = { tile : Tile, to : Maybe Kaze, riichi : Bool }
+type alias Discard =
+   { tile   : Tile
+   , to     : Maybe Kaze
+   , riichi : Bool }
+
 -- }}}
 
 -- {{{ Mentsu ----------------------------------------------------------------
-data MentsuKind = Shuntsu | Koutsu | Kantsu | Jantou
-type Mentsu = { mentsuKind : MentsuKind
-              , tile       : Tile
-              , from       : Maybe Shout
-              }
+type MentsuKind   = Shuntsu | Koutsu | Kantsu | Jantou
+type alias Mentsu =
+   { mentsuKind : MentsuKind
+   , tile       : Tile
+   , from       : Maybe Shout }
 -- }}}
 
 -- {{{ Shouts ----------------------------------------------------------------
-data ShoutKind  = Pon | Kan | Chi | Ron
-type Shout = { shoutKind : ShoutKind
-             , shoutFrom : Kaze
-             , shoutTile : Tile
-             , shoutTo   : [Tile]
-             }
+type ShoutKind   = Pon | Kan | Chi | Ron
+type alias Shout =
+   { shoutKind : ShoutKind
+   , shoutFrom : Kaze
+   , shoutTile : Tile
+   , shoutTo   : List Tile }
 -- }}}

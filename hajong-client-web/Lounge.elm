@@ -1,20 +1,24 @@
 module Lounge where
 
-import GameTypes (..)
+import GameTypes exposing (..)
 import Events
 import Util
 
-import Maybe (maybe)
 import Set
 import Text
+import String
+import Text exposing (bold)
 import Keyboard
-import Graphics.Input (..)
+import Signal exposing (..)
+import Graphics.Element exposing (..)
+import Color exposing (..)
+import Graphics.Input exposing (..)
 import Graphics.Input.Field as Field
 
-data ButtonState = Submit | Clear
+type ButtonState = Submit | Clear
 
 -- {{{ Controls ----------------------------------------
-type Controls = { chosen : Maybe GameInfo }
+type alias Controls = { chosen : Maybe GameInfo }
 
 controls : Signal Controls
 controls = Controls <~ chosenGame.signal
@@ -22,7 +26,7 @@ controls = Controls <~ chosenGame.signal
 
 -- {{{ Events ------------------------------------------
 events : Signal Event
-events = merges
+events = mergeMany
     [ maybeEvent (Events.joinGame << .ident) joined
     , forceStartEvent ]
 -- }}}
@@ -32,60 +36,76 @@ display : Controls -> GameState -> Element
 display v gs = doDraw { v | game = gs }
 
 doDraw o = flow down
-    [ maybe (spacer 10 10 |> color red) (waitView << Util.lookupGameInfo o.game) o.game.gameWait
-    , toText "Lounge" |> bold |> centered
+    [ Maybe.withDefault
+         (spacer 10 10 |> color red)
+         <| Maybe.map waitView (o.game.gameWait `Maybe.andThen` Util.lookupGameInfo o.game)
+
+    , Text.fromString "Lounge" |> bold |> centered
     , blockElement 250 400 (gameListView o)
     ]
 
 waitView gameinfo = color lightOrange <| flow right
-    [ toText "Waiting for " |> leftAligned
+    [ Text.fromString "Waiting for " |> leftAligned
     , gameInfoView gameinfo
     , forceStartButton gameinfo.ident
     ]
 
 gameListView o = flow down
-    [ toText "Available games" |> bold |> centered
+    [ Text.fromString "Available games" |> bold |> centered
     , flow down   <| buildGameList o.chosen o.game.lounge.games
     , joinGameButton
-    , leftAligned <| toText "Idle players: " ++ toText (join ", " <| Set.toList o.game.lounge.idle)
+    , leftAligned <| Text.fromString "Idle players: " `Text.append`
+                     Text.fromString (String.join ", " <| Set.toList o.game.lounge.idle)
     ]
 -- }}}
 
 -- {{{ Game info --------------------------------------
 
 -- | `active_game all_games`
-buildGameList : Maybe GameInfo -> [GameInfo] -> [Element]
+buildGameList : Maybe GameInfo -> List GameInfo -> List Element
 buildGameList act =
     let active gi = if act == Just gi then color blue else identity
-    in  map (\gi -> active gi <| gameListElement gi <| gameInfoView gi)
+    in  List.map (\gi -> active gi <| gameListElement gi <| gameInfoView gi)
 
 gameInfoView : GameInfo -> Element
 gameInfoView {ident,topic,players} =
-    let pc = length <| Set.toList players
+    let pc = List.length <| Set.toList players
     in leftAligned <|
-        (show ident |> toText |> Text.color red) ++
-        toText " " ++ (toText topic |> bold)  ++ toText " " ++
-        toText " (" ++ (show pc |> toText |> bold) ++ toText "/4 players)" ++
-        toText " {" ++ toText (join ", " <| Set.toList players) ++ toText "}"
+        (toString ident |> Text.fromString |> Text.color red) ++
+        Text.fromString " " ++ (Text.fromString topic |> bold)  ++ Text.fromString " " ++
+        Text.fromString " (" ++ (toString pc |> Text.fromString |> bold) ++ Text.fromString "/4 players)" ++
+        Text.fromString " {" ++ Text.fromString (String.join ", " <| Set.toList players) ++ Text.fromString "}"
 
 gameListElement : GameInfo -> Element -> Element
-gameListElement game = clickable chosenGame.handle (Just game)
+gameListElement game = clickable (chooseGame game)
 -- }}}
 
 -- {{{ Force start of the game -------------------------
-forceStart : Input (Maybe Int)
-forceStart = input Nothing
+forceStartMailbox : Mailbox (Maybe Int)
+forceStartMailbox = mailbox Nothing
 
-forceStartEvent    = maybeEvent Events.forceStart forceStart.signal
-forceStartButton n = button forceStart.handle (Just n) "Force start"
+forceStart n = message forceStartMailbox.address (Just n)
+
+forceStartEvent    = maybeEvent Events.forceStart forceStartMailbox.signal
+forceStartButton n = button (forceStart n) "Force start"
 -- }}}
 
 -- {{{ Join game ---------------------------------------
-chosenGame     = input Nothing
-joinGame       = input Clear
 
-joinGameButton = button joinGame.handle Submit "Join"
-joined         = sampleOn (isSubmit joinGame.signal) chosenGame.signal
+chosenGame : Mailbox (Maybe GameInfo)
+chosenGame = mailbox Nothing
+chooseGame game = message chosenGame.address (Just game)
+
+joinGame : Mailbox ButtonState
+joinGame = mailbox Clear
+
+joinGameButton : Element
+joinGameButton = button (message joinGame.address Submit) "Join"
+
+-- | When joined a game
+joined : Signal (Maybe GameInfo)
+joined = sampleOn (isSubmit joinGame.signal) chosenGame.signal
+
 -- }}}
 
 -- {{{ Helpers -----------------------------------------
@@ -93,7 +113,7 @@ isSubmit : Signal ButtonState -> Signal Bool
 isSubmit s = (\x -> x == Submit) <~ s
 
 maybeEvent : (a -> Event) -> Signal (Maybe a) -> Signal Event
-maybeEvent f s = maybe Noop f <~ s
+maybeEvent f s = (Maybe.withDefault Noop << Maybe.map f) <~ s
 
 blockElement : Int -> Int -> Element -> Element
 blockElement w h e = size w h (color gray e)

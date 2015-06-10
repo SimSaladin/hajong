@@ -1,6 +1,6 @@
 module Events where
 
-import GameTypes (..)
+import GameTypes exposing (..)
 
 -- Create Events ------------------------------------------------------------
 

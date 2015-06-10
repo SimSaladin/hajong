@@ -1,12 +1,18 @@
 module Game where
 
-import Util
-import GameTypes (..)
+import Util exposing (..)
+import GameTypes exposing (..)
 
-import Graphics.Input (..)
-import Maybe (maybe, isNothing)
 import List
+import List exposing (map)
 import Array
+import Signal exposing ((<~), dropRepeats, mergeMany, Mailbox, mailbox, message)
+import Graphics.Input exposing (..)
+import Graphics.Element exposing (..)
+import Graphics.Collage exposing (..)
+import Color exposing (..)
+import Text as T
+import Time exposing (inSeconds)
 
 -- TODO: hard-coded tile widths; some other measures are also hard-coded
 t_w = 62
@@ -16,40 +22,40 @@ called_off   = 650
 riichi_off   = 130
 
 -- {{{ Controls ------------------------------------------------------
-type Controls = { hoveredTile : Maybe Tile
-                }
+type alias Controls =
+   { hoveredTile : Maybe Tile }
 
 controls : Signal Controls
 controls = Controls <~ dropRepeats discardHover.signal
 
 -- Maybe a tile to discard from my hand
-discard : Input (Maybe Discard)
-discard = input Nothing
-riichi = input Nothing
-tsumo  = input Nothing
+discard : Mailbox (Maybe Discard)
+discard = mailbox Nothing
+riichi = mailbox Nothing
+tsumo  = mailbox Nothing
 
-discardHover : Input (Maybe Tile)
-discardHover = input Nothing
+discardHover : Mailbox (Maybe Tile)
+discardHover = mailbox Nothing
 
-shout : Input (Maybe Shout)
-shout = input Nothing
+shout : Mailbox (Maybe Shout)
+shout = mailbox Nothing
 
-ankan : Input (Maybe Tile)
-ankan = input Nothing
+ankan : Mailbox (Maybe Tile)
+ankan = mailbox Nothing
 
-shouminkan : Input (Maybe Tile)
-shouminkan = input Nothing
+shouminkan : Mailbox (Maybe Tile)
+shouminkan = mailbox Nothing
 
-nocare : Input Bool
-nocare = input False
+nocare : Mailbox Bool
+nocare = mailbox False
 
-shoutChooseTile : Input (Maybe Tile)
-shoutChooseTile = input Nothing
+shoutChooseTile : Mailbox (Maybe Tile)
+shoutChooseTile = mailbox Nothing
 -- }}}
 
 -- {{{ Upstream events ----------------------------------------------------
 events : Signal Event
-events = merges
+events = mergeMany
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard) <~ discard.signal
    , maybe Noop (InGameAction << GameTurn << TurnTileDiscard) <~ riichi.signal
    , maybe Noop (InGameAction << GameShout) <~ shout.signal
@@ -72,7 +78,7 @@ display co gs = case gs.roundState of
             , dispDiscards co gs rs |> scale 0.7
             , dispCalled co gs rs |> scale 0.6
             , group <| map (fst >> \k -> moveRotateKaze riichi_off rs.mypos k playerRiichi)
-                    <| filter (snd >> .riichi) rs.hands
+                    <| List.filter (snd >> .riichi) rs.hands
             , maybe (toForm empty) dispResults rs.results
             ]
         , container 1000 40 midTop <| flow right
@@ -86,7 +92,7 @@ display co gs = case gs.roundState of
                )
         , container 1000 100 midTop <| dispHand rs.mypos co rs.myhand
         ]
-   Nothing -> asText "Hmm, roundState is Nothing but I should be in a game"
+   Nothing -> show "Hmm, roundState is Nothing but I should be in a game"
 -- }}}
 
 -- {{{ Per-player ---------------------------------------------------
@@ -99,7 +105,7 @@ dispDiscards co gs rs = group <| map
    [Ton, Nan, Shaa, Pei]
 
 dispCalled co gs rs = [Ton, Nan, Shaa, Pei]
-   |> filter (\x -> x /= rs.mypos)
+   |> List.filter (\x -> x /= rs.mypos)
    |> map (
       \k -> Util.listFind k rs.hands
          |> dispPublicMentsu co k
@@ -128,11 +134,11 @@ dispInfoBlock co gs rs =
    <| color white <| size 230 230
    <| collage 230 230
    <| [ turnIndicator gs |> moveRotateKaze 90 rs.mypos rs.turn
-      , toForm <| (centered <| bold <| toText <| show rs.round) `beside` plainText (" " ++ show rs.deal)
+      , toForm <| (centered <| T.bold <| T.fromString <| toString rs.round) `beside` show (" " ++ toString rs.deal)
       , move (-60, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
-      , if rs.honba > 0 then move (-60,-60) <| toForm <| centered <| toText (show (rs.honba * 100) ++ "H")
+      , if rs.honba > 0 then move (-60,-60) <| toForm <| centered <| T.fromString <| toString (rs.honba * 100) ++ "H"
                         else toForm empty
-      , moveY (-30) <| toForm <| centered <| toText <| show rs.tilesleft
+      , moveY (-30) <| toForm <| centered <| T.fromString <| toString rs.tilesleft
       ]
       ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 95 rs.mypos k) [Ton, Nan, Shaa, Pei]
 
@@ -142,7 +148,7 @@ turnIndicator gs =
                 in group
    [ rotate (degrees 90) <| filled col <| ngon 3 80
    , moveY 30
-         <| toForm <| asText <| floor
+         <| toForm <| show <| floor
          <| case gs.waitTurnAction of
                Nothing -> inSeconds <| gs.updated - gs.turnBegan
                Just wr -> toFloat wr.seconds - (inSeconds (gs.updated - wr.added))
@@ -150,11 +156,8 @@ turnIndicator gs =
 
 dispPlayerInfo rs k =
    let (p, points, name) = Util.listFind k rs.players
-   in asText p `beside` ((if name == "" then toText "(bot)" else toText name |> bold) |> centered)
-      `above` flow right
-      [ spacer 5 5, asText k, spacer 5 5
-      , asText points
-      ] |> toForm
+   in show p `beside` ((if name == "" then T.fromString "(bot)" else T.fromString name |> T.bold) |> centered)
+      `above` flow right [ spacer 5 5, show k, spacer 5 5, show points ] |> toForm
 -- }}}
 
 -- {{{ Results
@@ -162,16 +165,16 @@ dispResults : RoundResult -> Form
 dispResults res =
    let (col, view) = case res of
                DealTsumo {winners, payers} -> (lightBlue,
-                  [ asText "Tsumo! " ]
+                  [ show "Tsumo! " ]
                   ++ [flow down <| map dispWinner winners]
-                  ++ [ asText "Payers: " `beside` asText payers ])
+                  ++ [ show "Payers: " `beside` show payers ])
                DealRon {winners, payers} -> (lightGreen,
-                  [ asText "Win: " `beside` asText winners
-                  , asText "Payers: " `beside` asText payers
+                  [ show "Win: " `beside` show winners
+                  , show "Payers: " `beside` show payers
                   ])
                DealDraw {tenpai, nooten} -> (lightYellow,
-                  [ asText "Tenpai players: " `beside` asText tenpai
-                  , asText "Nooten: " `beside` asText nooten
+                  [ show "Tenpai players: " `beside` show tenpai
+                  , show "Nooten: " `beside` show nooten
                   ])
    in toForm
          <| color col
@@ -180,7 +183,7 @@ dispResults res =
 
 dispWinner : Winner -> Element
 dispWinner {player, valuehand} = flow down <|
-   [ asText player, dispValued valuehand ]
+   [ show player, dispValued valuehand ]
 
 dispValued : Valued -> Element
 dispValued {mentsu, tiles, value} = flow right
@@ -189,11 +192,11 @@ dispValued {mentsu, tiles, value} = flow right
 
 dispHandValue : HandValue -> Element
 dispHandValue {yaku, fu, han, points, named} = flow right
-   [ asText han, asText " Han, ", asText fu, asText " Fu." ]
+   [ show han, show " Han, ", show fu, show " Fu." ]
    `above` flow down (map dispYaku yaku)
 
 dispYaku : Yaku -> Element
-dispYaku {han, name} = asText name `beside` asText " " `beside` asText han 
+dispYaku {han, name} = show name `beside` show " " `beside` show han
 -- }}}
 
 -- {{{ Hands --------------------------------------------------------------
@@ -206,7 +209,7 @@ dispHand k co hand = flow right
    ]
 
 dispHandDiscards co h = h.discards
-   |> filter (.to >> isNothing)
+   |> List.filter (.to >> isNothing)
    |> Util.groupInto 6
    |> map (map dispDiscard >> flow right)
    |> flow down
@@ -238,7 +241,7 @@ dispMentsu k m = case m.from of
 -- {{{ Tiles -----------------------------------------------------------------------
 dispTile : Tile -> Element
 dispTile tile = container (t_w + 4) (t_h + 4) middle
-   <| hoverable discardHover.handle (\h -> if h then Just tile else Nothing)
+   <| hoverable (\h -> message discardHover.address <| if h then Just tile else Nothing)
    <| size t_w t_h
    <| tileImage tile
 
@@ -246,7 +249,7 @@ dispWanpai : Controls -> RoundState -> Element
 dispWanpai co = .dora >> map dispTile >> flow right
 
 dispTileClickable : Controls -> Tile -> Element
-dispTileClickable co tile = dispTile tile |> clickable discard.handle (Just <| Discard tile Nothing False)
+dispTileClickable co tile = dispTile tile |> clickable (message discard.address (Just <| Discard tile Nothing False))
 
 tileImage tile =
    let (row, col) = case tile of
@@ -263,47 +266,49 @@ tileImage tile =
 
 shoutButton : Shout -> Element
 shoutButton s =
-   clickable shout.handle (Just s) <| collage 80 40
+   clickable (message shout.address (Just s)) <| collage 80 40
       [ oval 80 40 |> filled green
-      , toText (show s.shoutKind) |> centered |> toForm ]
+      , toString s.shoutKind |> T.fromString |> centered |> toForm ]
       -- TODO multiple chii identify
 
 shouminkanButtons rs str = findShouminkan rs.myhand
-   |> map (\t -> clickable shouminkan.handle (Just t) (buttonElem' str blue))
+   |> map (\t -> clickable (message shouminkan.address (Just t)) <| buttonElem' str blue)
 
-riichiButtons = map (\t -> clickable riichi.handle (Just <| Discard t Nothing True) (buttonElem' "Riichi" red))
+riichiButtons = map (\t -> clickable (message riichi.address (Just <| Discard t Nothing True)) (buttonElem' "Riichi" red))
 
 ankanButton rs str = case findFourTiles rs of
-   Just t  -> clickable ankan.handle (Just t) (buttonElem' str green)
+   Just t  -> clickable (message ankan.address (Just t)) (buttonElem' str green)
    Nothing -> empty
 
-tsumoButton b = if b then clickable tsumo.handle (Just ()) (buttonElem' "Tsumo" orange) else empty
+tsumoButton b = if b then clickable (message tsumo.address (Just ())) <| buttonElem' "Tsumo" orange else empty
 
 -- TODO is his turn
 nocareButton w str = case w of
-   Just (w, _ :: _) -> clickable nocare.handle True <| buttonElem' str green
+   Just (w, _ :: _) -> clickable (message nocare.address True) <| buttonElem' str green
    _                -> empty
 
 findFourTiles : RoundState -> Maybe Tile
 findFourTiles rs = counted 4 <| sortTiles <| rs.myhand.concealed ++ maybe [] (\x -> [x]) rs.myhand.pick
 
-findShouminkan h = filter (\x -> x.mentsuKind == Koutsu &&
+findShouminkan h = List.filter (\x -> x.mentsuKind == Koutsu &&
    (List.any (\t -> t == x.tile) h.concealed || h.pick == Just x.tile)) h.called
    |> map .tile
 
-counted : Int -> [Tile] -> Maybe Tile
+-- | The nth unique tile
+counted : Int -> List Tile -> Maybe Tile
 counted m ts =
-   let go n xs = if n == 0
-           then Just (head xs)
-           else case xs of
-               x :: y :: zs -> if x == y then go (n - 1) (y :: zs)
-                                         else counted m (y :: zs)
-               _ -> Nothing
+   let go n xs = case xs of
+      y :: ys -> if n == 0 then Just y
+                           else case ys of
+                              z :: zs -> if y == z then go (n - 1) ys
+                                                   else counted m ys
+                              _       -> Nothing
+      _       -> Nothing
    in go m ts
 
 buttonElem' str col = collage 80 40
    [ oval 80 40 |> filled col
-   , toText str |> centered |> toForm ]
+   , T.fromString str |> centered |> toForm ]
 -- }}}
 
 -- {{{ Process GameEvents
@@ -327,7 +332,7 @@ processInGameEvent event gs = case event of
    RoundPrivateChange {hand} -> setMyHand hand gs
 
    RoundTurnBegins {player_kaze} ->
-      Util.log ("Turn of " ++ show player_kaze) gs
+      Util.log ("Turn of " ++ toString player_kaze) gs
       |> setTurnPlayer player_kaze
       |> \gs -> { gs | turnBegan      <- gs.updated
                      , waitTurnAction <- Nothing
@@ -339,7 +344,7 @@ processInGameEvent event gs = case event of
        processTurnAction player_kaze action gs
 
    RoundTurnShouted {player_kaze, shout} ->
-      Util.log (show player_kaze ++ " shouted: " ++ show shout) gs
+      Util.log (toString player_kaze ++ " shouted: " ++ toString shout) gs
 
    RoundHandChanged {player_kaze, hand} -> setPlayerHand player_kaze hand gs
 

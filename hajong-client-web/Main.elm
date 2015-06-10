@@ -4,48 +4,56 @@ import Lounge
 import Game
 import Events
 import Util
-import GameTypes (..)
-import JSON (fromJSON_Event, toJSON_Event)
+import GameTypes exposing (..)
+import JSON exposing (decodeEvent, encodeEvent)
 
 import Set
 import Mouse
 import Text
-import Json
+import Time
+import Json.Decode exposing (Value)
 import Graphics.Input.Field as Field
+import Graphics.Element exposing (..)
+import Color exposing (..)
+import Signal exposing (..)
 
 -- {{{ Log view ---------------------------------------------------
 logView : GameState -> Element
 logView game = container 500 200 topLeft
       <| titled "Log"
       <| flow down
-      <| map (eventView >> leftAligned)
-      <| take 6 game.eventlog
+      <| List.map (eventView >> leftAligned)
+      <| List.take 6 game.eventlog
 
 titled : String -> Element -> Element
-titled str = above (leftAligned <| Text.color charcoal <| toText str)
+titled str = above (leftAligned <| Text.color charcoal <| Text.fromString str)
 
 eventView : Event -> Text.Text
 eventView ev = case ev of
-    Identity {nick}        -> "I am `" ++ nick ++ "'"    |> toText |> Text.color blue
-    JoinServer {nick}      -> nick ++ " joined server."  |> toText |> Text.color green
-    PartServer {nick}      -> nick ++ " has left."       |> toText |> Text.color red
-    Message {from,content} -> toText "<" ++ (toText from |> bold) ++ toText "> " ++ toText content
-    Invalid {content}      -> content                    |> toText |> Text.color white
-    LoungeInfo {lounge}    -> toText "Lounge updated - connection established!" |> Text.color blue
-    GameCreated {game}     -> join " " ["Game", game.topic, show game.ident, join " " <| Set.toList game.players] |> toText
-    InGameEvents _         -> "" |> toText
-    _                      -> show ev |> toText |> Text.color orange
+    Identity {nick}        -> "I am `" ++ nick ++ "'"    |> Text.fromString |> Text.color blue
+    JoinServer {nick}      -> nick ++ " joined server."  |> Text.fromString |> Text.color green
+    PartServer {nick}      -> nick ++ " has left."       |> Text.fromString |> Text.color red
+    Message {from,content} -> Text.fromString "<" ++ (Text.fromString from |> Text.bold) ++ Text.fromString "> " ++ Text.fromString content
+    Invalid {content}      -> content                    |> Text.fromString |> Text.color white
+    LoungeInfo {lounge}    -> Text.fromString "Lounge updated - connection established!" |> Text.color blue
+    GameCreated {game}     -> Text.join (Text.fromString " ")
+       [ Text.fromString "Game"
+       , Text.fromString game.topic
+       , Text.fromString <| toString game.ident
+       , Text.join (Text.fromString " ") <| List.map Text.fromString <| Set.toList game.players]
+    InGameEvents _         -> "" |> Text.fromString
+    _                      -> toString ev |> Text.fromString |> Text.color orange
 -- }}}
 
 -- {{{ Server IO ----------------------------------------------
 port downstream : Signal String
 
 eventInput : Signal Event
-eventInput = fromJSON_Event <~ downstream
+eventInput = decodeEvent <~ downstream
 
 -- upstream signal (further handled from JS)
 port upstream : Signal String
-port upstream = (toJSON_Event >> Json.toString "") <~ merges
+port upstream = encodeEvent <~ mergeMany
     [ Lounge.events
     , Game.events
     ]
@@ -72,16 +80,16 @@ newState = { status     = InLounge
 -- }}}
 
 -- {{{ Input --------------------------------------------------
-data Input = AnEvent Event
+type Input = AnEvent Event
            | GameInput Game.Controls
            | LoungeInput Lounge.Controls
-           | TimeDelta Time
+           | TimeDelta Time.Time
 
-input = merges [ AnEvent <~ eventInput
-               , GameInput <~ Game.controls
-               , LoungeInput <~ Lounge.controls
-               , TimeDelta <~ every second
-               ]
+input = mergeMany
+   [ AnEvent <~ eventInput
+   , GameInput <~ Game.controls
+   , LoungeInput <~ Lounge.controls
+   , TimeDelta <~ Time.every Time.second ]
 -- }}}
 
 -- {{{ State --------------------------------------------------
@@ -96,6 +104,7 @@ stepGame x gs = case x of
                      }
    _             -> gs
 
+-- | Apply an Event to the GameState.
 stepEvent : Event -> GameState -> GameState
 stepEvent event gameState = case event of
    Identity   {nick}   -> { gameState | mynick <- nick }
@@ -112,7 +121,7 @@ stepEvent event gameState = case event of
                            then Just ident
                            else gameState.gameWait
        }
-   InGameEvents events -> foldl Game.processInGameEvent gameState events
+   InGameEvents events -> List.foldl Game.processInGameEvent gameState events
    _ -> gameState
 -- }}}
 
@@ -121,12 +130,13 @@ addGame g l = { l | games <- l.games ++ [g] }
 addIdle n l = { l | idle  <- Set.insert n l.idle }
 
 addJoinedGame i n l =
-    { l | games <- map (\g -> if g.ident == i then { g | players <- Set.insert n g.players } else g) l.games
+    { l | games <- List.map (\g -> if g.ident == i then { g | players <- Set.insert n g.players } else g) l.games
         , idle  <- Set.remove n l.idle }
 
+deleteNick : String -> LoungeData -> LoungeData
 deleteNick n l =
    { l | idle  <- Set.remove n l.idle
-       , games <- map (\g -> { g | players <- Set.remove n g.players }) l.games }
+       , games <- List.map (\g -> { g | players <- Set.remove n g.players }) l.games }
 -- }}}
 
 -- {{{ Display ------------------------------------------------
@@ -136,13 +146,13 @@ display game view = flow down
    , logView game
    ]
 
-mainView = merges
-   [ sampleOn (keepIf Util.atLounge newState gameState)
-      (lift2 Lounge.display Lounge.controls gameState)
-   , sampleOn (keepIf Util.inGame newState gameState)
-      (lift2 Game.display Game.controls gameState)
+mainView = mergeMany
+   [ sampleOn (filter Util.atLounge newState gameState)
+      (map2 Lounge.display Lounge.controls gameState)
+   , sampleOn (filter Util.inGame newState gameState)
+      (map2 Game.display Game.controls gameState)
    ]
 -- }}}
 
 -- main -------------------------------------------------------
-main = lift2 display gameState mainView
+main = map2 display gameState mainView

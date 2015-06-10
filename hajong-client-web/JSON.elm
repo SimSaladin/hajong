@@ -1,48 +1,275 @@
 module JSON where
 
-import GameTypes (..)
+import GameTypes exposing (..)
 
 import Dict
 import Set
-import Maybe (maybe)
-import Json (Value(..), toString, fromString)
+import Json.Decode exposing (..)
+import Json.Encode as Encode
 import Debug
-import Util (..)
 
--- FromJSON --------------------------------------------------------------------
+-- Decode ----------------------------------------------------------------------
 
-fromJSON_Event : String -> Event
-fromJSON_Event str = maybe (Invalid { content = str }) parseEvent <| fromString str
+-- set : Decoder comparable -> Decoder (Set.Set comparable)
+set x = map Set.fromList (list x)
+
+-- | map errors to "Invalid" events
+decodeEvent : String -> Event
+decodeEvent str = case decodeString event str of
+   Ok ev   -> ev
+   Err err -> Invalid { content = err }
+
+event : Decoder Event
+event = ("type" := string) `andThen` eventOfType
+
+eventOfType : String -> Decoder Event
+eventOfType eventType = case eventType of
+   "identity"     -> object1 (\n -> Identity { nick = n }) nick
+   "join"         -> object2 (\n i -> JoinServer { nick = n, ident = i }) nick ident
+   "part"         -> object1 (\n -> PartServer { nick = n }) nick
+   "msg"          -> object2 (\f c -> Message { from = f, content = c }) from content
+   "invalid"      -> object1 (\c -> Invalid { content = c } ) content
+   "lounge"       -> object1 (\l -> LoungeInfo { lounge = l }) ("lounge" := lounge)
+   "game-created" -> object1 (\g -> GameCreated { game = g }) gameInfo
+   "game-join"    -> object2 (\i n -> JoinGame { ident = i, nick = n }) ident nick
+   "game-event"   -> object1 InGameEvents (list gameEvent)
+   _              -> succeed <| Invalid { content = "Received unexpected event of type " ++ eventType }
+
+nick       = "nick"        := string
+ident      = "ident"       := int
+from       = "from"        := string
+content    = "content"     := string
+player     = "player"      := int
+playerKaze = "player-kaze" := map readKaze string
+
+-- ** Tiles
+
+tile : Decoder Tile
+tile = ("type" := string) `andThen` tileOfType
+
+tileMaybe : Decoder (Maybe Tile)
+tileMaybe = oneOf [ null Nothing, map Just tile ]
+
+tileOfType : String -> Decoder Tile
+tileOfType tileType = case tileType of
+    "ManTile"   -> object2 (Suited ManTile) ("number" := int) ("aka" := bool)
+    "SouTile"   -> object2 (Suited SouTile) ("number" := int) ("aka" := bool)
+    "PinTile"   -> object2 (Suited PinTile) ("number" := int) ("aka" := bool)
+    "HonorTile" -> object1 Honor honor
+
+honor : Decoder Honor
+honor = map honorFrom ("ident" := string)
+
+honorFrom str = case str of
+    "Ton"   -> Kazehai Ton
+    "Nan"   -> Kazehai Nan
+    "Shaa"  -> Kazehai Shaa
+    "Pei"   -> Kazehai Pei
+    "Haku"  -> Sangenpai Haku
+    "Hatsu" -> Sangenpai Hatsu
+    "Chun"  -> Sangenpai Chun
+
+kaze = string |> map (\x -> case x of
+   "Ton"   -> Ton
+   "Nan"   -> Nan
+   "Shaa"  -> Shaa
+   "Pei"   -> Pei)
+
+-- ** Lounge
+
+lounge : Decoder LoungeData
+lounge = object2 (\i g -> { idle = i, games = g }) ("idle" := (map Set.fromList (list nick))) ("games" := list gameInfo)
+
+gameInfo : Decoder GameInfo
+gameInfo = object3 (\i t p -> { ident = i, topic = t, players = p}) ("ident" := int) ("topic" := string) ("players" := set nick)
+
+-- ** GameEvent
+
+gameEvent : Decoder GameEvent
+gameEvent = "event" := string `andThen` gameEventOfType
+
+gameEventOfType eventType = case eventType of
+    "round-begin"  -> object1 RoundPrivateStarts roundState
+    "wait-shout"   -> object2 (\s ss   -> RoundPrivateWaitForShout      { seconds = s, shouts = ss                 } ) ("seconds" := int) ("shouts" := list shout)
+    "wait-turn"    -> object3 (\p s rw -> RoundPrivateWaitForTurnAction { player = p, seconds = s, riichiWith = rw } ) ("player" := int) ("seconds" := int) ("riichi-with" := list tile)
+    "my-hand"      -> object1 (\h      -> RoundPrivateChange            { hand = h                                 } ) ("hand" := hand)
+    "turn-changed" -> object1 (\pk     -> RoundTurnBegins               { player_kaze = pk                         } ) playerKaze
+    "turn-action"  -> object2 (\pk a   -> RoundTurnAction               { player_kaze = pk, action = a             } ) playerKaze ("action" := turnAction)
+    "shout"        -> object2 (\pk s   -> RoundTurnShouted              { player_kaze = pk, shout = s              } ) playerKaze ("shout"  := shout)
+    "hand"         -> object2 (\pk h   -> RoundHandChanged              { player_kaze = pk, hand = h               } ) playerKaze ("hand"   := handPublic)
+    "nick"         -> object2 (\pk n   -> RoundNick                     { player_kaze = pk, nick = n               } ) playerKaze ("nick"   := string)
+    "riichi"       -> object1 (\pk     -> RoundRiichi                   { player_kaze = pk                         } ) playerKaze
+    "filpped-dora" -> object1 (\t      -> RoundFlippedDora              { tile = t                                 } ) ("tile" := tile)
+    "end"          -> object1 RoundEnded                                                                               ("results" := results)
+    "set-points"   -> object2 (\p po -> RoundGamePoints                 { player = p, points = po                  } ) player ("points" := int)
+
+-- ** Hand
+
+hand : Decoder Hand
+hand = object7 toHand
+   ("concealed" := list tile)
+   ("pick"      := tileMaybe)
+   ("furiten"   := oneOf [map Just bool, succeed Nothing])
+   ("can-tsumo" := bool)
+   ("called"    := list mentsu)
+   ("discards"  := list discard)
+   ("riichi"    := bool)
+
+toHand con pick furit canTsumo called discards riichi =
+   { concealed = con, pick = pick, furiten = furit, canTsumo = canTsumo, called
+   = called, discards = discards, riichi = riichi }
+
+handPublic = object3 toHandPublic
+    ("called"   := list mentsu)
+    ("discards" := list discard)
+    ("riichi"   := bool)
+
+toHandPublic called discards riichi = { called = called, discards = discards, riichi = riichi }
+
+playerHand : Decoder (Kaze, HandPublic)
+playerHand = tuple2 (,) kaze handPublic
+
+discard : Decoder Discard
+discard = object3 Discard
+   ("tile" := tile) (oneOf ["to" := map Just kaze, succeed Nothing]) ("riichi" := bool)
+
+-- }}}
+
+-- * {{{ Mentsu ------------------------------------------------------
+mentsu = object3 Mentsu ("kind" := mentsuKind) ("tile" := tile) ("shout" := shoutMaybe)
+
+mentsuKind = map readMentsuKind string
+
+readMentsuKind s = case s of
+   "shuntsu" -> Shuntsu
+   "koutsu"  -> Koutsu
+   "kantsu"  -> Kantsu
+   "jantou"  -> Jantou
+   -- TODO partial
+-- }}}
+
+-- * {{{ Shout -------------------------------------------------------
+
+shout : Decoder Shout
+shout = object4 Shout ("kind" := shoutKind) ("from" := kaze) ("tile" := tile) ("to" := list tile)
+
+shoutMaybe = oneOf [null Nothing, map Just shout]
+
+shoutKind = map readShoutKind string
+
+readShoutKind s = case s of
+   "pon" -> Pon
+   "kan" -> Kan
+   "chi" -> Chi
+   "ron" -> Ron
+-- }}}
+
+-- * {{{ RoundState -------------------------------------------------------
+
+roundState : Decoder RoundState
+roundState = object8 RoundState
+    ("mypos"      := kaze)
+    ("round"      := kaze)
+    ("turn"       := kaze)
+    ("player"     := int)
+    ("oja"        := int)
+    ("first-oja"  := int)
+    ("tiles-left" := int)
+    ("dora"       := list tile)
+    `andThen` (\x -> object8 x
+       ("hands"      := list playerHand)
+       ("players"    := list players)
+       ("myhand"     := hand)
+       ("results"    := maybe results)
+       ("deal"       := int)
+       ("honba"      := int)
+       ("in-table"   := int)
+       (succeed []) -- ([] -- TODO : "prev-deals" .: game |> withArray
+    )
+
+points : Decoder (Kaze, Int)
+points = tuple2 (,) kaze int
+
+players : Decoder (Kaze, (Player, Int, String))
+players = tuple2 (\p (k, ps, n) -> (k, (p, ps, n))) player (tuple3 (,,) kaze int string)
+-- }}}
+
+-- * {{{ Results -------------------------------------------------------
+results : Decoder RoundResult
+results = tuple2 resultsFrom string value
+
+resultsFrom : String -> Value -> RoundResult
+resultsFrom t o =
+   let decoder = case t of
+         "tsumo" -> object2 (\w p -> DealTsumo { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
+         "ron"   -> object2 (\w p -> DealRon   { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
+         "draw"  -> object2 (\w p -> DealDraw  { tenpai = w, nooten = p }) ("tenpais" := list payer) ("nooten" := list payer)
+   in case decodeValue decoder o of
+         Ok res -> res
+
+winner : Decoder Winner
+winner = tuple3 (\p points h -> Winner p points h) player int valuedHand
+
+payer : Decoder Payer
+payer = tuple2 (\p v -> Payer p v) player int
+-- }}}
+
+-- {{{ * Value
+handValue : Decoder HandValue
+handValue = object5 HandValue
+   ("yaku" := list yaku) ("fu" := int) ("han" := int) ("value" := int)
+   ("named" := maybe string)
+
+valuedHand : Decoder Valued
+valuedHand = object3 Valued ("mentsu" := list mentsu) ("tiles" := list tile) ("value" := handValue)
+
+yaku : Decoder Yaku
+yaku = object2 Yaku ("han"  := int) ("name" := string)
+-- }}}
+
+-- * {{{ TurnAction -------------------------------------------------------
+turnAction : Decoder TurnAction
+turnAction {- (Object o) -} = ("type" := string) `andThen` turnActionOfType
+
+turnActionOfType taType = case taType of
+    "draw"       -> object2 TurnTileDraw ("wanpai" := bool) ("tile" := maybe tile)
+    "discard"    -> object1 TurnTileDiscard discard
+    "ankan"      -> object1 TurnAnkan       ("tile" := tile)
+    "shouminkan" -> object1 TurnShouminkan  ("tile" := tile)
+    "tsumo"      -> succeed TurnTsumo
+-- }}}
 
 -- {{{ ToJSON ----------------------------------------------------------------------
 
+encodeEvent : Event -> String
+encodeEvent = Encode.encode 0 << toJSON_Event
+
 toJSON_Event : Event -> Value
 toJSON_Event ev = case ev of
-    JoinServer {nick,ident} -> atType "join" [("nick", String nick), ("ident", Number <| toFloat ident)]
-    PartServer {nick}     -> atType "part" [("nick", String nick)]
-    Identity   {nick}     -> atType "identity" [("nick", String nick)]
-    Message{from,content} -> atType "msg" [("from", String from), ("content", String content)]
-    JoinGame {ident,nick} -> atType "game-join" [("nick", String nick), ("ident", Number <| toFloat ident)]
-
-    ForceStart {ident}    -> atType "game-fstart" [("ident", Number <| toFloat ident)]
+    JoinServer {nick,ident} -> atType "join" [("nick", Encode.string nick), ("ident", Encode.int ident)]
+    PartServer {nick}     -> atType "part" [("nick", Encode.string nick)]
+    Identity   {nick}     -> atType "identity" [("nick", Encode.string nick)]
+    Message{from,content} -> atType "msg" [("from", Encode.string from), ("content", Encode.string content)]
+    JoinGame {ident,nick} -> atType "game-join" [("nick", Encode.string nick), ("ident", Encode.int ident)]
+    ForceStart {ident}    -> atType "game-fstart" [("ident", Encode.int ident)]
     InGameAction action   -> atType "game-action" <| toJSON_GameAction action
     Noop                  -> atType "noop" []
 
-toJSON_GameAction : GameAction -> [(String, Value)]
+toJSON_GameAction : GameAction -> List (String, Value)
 toJSON_GameAction a = case a of
-   GameTurn (TurnTileDiscard discard)     -> atAction "discard" [("tile", toJSON_Tile discard.tile), ("riichi", Boolean discard.riichi)]
-   GameTurn (TurnTileDraw dead _)         -> atAction "draw" [("dead", Boolean dead)]
+   GameTurn (TurnTileDiscard discard)     -> atAction "discard" [("tile", toJSON_Tile discard.tile), ("riichi", Encode.bool discard.riichi)]
+   GameTurn (TurnTileDraw dead _)         -> atAction "draw" [("dead", Encode.bool dead)]
    GameTurn (TurnAnkan tile)              -> atAction "ankan" [("tile", toJSON_Tile tile)]
    GameTurn (TurnShouminkan tile)         -> atAction "shouminkan" [("tile", toJSON_Tile tile)]
    GameTurn TurnTsumo                     -> atAction "tsumo" []
    GameShout s                            -> atAction "shout"
                [ ("kind", toJSON_ShoutKind s.shoutKind)
-               , ("from", String <| show s.shoutFrom)
+               , ("from", Encode.string <| toString s.shoutFrom)
                , ("tile", toJSON_Tile s.shoutTile)
-               , ("to", Array <| map toJSON_Tile s.shoutTo) ]
+               , ("to", Encode.list <| List.map toJSON_Tile s.shoutTo) ]
    GameDontCare -> atAction "pass" []
 
-toJSON_ShoutKind sk = String <| case sk of
+toJSON_ShoutKind sk = Encode.string <| case sk of
    Pon -> "pon"
    Kan -> "kan"
    Chi -> "chi"
@@ -50,279 +277,14 @@ toJSON_ShoutKind sk = String <| case sk of
 
 toJSON_Tile : Tile -> Value
 toJSON_Tile tile = case tile of
-   Suited suit num aka -> atType (show suit) [("number", Number <| toFloat num), ("aka", Boolean aka)]
-   Honor honor -> atType "HonorTile" <| case honor of
-      Kazehai kaze -> [("ident", String <| show kaze)]
-      Sangenpai sangen -> [("ident", String <| show sangen)]
+   Suited suit num aka -> atType (toString suit) [("number", Encode.int num), ("aka", Encode.bool aka)]
+   Honor honor         -> atType "HonorTile" <| case honor of
+      Kazehai kaze     -> [("ident", Encode.string <| toString kaze)]
+      Sangenpai sangen -> [("ident", Encode.string <| toString sangen)]
 
-atType : String -> [(String, Value)] -> Value
-atType t xs = Object (Dict.fromList <| ("type", String t) :: xs)
+atType : String -> List (String, Value) -> Value
+atType t xs = Encode.object (("type", Encode.string t) :: xs)
 
-atAction : String -> [(String, Value)] -> [(String, Value)]
-atAction t xs = ("action", String t) :: xs
--- }}}
-
--- Parsers ---------------------------------------------------------------------
-
--- ** {{{ Helpers ----------------------------------------------------
-n .: o = Dict.getOrFail n o
-
-parseString x = case x of
-   String s -> s
-   _        -> Debug.crash <| "JSON.parseString: not a string: " ++ show x
-
-parseInt x = case x of
-   Number n -> floor n
-   _        -> Debug.crash <| "JSON.parseInt: not int: " ++ show x
-
-parseBool x = case x of
-   Boolean b -> b
-   _         -> Debug.crash <| "JSON.parseBool: not bool: " ++ show x
-
-parseBoolMaybe x = case x of
-   Boolean b -> Just b
-   Null      -> Nothing
-
-parseStringMaybe x = case x of
-   String s -> Just s
-   Null -> Nothing
-
-withArray f (Array xs) = map f xs
-
-parsePlayer = parseInt
--- }}}
-
--- ** {{{ Event ------------------------------------------------------
-parseEvent : Value -> Event
-parseEvent (Object o) = case "type" .: o |> parseString of
-    "identity"     -> Identity     <| hasNick o {}
-    "join"         -> JoinServer   <| hasNick o { ident = parseInt <| "ident" .: o }
-    "part"         -> PartServer   <| hasNick o {}
-    "msg"          -> Message      <| hasContent o <| hasFrom o {}
-    "invalid"      -> Invalid      <| hasContent o {}
-    "lounge"       -> LoungeInfo   <| hasLounge o {}
-    "game-created" -> GameCreated  <| hasGame o {}
-    "game-join"    -> JoinGame     <| hasNick o { ident = parseInt <| "ident" .: o }
-    "game-event"   -> InGameEvents <| withArray parseGameEvent <| "events" .: o
-    t              -> Invalid { content = "Received unexpected " ++ t }
--- }}}
-
--- ** {{{ Tiles -----------------------------------------------------
-parseTile : Value -> Tile
-parseTile (Object o) = case "type" .: o |> parseString of
-    "ManTile"   -> Suited ManTile ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
-    "SouTile"   -> Suited SouTile ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
-    "PinTile"   -> Suited PinTile ("number" .: o |> parseInt) (parseBool <| "aka" .: o)
-    "HonorTile" -> Honor <| hasHonor o
-
-parseTileMaybe : Value -> Maybe Tile
-parseTileMaybe x = case x of
-    Object _    -> Just <| parseTile x
-    Null        -> Nothing
-
-hasHonor o = case "ident" .: o |> parseString of
-    "Ton"       -> Kazehai Ton
-    "Nan"       -> Kazehai Nan
-    "Shaa"      -> Kazehai Shaa
-    "Pei"       -> Kazehai Pei
-    "Haku"      -> Sangenpai Haku
-    "Hatsu"     -> Sangenpai Hatsu
-    "Chun"      -> Sangenpai Chun
-
-parseKaze : Value -> Kaze
-parseKaze = readKaze << parseString
--- }}}
-
--- ** {{{ General fields ------------------------------------------
-hasNick o s        = { s | nick         = "nick"        .: o |> parseString }
-hasFrom o s        = { s | from         = "from"        .: o |> parseString }
-hasContent o s     = { s | content      = "content"     .: o |> parseString }
-hasPlayer o s      = { s | player       = "player"      .: o |> parseInt }
-hasPlayerKaze o s  = { s | player_kaze  = "player-kaze" .: o |> parseKaze }
-hasLounge o s      = { s | lounge       = parseLoungeData o }
-hasGame o s        = { s | game         = parseGame o }
--- }}}
-
--- ** {{{ Lounge --------------------------------------------------
-parseLoungeData o =
-    { idle  = parseNicks     <| "idle"  .: o
-    , games = parseGameInfos <| "games" .: o }
-
-parseNicks : Value -> Set.Set String
-parseNicks = Set.fromList << withArray parseString
-
-parseGameInfos : Value -> [GameInfo]
-parseGameInfos = withArray (\(Object o) -> parseGame o)
-
-parseGame o = { ident   = parseInt    <| "ident"   .: o
-              , topic   = parseString <| "topic"   .: o
-              , players = parseNicks  <| "players" .: o }
--- }}}
-
--- ** {{{ GameEvents ------------------------------------------------
-parseGameEvent : Value -> GameEvent
-parseGameEvent (Object o) = case "event" .: o |> parseString of
-    "round-begin"  -> RoundPrivateStarts  <| parseRoundState o
-    "wait-shout"   -> RoundPrivateWaitForShout      <| { seconds = "seconds" .: o |> parseInt
-                                                       , shouts  = "shouts"  .: o |> withArray parseShout }
-    "wait-turn"    -> RoundPrivateWaitForTurnAction <| hasPlayer o { seconds    = "seconds"     .: o |> parseInt
-                                                                   , riichiWith = "riichi-with" .: o |> withArray parseTile
-                                                                   }
-    "my-hand"      -> RoundPrivateChange  { hand    = "hand"   .: o |> parseHand }
-    "turn-changed" -> RoundTurnBegins     <| hasPlayerKaze o { }
-    "turn-action"  -> RoundTurnAction     <| hasPlayerKaze o { action  = "action" .: o |> parseTurnAction }
-    "shout"        -> RoundTurnShouted    <| hasPlayerKaze o { shout   = "shout"  .: o |> parseShout }
-    "hand"         -> RoundHandChanged    <| hasPlayerKaze o { hand    = "hand"   .: o |> parsePublicHand }
-    "filpped-dora" -> RoundFlippedDora    { tile = parseTile <| "tile" .: o }
-    "nick"         -> RoundNick           <| hasPlayerKaze o { nick    = "nick"   .: o |> parseString }
-    "riichi"       -> RoundRiichi         <| hasPlayerKaze o {}
-    "end"          -> RoundEnded          <| fromJust <| parseResults <| "results" .: o
-    "set-points"   -> RoundGamePoints     <| hasPlayer o { points = "points" .: o |> parseInt }
--- }}}
-
--- * {{{ Hand -------------------------------------------------------
-parseHand : Value -> Hand
-parseHand v =
-  let x = parsePublicHand v
-  in case v of
-    Object o ->
-        { concealed   = "concealed" .: o |> withArray parseTile
-        , pick        = "pick"      .: o |> parseTileMaybe
-        , furiten     = "furiten"   .: o |> parseBoolMaybe
-        , canTsumo    = "can-tsumo" .: o |> parseBool
-        , called      = x.called
-        , discards    = x.discards
-        , riichi      = x.riichi }
-
-parsePublicHand : Value -> HandPublic
-parsePublicHand (Object o) = 
-    { called      = "called"       .: o |> withArray parseMentsu
-    , discards    = "discards"     .: o |> withArray parseDiscard
-    , riichi      = "riichi"       .: o |> parseBool }
-
-parsePlayerHand : Value -> (Kaze, HandPublic)
-parsePlayerHand (Array [a, b]) = (parseKaze a, parsePublicHand b)
-
-parseDiscard : Value -> Discard
-parseDiscard (Object o) =
-   let player = case "to" .: o of
-         Null -> Nothing
-         String s -> readKaze s |> Just
-      in Discard ("tile" .: o |> parseTile) player ("riichi" .: o |> parseBool)
--- }}}
-
--- * {{{ Mentsu ------------------------------------------------------
-parseMentsu : Value -> Mentsu
-parseMentsu (Object o) = Mentsu
-   (parseMentsuKind <| "kind"  .: o)
-   (parseTile       <| "tile"  .: o)
-   (parseShoutMaybe <| "shout" .: o)
-
-parseMentsuKind : Value -> MentsuKind
-parseMentsuKind (String s) = case s of
-   "shuntsu" -> Shuntsu
-   "koutsu"  -> Koutsu
-   "kantsu"  -> Kantsu
-   "jantou"  -> Jantou
--- }}}
-
--- * {{{ Shout -------------------------------------------------------
-parseShout : Value -> Shout
-parseShout (Object o) =
-   { shoutKind = "kind" .: o |> parseShoutKind
-   , shoutFrom = "from" .: o |> parseKaze
-   , shoutTile = "tile" .: o |> parseTile
-   , shoutTo   = "to"   .: o |> withArray parseTile }
-
-parseShoutKind : Value -> ShoutKind
-parseShoutKind (String s) = case s of
-   "pon" -> Pon
-   "kan" -> Kan
-   "chi" -> Chi
-   "ron" -> Ron
-
-parseShoutMaybe : Value -> Maybe Shout
-parseShoutMaybe v = case v of
-   Null     -> Nothing
-   Object _ -> Just <| parseShout v
--- }}}
-
--- * {{{ RoundState -------------------------------------------------------
--- parseRoundState : Value -> RoundState
-parseRoundState game = 
-    { mypos     = "mypos"      .: game |> parseKaze
-    , player    = "player"     .: game |> parseInt
-    , myhand    = "myhand"     .: game |> parseHand
-    , hands     = "hands"      .: game |> withArray parsePlayerHand
-    , round     = "round"      .: game |> parseKaze
-    , deal      = "deal"       .: game |> parseInt
-    , turn      = "turn"       .: game |> parseKaze
-    , oja       = "oja"        .: game |> parseInt
-    , firstoja  = "first-oja"  .: game |> parseInt
-    , tilesleft = "tiles-left" .: game |> parseInt
-    , dora      = "dora"       .: game |> withArray parseTile
-    , players   = "players"    .: game |> withArray parsePlayers
-    , honba     = "honba"      .: game |> parseInt
-    , inTable   = "in-table"   .: game |> parseInt
-    , results   = "results"    .: game |> parseResults
-    , prevDeals = [] -- TODO : "prev-deals" .: game |> withArray
-    }
-
-parsePoints : Value -> (Kaze, Int)
-parsePoints (Array [a, b]) = (parseKaze a, parseInt b)
-
-parsePlayers : Value -> (Kaze, (Player, Int, String))
-parsePlayers (Array [p, Array [k, ps, n]]) =
-    (parseKaze k, (parseInt p, parseInt ps, parseString n))
--- }}}
-
--- * {{{ Results -------------------------------------------------------
-parseResults : Value -> Maybe RoundResult
-parseResults val = case val of
-    Array [String t, Object o] -> Just <| case t of
-      "tsumo" -> DealTsumo { winners = ("winners" .: o |> withArray parseWinner)
-                           , payers  = ("payers"  .: o |> withArray parsePayer) }
-      "ron"   -> DealRon   { winners = ("winners" .: o |> withArray parseWinner)
-                           , payers  = ("payers"  .: o |> withArray parsePayer) }
-      "draw"  -> DealDraw  { tenpai  = ("tenpais" .: o |> withArray parsePayer) -- (player, points)
-                           , nooten  = ("nooten"  .: o |> withArray parsePayer) }
-    Null -> Nothing
-
-parseWinner : Value -> Winner
-parseWinner (Array [p, points, h]) = Winner (parsePlayer p) (parseInt points) (parseValuedHand h)
-
-parsePayer : Value -> Payer
-parsePayer (Array [p, v]) = Payer (parsePlayer p) (parseInt v)
--- }}}
-
--- {{{ * Value
-parseHandValue : Value -> HandValue
-parseHandValue (Object o) = HandValue
-   ("yaku"  .: o |> withArray parseYaku)
-   ("fu"    .: o |> parseInt)
-   ("han"   .: o |> parseInt)
-   ("value" .: o |> parseInt)
-   ("named" .: o |> parseStringMaybe)
-
-parseValuedHand : Value -> Valued
-parseValuedHand (Object o) = Valued
-   ("mentsu" .: o |> withArray parseMentsu)
-   ("tiles"  .: o |> withArray parseTile)
-   ("value"  .: o |> parseHandValue)
-
-parseYaku : Value -> Yaku
-parseYaku (Object o) = Yaku
-   ("han"  .: o |> parseInt)
-   ("name" .: o |> parseString)
--- }}}
-
--- * {{{ TurnAction -------------------------------------------------------
-parseTurnAction : Value -> TurnAction
-parseTurnAction (Object o) = case "type" .: o |> parseString of
-    "draw"       -> TurnTileDraw    ("wanpai" .: o |> parseBool)
-                                    ("tile"   .: o |> parseTileMaybe)
-    "discard"    -> TurnTileDiscard (parseDiscard (Object o))
-    "ankan"      -> TurnAnkan       ("tile"   .: o |> parseTile)
-    "shouminkan" -> TurnShouminkan  ("tile"   .: o |> parseTile)
-    "tsumo"      -> TurnTsumo
+atAction : String -> List (String, Value) -> List (String, Value)
+atAction t xs = ("action", Encode.string t) :: xs
 -- }}}
