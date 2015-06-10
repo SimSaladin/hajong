@@ -29,10 +29,10 @@ eventOfType eventType = case eventType of
    "part"         -> object1 (\n -> PartServer { nick = n }) nick
    "msg"          -> object2 (\f c -> Message { from = f, content = c }) from content
    "invalid"      -> object1 (\c -> Invalid { content = c } ) content
-   "lounge"       -> object1 (\l -> LoungeInfo { lounge = l }) ("lounge" := lounge)
+   "lounge"       -> object1 (\l -> LoungeInfo { lounge = l }) lounge
    "game-created" -> object1 (\g -> GameCreated { game = g }) gameInfo
    "game-join"    -> object2 (\i n -> JoinGame { ident = i, nick = n }) ident nick
-   "game-event"   -> object1 InGameEvents (list gameEvent)
+   "game-event"   -> object1 InGameEvents ("events" := list gameEvent)
    _              -> succeed <| Invalid { content = "Received unexpected event of type " ++ eventType }
 
 nick       = "nick"        := string
@@ -78,7 +78,7 @@ kaze = string |> map (\x -> case x of
 -- ** Lounge
 
 lounge : Decoder LoungeData
-lounge = object2 (\i g -> { idle = i, games = g }) ("idle" := (map Set.fromList (list nick))) ("games" := list gameInfo)
+lounge = object2 (\i g -> { idle = i, games = g }) ("idle" := (map Set.fromList (list string))) ("games" := list gameInfo)
 
 gameInfo : Decoder GameInfo
 gameInfo = object3 (\i t p -> { ident = i, topic = t, players = p}) ("ident" := int) ("topic" := string) ("players" := set nick)
@@ -97,7 +97,7 @@ gameEventOfType eventType = case eventType of
     "turn-action"  -> object2 (\pk a   -> RoundTurnAction               { player_kaze = pk, action = a             } ) playerKaze ("action" := turnAction)
     "shout"        -> object2 (\pk s   -> RoundTurnShouted              { player_kaze = pk, shout = s              } ) playerKaze ("shout"  := shout)
     "hand"         -> object2 (\pk h   -> RoundHandChanged              { player_kaze = pk, hand = h               } ) playerKaze ("hand"   := handPublic)
-    "nick"         -> object2 (\pk n   -> RoundNick                     { player_kaze = pk, nick = n               } ) playerKaze ("nick"   := string)
+    "nick"         -> object2 (\pk n   -> RoundNick                     { player_kaze = pk, nick = n               } ) playerKaze nick
     "riichi"       -> object1 (\pk     -> RoundRiichi                   { player_kaze = pk                         } ) playerKaze
     "filpped-dora" -> object1 (\t      -> RoundFlippedDora              { tile = t                                 } ) ("tile" := tile)
     "end"          -> object1 RoundEnded                                                                               ("results" := results)
@@ -191,7 +191,7 @@ points : Decoder (Kaze, Int)
 points = tuple2 (,) kaze int
 
 players : Decoder (Kaze, (Player, Int, String))
-players = tuple2 (\p (k, ps, n) -> (k, (p, ps, n))) player (tuple3 (,,) kaze int string)
+players = tuple2 (\p (k, ps, n) -> (k, (p, ps, n))) int (tuple3 (,,) kaze int string)
 -- }}}
 
 -- * {{{ Results -------------------------------------------------------

@@ -4907,6 +4907,32 @@ Elm.JSON.make = function (_elm) {
    }),
    kaze,
    $Json$Decode.$int);
+   var players = A3($Json$Decode.tuple2,
+   F2(function (p,_v28) {
+      return function () {
+         switch (_v28.ctor)
+         {case "_Tuple3":
+            return {ctor: "_Tuple2"
+                   ,_0: _v28._0
+                   ,_1: {ctor: "_Tuple3"
+                        ,_0: p
+                        ,_1: _v28._1
+                        ,_2: _v28._2}};}
+         _U.badCase($moduleName,
+         "on line 194, column 37 to 50");
+      }();
+   }),
+   $Json$Decode.$int,
+   A4($Json$Decode.tuple3,
+   F3(function (v0,v1,v2) {
+      return {ctor: "_Tuple3"
+             ,_0: v0
+             ,_1: v1
+             ,_2: v2};
+   }),
+   kaze,
+   $Json$Decode.$int,
+   $Json$Decode.string));
    var honorFrom = function (str) {
       return function () {
          switch (str)
@@ -5126,32 +5152,6 @@ Elm.JSON.make = function (_elm) {
    var player = A2($Json$Decode._op[":="],
    "player",
    $Json$Decode.$int);
-   var players = A3($Json$Decode.tuple2,
-   F2(function (p,_v31) {
-      return function () {
-         switch (_v31.ctor)
-         {case "_Tuple3":
-            return {ctor: "_Tuple2"
-                   ,_0: _v31._0
-                   ,_1: {ctor: "_Tuple3"
-                        ,_0: p
-                        ,_1: _v31._1
-                        ,_2: _v31._2}};}
-         _U.badCase($moduleName,
-         "on line 194, column 37 to 50");
-      }();
-   }),
-   player,
-   A4($Json$Decode.tuple3,
-   F3(function (v0,v1,v2) {
-      return {ctor: "_Tuple3"
-             ,_0: v0
-             ,_1: v1
-             ,_2: v2};
-   }),
-   kaze,
-   $Json$Decode.$int,
-   $Json$Decode.string));
    var winner = A4($Json$Decode.tuple3,
    F3(function (p,points,h) {
       return A3($GameTypes.Winner,
@@ -5285,6 +5285,18 @@ Elm.JSON.make = function (_elm) {
       $Json$Decode.$int),
       $Json$Decode.succeed(_L.fromArray([])));
    });
+   var content = A2($Json$Decode._op[":="],
+   "content",
+   $Json$Decode.string);
+   var from = A2($Json$Decode._op[":="],
+   "from",
+   $Json$Decode.string);
+   var ident = A2($Json$Decode._op[":="],
+   "ident",
+   $Json$Decode.$int);
+   var nick = A2($Json$Decode._op[":="],
+   "nick",
+   $Json$Decode.string);
    var gameEventOfType = function (eventType) {
       return function () {
          switch (eventType)
@@ -5331,9 +5343,7 @@ Elm.JSON.make = function (_elm) {
                                              ,player_kaze: pk});
               }),
               playerKaze,
-              A2($Json$Decode._op[":="],
-              "nick",
-              $Json$Decode.string));
+              nick);
             case "riichi":
             return A2($Json$Decode.object1,
               function (pk) {
@@ -5424,18 +5434,6 @@ Elm.JSON.make = function (_elm) {
    "event",
    $Json$Decode.string),
    gameEventOfType);
-   var content = A2($Json$Decode._op[":="],
-   "content",
-   $Json$Decode.string);
-   var from = A2($Json$Decode._op[":="],
-   "from",
-   $Json$Decode.string);
-   var ident = A2($Json$Decode._op[":="],
-   "ident",
-   $Json$Decode.$int);
-   var nick = A2($Json$Decode._op[":="],
-   "nick",
-   $Json$Decode.string);
    var set = function (x) {
       return A2($Json$Decode.map,
       $Set.fromList,
@@ -5467,7 +5465,7 @@ Elm.JSON.make = function (_elm) {
    "idle",
    A2($Json$Decode.map,
    $Set.fromList,
-   $Json$Decode.list(nick))),
+   $Json$Decode.list($Json$Decode.string))),
    A2($Json$Decode._op[":="],
    "games",
    $Json$Decode.list(gameInfo)));
@@ -5484,7 +5482,9 @@ Elm.JSON.make = function (_elm) {
             case "game-event":
             return A2($Json$Decode.object1,
               $GameTypes.InGameEvents,
-              $Json$Decode.list(gameEvent));
+              A2($Json$Decode._op[":="],
+              "events",
+              $Json$Decode.list(gameEvent)));
             case "game-join":
             return A3($Json$Decode.object2,
               F2(function (i,n) {
@@ -5523,9 +5523,7 @@ Elm.JSON.make = function (_elm) {
                  return $GameTypes.LoungeInfo({_: {}
                                               ,lounge: l});
               },
-              A2($Json$Decode._op[":="],
-              "lounge",
-              lounge));
+              lounge);
             case "msg":
             return A3($Json$Decode.object2,
               F2(function (f,c) {

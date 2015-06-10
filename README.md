@@ -2,6 +2,20 @@
 
 See http://funktionaali.com/2014-05-04-Riichi.html
 
+# hajong-client-web Web Client
+
+Requires elm 0.15
+
+compile with
+
+```
+hajong/hajong-client-web $ elm make Main.elm
+```
+
+# Authentication scheme
+
+??
+
 ## About lens naming
 
 Prefixes:
