@@ -39,7 +39,7 @@ function setIdentity(nick, ident, token) {
 }
 
 function startGame(doJoin) {
-  socket = new WebSocket("ws://84.248.82.156:8001");
+  socket = new WebSocket(#{String websocketURI});
 
   socket.onopen = function () {
     waitDiv.hidden = true;

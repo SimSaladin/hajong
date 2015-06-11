@@ -1,20 +1,29 @@
 Default: &defaults
+
+  # web server settings
   host: "*4" # any IPv4 host
   port: 3000
   approot: "http://localhost:3000"
-  copyright: "2014 Samuli Thomasson"
-  server_port: 8001
+
+  # hajong server settings
+  server_ws: "ws://localhost:8001"
   server_binary: "hajong-server" # in path or absolute
   server_args:
      - "--verbose"
   server_log: "game-devel.log"
+
+  copyright: "2014 Samuli Thomasson"
   #analytics: UA-YOURCODE
 
 Development:
   <<: *defaults
 
 Testing:
-  <<: *defaults
+   port: 80
+   approot: "http://hajong-test.funktionaali.com"
+
+   server_ws: "ws://hajong-test.funktionaali.com:8001"
+   <<: *defaults
 
 Staging:
   <<: *defaults

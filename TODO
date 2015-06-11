@@ -1,6 +1,7 @@
 x = done, / = half done, ! = needs testing
 
 # mechanics
+[ ] (elm) 'you are furiten' results in Game error
 [ ] (game) nagashi mangan check
 [x] (game) furiten
 [/] (game) chankan

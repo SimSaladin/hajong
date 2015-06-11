@@ -31,6 +31,7 @@ getLobbyR = playLayout Nothing
 playLayout :: Maybe Int -> Handler Html
 playLayout mgid = do
     mauth <- maybeAuthId
+    websocketURI <- extraServerWs <$> getExtra
     defaultLayout $ do
         setTitle "Playing"
         addScript $ StaticR js_elm_js

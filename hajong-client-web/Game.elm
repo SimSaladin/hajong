@@ -259,7 +259,7 @@ tileImage tile =
                Honor (Kazehai k)   -> (222 + (kazeNth k) * 97, 356)
                Honor (Sangenpai s) -> (707 + (sangenNth s) * 97, 356)
    in
-      croppedImage (row, col) 62 82 "static/img/Mahjong-tiles.jpg"
+      croppedImage (row, col) 62 82 "/static/img/Mahjong-tiles.jpg"
 -- }}}
 
 -- {{{ Buttons 'n stuff --------------------------------------------------------

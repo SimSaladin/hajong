@@ -28,6 +28,7 @@ import           Data.SafeCopy
 import           Data.ReusableIdentifiers
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
+import           Data.Time.Clock (secondsToDiffTime)
 import           Network
 import           System.Log.FastLogger (LoggerSet, pushLogStr, toLogStr)
 import           System.Directory (removeFile)
@@ -38,37 +39,38 @@ import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 
 -- * Types
 
+-- | Serialization of an on-going game.
 data Game = Game
     { _gaSettings      :: GameSettings
     , _gaState         :: GameState Int
     } deriving (Show, Typeable)
 
+-- | A record of a client connected or previously connected.
 data ClientRecord = ClientRecord
     { _cNick           :: Text
     , _cToken          :: Text
     , _cRegistered     :: Bool
-    , _cJoined         :: Maybe UTCTime
-    , _cParted         :: Maybe UTCTime
+    , _cStatus         :: Either UTCTime UTCTime -- ^ Left (disconnected at) or Right (connected at)
     , _cInGame         :: Maybe Int
     } deriving (Show, Typeable)
 
--- | This is ACID.
+-- | This is the root ACID type.
 --
 -- Players are identified with unique Ints. When joining the server, they
 -- may opt for a new *anonymous* identifier or provide their previous
 -- identifier and a passphrase.
 data ServerDB = ServerDB
-    { _sePlayerRecord  :: Record              -- ^ Identifiers, connected or in game
-    , _seReserved      :: IntMap ClientRecord -- ^ Reserved player spots, "valid until"
+    { _sePlayerRecord  :: Record              -- ^ Player identifiers
+    , _seReserved      :: IntMap ClientRecord -- ^ Clients identified by @sePlayerRecord@
     , _seNicks         :: Map Nick Int        -- ^ Reserved nicks
-    , _seGameRecord    :: Record              -- ^ Temp game id's
-    , _seGames         :: IntMap Game
+    , _seGameRecord    :: Record              -- ^ Game identifiers
+    , _seGames         :: IntMap Game         -- ^ Games identified by @seGameRecord@
     } deriving (Show, Typeable)
 
-$(deriveSafeCopy 0 'base ''ClientRecord)
+$(deriveSafeCopy 1 'base ''ClientRecord)
 $(deriveSafeCopy 0 'base ''ServerDB)
 
--- | In Reader.
+-- | Server logic Reader value.
 data ServerSt = ServerSt
     { _db              :: AcidState ServerDB
     , _seConnections   :: TVar (IntMap Client)      -- ^ Everyone connected
@@ -79,16 +81,18 @@ data ServerSt = ServerSt
     , _seWorkers       :: TVar (IntMap RunningGame)
     } deriving (Typeable)
 
+-- | Game worker thread.
 data RunningGame = RunningGame
     { _gWorker         :: WorkerData
     , _gThread         :: ThreadId
     , _gClients        :: IntMap Client
     } deriving (Typeable)
 
+-- | Disconnecting websocket client.
 data PartedException = PartedException Text deriving (Show, Typeable)
 instance Exception PartedException
 
---
+-- | Server logic monad.
 newtype Server a = Server { unServer :: ReaderT ServerSt IO a }
     deriving ( Functor, Applicative, Monad, MonadIO, MonadReader ServerSt )
 
@@ -154,23 +158,35 @@ dumpDB = ask
 
 -- * Updates
 
--- | Connect with (ident, token).
+-- | Add the new client to ServerDB if
+--      * its @ident@ is known,
+--      * the client knows correct @token@ and
+--      * there are no other clients with the @ident@
+--
+--  @connectClient currentTime ident token@
 connectClient :: UTCTime -> Int -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
-connectClient time mi token = use (seReserved.at mi) >>= \case
-    Nothing                     -> return (Left "Unknown identity")
-    Just c | token == c^.cToken -> do let c' = c&cJoined.~Just time&cParted.~Nothing
-                                      seReserved.at mi <.= Just c'
-                                      return (Right (mi, c'))
-           | otherwise          -> return $ Left "Auth token didn't match"
+connectClient time ident token = do
+    reserved <- use (seReserved.at ident)
+    case reserved of
+        Nothing                     -> return $ Left $ "Unknown identity: " <> tshow ident
+        Just c | token == c^.cToken -> do let c' = c&cStatus.~Right time
+                                          seReserved.at ident <.= Just c'
+                                          return (Right (ident, c'))
+               | otherwise          -> return $ Left $ "Auth tokens didn't match (got " <> token <> ")"
 
+-- | Client disconnects: Set status to Left in corresponding ClientRecord. 
+--
+-- @partClient currentTime ident@
 partClient :: UTCTime -> Int -> Update ServerDB (Maybe ClientRecord)
-partClient t i = use (seReserved.at i) >>= \case
-        Just c  -> seReserved.at i <.= Just (c&cParted.~Just t)
+partClient time ident = use (seReserved.at ident) >>= \case
+        Just c  -> seReserved.at ident <.= Just (c&cStatus.~Left time)
         Nothing -> return Nothing
 
--- | New anonymous, new registered or previous registered.
-newPlayerRecord :: Text -> Text -> Bool -> Update ServerDB (Either Text (Int, ClientRecord))
-newPlayerRecord nick token reg = do
+-- | Assign a @ident@ to a new player if possible.
+--
+-- @registerPlayer nick token isRegistered@
+registerPlayer :: Text -> Text -> Bool -> Update ServerDB (Either Text (Int, ClientRecord))
+registerPlayer nick token reg = do
     taken <- use (seNicks.at nick)
     rec   <- use sePlayerRecord
     case (taken, newId rec) of
@@ -182,26 +198,34 @@ newPlayerRecord nick token reg = do
         -- server has room
         (_, Just (i, rec')) -> do sePlayerRecord  .= rec'
                                   seNicks.at nick .= Just i
-                                  let c = ClientRecord nick token reg Nothing Nothing Nothing
+                                  let c = ClientRecord nick token reg (Left $ UTCTime (ModifiedJulianDay 0) $ secondsToDiffTime 0) Nothing
                                   seReserved.at i .= Just c
                                   return (Right (i, c))
         -- server is full
         (_, Nothing)        -> return (Left "Server is full")
 
-newAnon :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
-newAnon nick token = newPlayerRecord nick token False
+-- | Assign an @ident@ to an anonymous player.
+--
+-- @registerAnonymousPlayer nick token@
+registerAnonymousPlayer :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
+registerAnonymousPlayer nick token = registerPlayer nick token False
 
--- | Add or get info for registered user.
-addRegisteredUser :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
-addRegisteredUser user token = use (seNicks.at user) >>= \case
-    Nothing -> newPlayerRecord user token True
+-- | Assign an @ident@ to a registered player.
+--
+-- *TODO: If the nick is taken by an anon player, we should force the anon to change his nick.*
+--
+-- @registerLoggedInPlayer nick token@
+registerLoggedInPlayer :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
+registerLoggedInPlayer nick token = use (seNicks.at nick) >>= \case
+    Nothing -> registerPlayer nick token True
     Just i  -> do
         Just c <- use (seReserved.at i)
         if c^.cRegistered then return (Right (i, c))
                           else return (Left "Your nick is in use by someone anonymous!")
 
-clientToGame :: Int -> Int -> Update ServerDB ()
-clientToGame gid i = seReserved.at i._Just.cInGame .= Just gid
+-- | Set the game of a player
+setPlayerGame :: Int -> Int -> Update ServerDB ()
+setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
 
 destroyGame :: Int -> Update ServerDB [ClientRecord]
 destroyGame gid = do seGameRecord %= freeId gid
@@ -221,10 +245,11 @@ insertGame game = do
                                return (Right gid)
         Nothing -> return (Left "Server's Game capacity reached")
 
--- 
+-- * ACID interface
 $(makeAcidic ''ServerDB [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB
-                        , 'connectClient, 'partClient, 'newAnon, 'addRegisteredUser
-                        , 'clientToGame
+                        , 'connectClient, 'partClient
+                        , 'registerAnonymousPlayer, 'registerLoggedInPlayer
+                        , 'setPlayerGame
                         , 'insertGame, 'destroyGame
                         ])
 
@@ -512,7 +537,7 @@ handleJoinGame gid rg = do
     putWorker rg $ WorkerAddPlayer c $ \gs -> do
         multicast gs (JoinGame gid nick)
         runServer ss $ do
-            update' (ClientToGame gid (getIdent c))
+            update' (SetPlayerGame gid (getIdent c))
             atomically $ modifyTVar' (ss^.seLounge) (deleteSet c)
             putLounge (JoinGame gid nick)
 

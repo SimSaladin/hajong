@@ -2261,7 +2261,7 @@ Elm.Game.make = function (_elm) {
          ,_1: col},
          62,
          82,
-         "static/img/Mahjong-tiles.jpg");
+         "/static/img/Mahjong-tiles.jpg");
       }();
    };
    var dispYaku = function (_v58) {

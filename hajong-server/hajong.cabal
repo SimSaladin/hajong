@@ -78,6 +78,7 @@ library
                      , directory
                      , binary
                      , text-binary
+                     , time
 
   default-extensions:  TemplateHaskell
                      , OverloadedStrings

@@ -68,7 +68,7 @@ widgetFile = (if development then widgetFileReload
 data Extra = Extra
     { extraCopyright :: Text
     , extraAnalytics :: Maybe Text -- ^ Google Analytics
-    , extraServerPort :: Int
+    , extraServerWs :: Text
     , extraServerBinary :: FilePath
     , extraServerArgs :: [String]
     , extraServerLog :: FilePath
@@ -78,7 +78,7 @@ parseExtra :: DefaultEnv -> Object -> Parser Extra
 parseExtra _ o = Extra
     <$> o .:  "copyright"
     <*> o .:? "analytics"
-    <*> o .: "server_port"
+    <*> o .: "server_ws"
     <*> o .: "server_binary"
     <*> o .: "server_args"
     <*> o .: "server_log"

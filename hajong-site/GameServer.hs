@@ -36,8 +36,8 @@ getRegisteredUser, getNewAnonUser :: Text -> Handler (Either Text (Int, G.Client
 getRegisteredUser user = do
     acid <- getAcid
     token <- liftIO G.randomToken
-    liftIO $ acid `update` G.AddRegisteredUser user token
+    liftIO $ acid `update` G.RegisterLoggedInPlayer user token
 getNewAnonUser nick = do
     acid <- getAcid
     token <- liftIO G.randomToken
-    liftIO $ acid `update` G.NewAnon nick token
+    liftIO $ acid `update` G.RegisterAnonymousPlayer nick token

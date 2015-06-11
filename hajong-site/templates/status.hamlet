@@ -1,6 +1,7 @@
 <h1>Status
 
 <h2>Active players
+<i>id - (nick) - registered? - connected? 
 <ul>
   $forall (i, cr) <- IM.toList _seReserved
     <li><b>#{i}</b> (#{_cNick cr}) &mdash; #
@@ -9,12 +10,12 @@
       $else
         <i>anonymous
       &mdash; #
-      $maybe p <- _cParted cr
-        <i>Disconnected
-        \ #{show p}
-      $nothing
-        <b>Connected
-        \ #{show (_cJoined cr)}
+
+      $case _cStatus cr
+        $of Right connectedAt
+          <b>Connected from #{show connectedAt}
+        $of Left disconnectedAt
+          <i>Disconnected since #{show disconnectedAt}
 
 <h2>Reserved nicks
 <ul>
