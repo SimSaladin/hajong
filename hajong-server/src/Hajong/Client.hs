@@ -41,7 +41,7 @@ instance IsPlayer Client where
 
 unicastError :: (MonadLogger m, MonadIO m) => Client -> Text -> m ()
 unicastError c txt = do
-    $logError $ "Client error [" ++ getNick c ++ "]: " <> txt
+    logErrorN $ "Client error [" ++ getNick c ++ "]: " <> txt
     unicast c $ Invalid txt
 
 clientEither :: (MonadLogger m, MonadIO m) => Client -> Either Text a -> (a -> m ()) -> m ()

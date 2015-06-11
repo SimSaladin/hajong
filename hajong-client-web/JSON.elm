@@ -196,19 +196,16 @@ players = tuple2 (\p (k, ps, n) -> (k, (p, ps, n))) int (tuple3 (,,) kaze int st
 
 -- * {{{ Results -------------------------------------------------------
 results : Decoder RoundResult
-results = tuple2 resultsFrom string value
+results = "type" := string `andThen` resultsOfType
 
-resultsFrom : String -> Value -> RoundResult
-resultsFrom t o =
-   let decoder = case t of
-         "tsumo" -> object2 (\w p -> DealTsumo { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
-         "ron"   -> object2 (\w p -> DealRon   { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
-         "draw"  -> object2 (\w p -> DealDraw  { tenpai = w, nooten = p }) ("tenpais" := list payer) ("nooten" := list payer)
-   in case decodeValue decoder o of
-         Ok res -> res
+resultsOfType : String -> Decoder RoundResult
+resultsOfType t = case t of
+   "dealtsumo" -> object2 (\w p -> DealTsumo { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
+   "dealron"   -> object2 (\w p -> DealRon   { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
+   "dealdraw"  -> object2 (\w p -> DealDraw  { tenpai  = w, nooten = p }) ("tenpais" := list payer)  ("nooten" := list payer)
 
 winner : Decoder Winner
-winner = tuple3 (\p points h -> Winner p points h) player int valuedHand
+winner = tuple3 (\p points h -> Winner p points h) int int valuedHand
 
 payer : Decoder Payer
 payer = tuple2 (\p v -> Payer p v) player int

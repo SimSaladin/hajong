@@ -23,7 +23,12 @@ logView game = container 500 200 topLeft
       <| titled "Log"
       <| flow down
       <| List.map (eventView >> leftAligned)
-      <| List.take 6 game.eventlog
+      <| List.take 6
+      <| List.filter isNotInGame game.eventlog
+
+isNotInGame x = case x of
+   InGameEvents _ -> False
+   _              -> True
 
 titled : String -> Element -> Element
 titled str = above (leftAligned <| Text.color charcoal <| Text.fromString str)
@@ -41,7 +46,7 @@ eventView ev = case ev of
        , Text.fromString game.topic
        , Text.fromString <| toString game.ident
        , Text.join (Text.fromString " ") <| List.map Text.fromString <| Set.toList game.players]
-    InGameEvents _         -> "" |> Text.fromString
+    InGameEvents _         -> "in-game" |> Text.fromString
     _                      -> toString ev |> Text.fromString |> Text.color orange
 -- }}}
 
@@ -85,11 +90,29 @@ type Input = AnEvent Event
            | LoungeInput Lounge.Controls
            | TimeDelta Time.Time
 
+input : Signal Input
 input = mergeMany
    [ AnEvent <~ eventInput
    , GameInput <~ Game.controls
    , LoungeInput <~ Lounge.controls
    , TimeDelta <~ Time.every Time.second ]
+-- }}}
+
+-- {{{ Sounds -------------------------------------------------
+port sounds : Signal String
+port sounds = soundFromInput <~ input
+
+soundFromInput : Input -> String
+soundFromInput inp = case inp of
+   AnEvent (InGameEvents (RoundTurnAction {action} :: _)) -> soundFromTurnAction action
+   _ -> ""
+
+soundFromTurnAction : TurnAction -> String
+soundFromTurnAction ta = case ta of
+   TurnTileDiscard _ -> "pop"
+   TurnTileDraw _ _  -> "pop"
+   _                 -> "none"
+
 -- }}}
 
 -- {{{ State --------------------------------------------------
@@ -110,8 +133,8 @@ stepEvent event gameState = case event of
    Identity   {nick}   -> { gameState | mynick <- nick }
    JoinServer {nick}   -> { gameState | lounge <- addIdle nick gameState.lounge }
    PartServer {nick}   -> { gameState | lounge <- deleteNick nick gameState.lounge }
-   -- Message {from,content} ->
-   -- Invalid {content} ->
+   Message {from,content} -> gameState -- TODO
+   Invalid {content} -> gameState -- TODO
    LoungeInfo {lounge} -> { gameState | lounge <- lounge }
    GameCreated {game}  -> { gameState | lounge <- addGame game gameState.lounge }
    JoinGame {nick, ident} ->

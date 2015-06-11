@@ -34,6 +34,7 @@ playLayout mgid = do
     websocketURI <- extraServerWs <$> getExtra
     defaultLayout $ do
         setTitle "Playing"
+        addScript $ StaticR js_howler_min_js
         addScript $ StaticR js_elm_js
         $(widgetFile "play")
 {-# INLINE playLayout #-}

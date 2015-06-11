@@ -4652,7 +4652,7 @@ Elm.JSON.make = function (_elm) {
                                          ,_0: "ident"
                                          ,_1: $Json$Encode.string($Basics.toString(tile._0._0))}]);}
                  _U.badCase($moduleName,
-                 "between lines 281 and 283");
+                 "between lines 278 and 280");
               }());
             case "Suited": return A2(atType,
               $Basics.toString(tile._0),
@@ -4663,7 +4663,7 @@ Elm.JSON.make = function (_elm) {
                             ,_0: "aka"
                             ,_1: $Json$Encode.bool(tile._2)}]));}
          _U.badCase($moduleName,
-         "between lines 279 and 283");
+         "between lines 276 and 280");
       }();
    };
    var toJSON_ShoutKind = function (sk) {
@@ -4674,7 +4674,7 @@ Elm.JSON.make = function (_elm) {
             case "Pon": return "pon";
             case "Ron": return "ron";}
          _U.badCase($moduleName,
-         "between lines 272 and 276");
+         "between lines 269 and 273");
       }());
    };
    var toJSON_GameAction = function (a) {
@@ -4736,7 +4736,7 @@ Elm.JSON.make = function (_elm) {
                    _L.fromArray([]));}
               break;}
          _U.badCase($moduleName,
-         "between lines 259 and 270");
+         "between lines 256 and 267");
       }();
    };
    var toJSON_Event = function (ev) {
@@ -4793,7 +4793,7 @@ Elm.JSON.make = function (_elm) {
                             ,_0: "nick"
                             ,_1: $Json$Encode.string(ev._0.nick)}]));}
          _U.badCase($moduleName,
-         "between lines 248 and 256");
+         "between lines 245 and 253");
       }();
    };
    var encodeEvent = function ($) {
@@ -5105,6 +5105,16 @@ Elm.JSON.make = function (_elm) {
    A2($Json$Decode._op[":="],
    "value",
    handValue));
+   var winner = A4($Json$Decode.tuple3,
+   F3(function (p,points,h) {
+      return A3($GameTypes.Winner,
+      p,
+      points,
+      h);
+   }),
+   $Json$Decode.$int,
+   $Json$Decode.$int,
+   valuedHand);
    var turnActionOfType = function (taType) {
       return function () {
          switch (taType)
@@ -5136,7 +5146,7 @@ Elm.JSON.make = function (_elm) {
             case "tsumo":
             return $Json$Decode.succeed($GameTypes.TurnTsumo);}
          _U.badCase($moduleName,
-         "between lines 234 and 239");
+         "between lines 231 and 236");
       }();
    };
    var turnAction = A2($Json$Decode.andThen,
@@ -5152,16 +5162,6 @@ Elm.JSON.make = function (_elm) {
    var player = A2($Json$Decode._op[":="],
    "player",
    $Json$Decode.$int);
-   var winner = A4($Json$Decode.tuple3,
-   F3(function (p,points,h) {
-      return A3($GameTypes.Winner,
-      p,
-      points,
-      h);
-   }),
-   player,
-   $Json$Decode.$int,
-   valuedHand);
    var payer = A3($Json$Decode.tuple2,
    F2(function (p,v) {
       return A2($GameTypes.Payer,
@@ -5170,68 +5170,57 @@ Elm.JSON.make = function (_elm) {
    }),
    player,
    $Json$Decode.$int);
-   var resultsFrom = F2(function (t,
-   o) {
+   var resultsOfType = function (t) {
       return function () {
-         var decoder = function () {
-            switch (t)
-            {case "draw":
-               return A3($Json$Decode.object2,
-                 F2(function (w,p) {
-                    return $GameTypes.DealDraw({_: {}
-                                               ,nooten: p
-                                               ,tenpai: w});
-                 }),
-                 A2($Json$Decode._op[":="],
-                 "tenpais",
-                 $Json$Decode.list(payer)),
-                 A2($Json$Decode._op[":="],
-                 "nooten",
-                 $Json$Decode.list(payer)));
-               case "ron":
-               return A3($Json$Decode.object2,
-                 F2(function (w,p) {
-                    return $GameTypes.DealRon({_: {}
-                                              ,payers: p
-                                              ,winners: w});
-                 }),
-                 A2($Json$Decode._op[":="],
-                 "winners",
-                 $Json$Decode.list(winner)),
-                 A2($Json$Decode._op[":="],
-                 "payers",
-                 $Json$Decode.list(payer)));
-               case "tsumo":
-               return A3($Json$Decode.object2,
-                 F2(function (w,p) {
-                    return $GameTypes.DealTsumo({_: {}
-                                                ,payers: p
-                                                ,winners: w});
-                 }),
-                 A2($Json$Decode._op[":="],
-                 "winners",
-                 $Json$Decode.list(winner)),
-                 A2($Json$Decode._op[":="],
-                 "payers",
-                 $Json$Decode.list(payer)));}
-            _U.badCase($moduleName,
-            "between lines 203 and 207");
-         }();
-         return function () {
-            var _v37 = A2($Json$Decode.decodeValue,
-            decoder,
-            o);
-            switch (_v37.ctor)
-            {case "Ok": return _v37._0;}
-            _U.badCase($moduleName,
-            "between lines 207 and 208");
-         }();
+         switch (t)
+         {case "dealdraw":
+            return A3($Json$Decode.object2,
+              F2(function (w,p) {
+                 return $GameTypes.DealDraw({_: {}
+                                            ,nooten: p
+                                            ,tenpai: w});
+              }),
+              A2($Json$Decode._op[":="],
+              "tenpais",
+              $Json$Decode.list(payer)),
+              A2($Json$Decode._op[":="],
+              "nooten",
+              $Json$Decode.list(payer)));
+            case "dealron":
+            return A3($Json$Decode.object2,
+              F2(function (w,p) {
+                 return $GameTypes.DealRon({_: {}
+                                           ,payers: p
+                                           ,winners: w});
+              }),
+              A2($Json$Decode._op[":="],
+              "winners",
+              $Json$Decode.list(winner)),
+              A2($Json$Decode._op[":="],
+              "payers",
+              $Json$Decode.list(payer)));
+            case "dealtsumo":
+            return A3($Json$Decode.object2,
+              F2(function (w,p) {
+                 return $GameTypes.DealTsumo({_: {}
+                                             ,payers: p
+                                             ,winners: w});
+              }),
+              A2($Json$Decode._op[":="],
+              "winners",
+              $Json$Decode.list(winner)),
+              A2($Json$Decode._op[":="],
+              "payers",
+              $Json$Decode.list(payer)));}
+         _U.badCase($moduleName,
+         "between lines 202 and 205");
       }();
-   });
-   var results = A3($Json$Decode.tuple2,
-   resultsFrom,
-   $Json$Decode.string,
-   $Json$Decode.value);
+   };
+   var results = A2($Json$Decode.andThen,
+   A2($Json$Decode._op[":="],
+   "type",
+   $Json$Decode.string),
+   resultsOfType);
    var roundState = A2($Json$Decode.andThen,
    A9($Json$Decode.object8,
    $GameTypes.RoundState,
@@ -5553,14 +5542,14 @@ Elm.JSON.make = function (_elm) {
    eventOfType);
    var decodeEvent = function (str) {
       return function () {
-         var _v41 = A2($Json$Decode.decodeString,
+         var _v39 = A2($Json$Decode.decodeString,
          event,
          str);
-         switch (_v41.ctor)
+         switch (_v39.ctor)
          {case "Err":
             return $GameTypes.Invalid({_: {}
-                                      ,content: _v41._0});
-            case "Ok": return _v41._0;}
+                                      ,content: _v39._0});
+            case "Ok": return _v39._0;}
          _U.badCase($moduleName,
          "between lines 18 and 20");
       }();
@@ -5603,7 +5592,7 @@ Elm.JSON.make = function (_elm) {
                       ,points: points
                       ,players: players
                       ,results: results
-                      ,resultsFrom: resultsFrom
+                      ,resultsOfType: resultsOfType
                       ,winner: winner
                       ,payer: payer
                       ,handValue: handValue
@@ -6577,6 +6566,8 @@ Elm.Main.make = function (_elm) {
               $Game.processInGameEvent,
               gameState,
               event._0);
+            case "Invalid":
+            return gameState;
             case "JoinGame":
             return _U.replace([["lounge"
                                ,A3(addJoinedGame,
@@ -6597,6 +6588,8 @@ Elm.Main.make = function (_elm) {
             return _U.replace([["lounge"
                                ,event._0.lounge]],
               gameState);
+            case "Message":
+            return gameState;
             case "PartServer":
             return _U.replace([["lounge"
                                ,A2(deleteNick,
@@ -6626,6 +6619,33 @@ Elm.Main.make = function (_elm) {
          return gs;
       }();
    });
+   var soundFromTurnAction = function (ta) {
+      return function () {
+         switch (ta.ctor)
+         {case "TurnTileDiscard":
+            return "pop";
+            case "TurnTileDraw":
+            return "pop";}
+         return "none";
+      }();
+   };
+   var soundFromInput = function (inp) {
+      return function () {
+         switch (inp.ctor)
+         {case "AnEvent":
+            switch (inp._0.ctor)
+              {case "InGameEvents":
+                 switch (inp._0._0.ctor)
+                   {case "::":
+                      switch (inp._0._0._0.ctor)
+                        {case "RoundTurnAction":
+                           return soundFromTurnAction(inp._0._0._0._0.action);}
+                        break;}
+                   break;}
+              break;}
+         return "";
+      }();
+   };
    var TimeDelta = function (a) {
       return {ctor: "TimeDelta"
              ,_0: a};
@@ -6685,6 +6705,13 @@ Elm.Main.make = function (_elm) {
                                               ,A2($Signal._op["<~"],
                                               TimeDelta,
                                               $Time.every($Time.second))]));
+   var sounds = Elm.Native.Port.make(_elm).outboundSignal("sounds",
+   function (v) {
+      return v;
+   },
+   A2($Signal._op["<~"],
+   soundFromInput,
+   input));
    var gameState = A3($Signal.foldp,
    stepGame,
    newState,
@@ -6724,7 +6751,7 @@ Elm.Main.make = function (_elm) {
               ev._0.nick,
               "\'"))));
             case "InGameEvents":
-            return $Text.fromString("");
+            return $Text.fromString("in-game");
             case "Invalid":
             return $Text.color($Color.white)($Text.fromString(ev._0.content));
             case "JoinServer":
@@ -6751,15 +6778,23 @@ Elm.Main.make = function (_elm) {
    var titled = function (str) {
       return $Graphics$Element.above($Graphics$Element.leftAligned($Text.color($Color.charcoal)($Text.fromString(str))));
    };
+   var isNotInGame = function (x) {
+      return function () {
+         switch (x.ctor)
+         {case "InGameEvents":
+            return false;}
+         return true;
+      }();
+   };
    var logView = function (game) {
       return A3($Graphics$Element.container,
       500,
       200,
       $Graphics$Element.topLeft)(titled("Log")($Graphics$Element.flow($Graphics$Element.down)($List.map(function ($) {
          return $Graphics$Element.leftAligned(eventView($));
-      })(A2($List.take,
-      6,
-      game.eventlog)))));
+      })($List.take(6)(A2($List.filter,
+      isNotInGame,
+      game.eventlog))))));
    };
    var display = F2(function (game,
    view) {
@@ -6774,6 +6809,7 @@ Elm.Main.make = function (_elm) {
    mainView);
    _elm.Main.values = {_op: _op
                       ,logView: logView
+                      ,isNotInGame: isNotInGame
                       ,titled: titled
                       ,eventView: eventView
                       ,eventInput: eventInput
@@ -6783,6 +6819,8 @@ Elm.Main.make = function (_elm) {
                       ,LoungeInput: LoungeInput
                       ,TimeDelta: TimeDelta
                       ,input: input
+                      ,soundFromInput: soundFromInput
+                      ,soundFromTurnAction: soundFromTurnAction
                       ,gameState: gameState
                       ,stepGame: stepGame
                       ,stepEvent: stepEvent

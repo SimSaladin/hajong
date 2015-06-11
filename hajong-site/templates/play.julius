@@ -7,6 +7,14 @@ var waitDiv = document.getElementById('wait');
 var alertedDiv = document.getElementById('alerted');
 /* }}} */
 
+/* {{{ Sounds */
+var sounds = {
+  pop: new Howl({ urls: ["@{StaticR sound_pop_wav}"] })
+};
+
+function soundHandler(x) { sounds[x] && sounds[x].play() }
+/* }}} */
+
 mainDiv.hidden = true;
 
 function initElm() {
@@ -45,6 +53,7 @@ function startGame(doJoin) {
     waitDiv.hidden = true;
     mainDiv.hidden = false;
     game = initElm();
+    game.ports.sounds.subscribe(soundHandler);
     game.ports.upstream.subscribe(function(e) {
       var d = JSON.parse(e);
       if (debug) console.log("out", d);

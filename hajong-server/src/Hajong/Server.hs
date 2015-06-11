@@ -390,21 +390,24 @@ workerWatcher = do
     chan <- view seWatcher >>= atomically . dupTChan
     forever $ atomically (readTChan chan) >>= uncurry workerDied
 
--- | Worker has finished; game ended.
+-- | Worker has finished: notify clients.
 workerDied :: Int -> WorkerResult -> Server ()
 workerDied gid res = do
+
+    -- Log and then destroy the game
     case res of
         Left err -> $logError $ "Game " ++ tshow gid ++ " errored! " ++ tshow err
         Right x  -> $logInfo  $ "Game " ++ tshow gid ++ " finished. " ++ tshow x
     update' $ DestroyGame gid
+
     ss <- ask
-    cs <- atomically $ do
+    clients <- atomically $ do
         ws <- readTVar (ss^.seWorkers)
         let clientSet = ws ^?! at gid._Just.gClients ^.. folded & setFromList
         modifyTVar' (ss^.seWorkers) (at gid .~ Nothing)
         modifyTVar' (ss^.seLounge) (union clientSet)
         return clientSet
-    forM_ cs $ \c -> unicast c (PartGame (getNick c))
+    forM_ clients $ \c -> unicast c (PartGame (getNick c))
 
 ------------------------------------------------------------------------------
 
@@ -446,7 +449,7 @@ withInGame f = do
 withRunningGame :: Int -> (RunningGame -> Server ()) -> Server ()
 withRunningGame gid f = do
     res <- rview seWorkers <&> view (at gid)
-    maybe (uniError "Game not found") f res
+    maybe (uniError $ "Game " <> tshow gid <> " not found!") f res
 
 randomToken :: IO Text
 randomToken = liftM pack $ replicateM 16 $ randomRIO ('A', 'Z')

@@ -55,9 +55,5 @@ aesonOptions :: Int -> Options
 aesonOptions n = defaultOptions
     { fieldLabelModifier     = unpack . toLower . asText . pack . drop n
     , constructorTagModifier = unpack . toLower . asText . pack
-    , sumEncoding            = TwoElemArray
+    , sumEncoding            = TaggedObject "type" "contents"
     }
-
-aesonOptions' :: Int -> Int -> Options
-aesonOptions' n m = (aesonOptions n)
-    { constructorTagModifier = constructorTagModifier (aesonOptions n) . drop m }
