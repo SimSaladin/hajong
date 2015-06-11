@@ -41,7 +41,7 @@ type InKyoku m =
     , Monad m
     )
 
-handOf :: Kaze -> Lens Kyoku Kyoku (Maybe Hand) (Maybe Hand)
+handOf :: Kaze -> Lens Kyoku Kyoku (Maybe HandA) (Maybe HandA)
 handOf pk = sHands.at pk
 
 ----------------------------------------------------------------------------------------
@@ -130,12 +130,11 @@ runTurn' pk ta = do
 
 -- *** Player in turn
 
-drawWall :: InKyoku m => Hand -> m Hand
+drawWall :: InKyoku m => HandA -> m HandA
 drawWall hand = do
-    unless (canDraw hand) (throwError "Cannot draw from wall")
     preview (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
 
-drawDeadWall :: InKyoku m => Hand -> m Hand
+drawDeadWall :: InKyoku m => HandA -> m HandA
 drawDeadWall hand = preview (sWall._last) >>= \case
     Nothing  -> throwError "Wall is empty"
     Just tow -> do
@@ -286,9 +285,8 @@ updatePlayerNick p nick = playerToKaze p >>= \pk -> tellEvent (DealNick p pk nic
 -- | Build the player's "@GamePlayer@" record, or the state of the game as
 -- seen by the player (hide "Deal" but show the player's own hand).
 buildPlayerState :: Kyoku -> Kaze -> AsPlayer
-buildPlayerState deal pk = flip appEndo deal $ mconcat
+buildPlayerState deal pk = flip appEndo (deal { _sHands = map maskPublicHand (_sHands deal) }) $ mconcat
     [ Endo $ sEvents .~ []
-    , Endo $ sHands %~ imap (\k -> if' (k == pk) id maskPublicHand)
     , Endo $ sWall .~ []
     , Endo $ sWanpai .~ []
     , Endo $ sWaiting %~ mwaiting
@@ -301,17 +299,17 @@ buildPlayerState deal pk = flip appEndo deal $ mconcat
                         xs -> Just (Right xs)
 
 -- | Set the hand of player
-updateHand :: InKyoku m => Kaze -> Hand -> m ()
+updateHand :: InKyoku m => Kaze -> HandA -> m ()
 updateHand pk = updateHand' pk (return ())
 
-updateHand' :: InKyoku m => Kaze -> m a -> Hand -> m a
+updateHand' :: InKyoku m => Kaze -> m a -> HandA -> m a
 updateHand' pk ma new = do
     p   <- kazeToPlayer pk
     old <- handOf' pk
     when (old /= new)
         $ tellEvent (DealPrivateHandChanged p pk new)
-    when (_handPublic old /= _handPublic new)
-        $ tellEvent (DealPublicHandChanged pk $ _handPublic new)
+    when (maskPublicHand old /= maskPublicHand new)
+        $ tellEvent (DealPublicHandChanged pk $ maskPublicHand new)
     local (sHands.at pk .~ Just new) ma
 
 tellEvent :: InKyoku m => GameEvent -> m ()
@@ -339,7 +337,7 @@ playerToKaze p = do
     let mk = rp ^. at p
     maybe (throwError "Player not found") (return . (^._1)) mk
 
-handOf' :: InKyoku m => Kaze -> m Hand
+handOf' :: InKyoku m => Kaze -> m HandA
 handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") return
 
 ----------------------------------------------------------------------------------------
@@ -422,8 +420,8 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
         ]
 
     -- TODO get rid these in favor of finer control
-    DealPublicHandChanged pk hp ->
-        [ Endo $ sHands.ix pk.handPublic .~ hp ]
+    -- DealPublicHandChanged pk hp ->
+    --     [ Endo $ sHands.ix pk.handPublic .~ hp ]
 
     DealPrivateHandChanged _ pk h ->
         [ Endo $ sHands.ix pk .~ h ]
@@ -437,7 +435,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
     -- player-private
     DealStarts _ _ new
         | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
-        | otherwise           -> [ Endo $ const new ]
+        -- | otherwise           -> [ Endo $ const new ]
 
     DealWaitForShout ws ->
         [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
@@ -446,13 +444,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
         [ Endo $ sWaiting .~ Just (Left wt) ]
 
     DealRiichi pk ->
-        [ Endo $ do
-             let isShout DealTurnShouted{} = True
-                 isShout _ = False
-             db <- liftA2 (&&) (^?!sHands.at pk._Just.handPublic.handDiscards.to null)
-                               (view sEvents <&> not . any isShout)
-             sHands.ix pk.handPublic %~ (handRiichi .~ True) . (hDoubleRiichi .~ db)
-        , Endo $ pRiichi +~ 1000 ]
+        [ Endo $ pRiichi +~ 1000 ]
 
     DealFlipDora td mtw ->
         [ Endo $ pDora %~ (|> td)
@@ -465,20 +457,20 @@ dealTurnAction :: Kaze -> TurnAction -> Endo Kyoku
 dealTurnAction p ta = mconcat $ case ta of 
 
     TurnTileDiscard dc ->
-        [ Endo $ sHands.ix p.handPublic.handDiscards %~ (|> dc)
-        , if' (dc^.dcRiichi) (Endo $ sHands.ix p.handPublic.handRiichi .~ True) mempty ]
+        [ Endo $ sHands.ix p.handDiscards %~ (|> dc) ]
 
     TurnTileDraw w mt ->
         [ Endo $ pWallTilesLeft -~ 1
-        , Endo $ sWall %~ if' w initEx tailEx
-        , Endo $ sHands.ix p.handPick .~ mt ]
+        , Endo $ sWall %~ if' w initEx tailEx ]
 
     TurnAnkan tile ->
-        [ Endo $ sHands.ix p.handPublic.handCalled %~ (|> kantsu tile) ]
+        [ ]
+        -- [ Endo $ sHands.ix p.handCalled %~ (|> kantsu tile) ]
 
     TurnShouminkan t ->
-        let isShoum m = mentsuKind m == Koutsu && mentsuTile m == t
-        in [ Endo $ sHands.ix p.handPublic.handCalled.each . filtered isShoum %~ promoteToKantsu ]
+        [ ]
+        -- let isShoum m = mentsuKind m == Koutsu && mentsuTile m == t
+        -- in [ Endo $ sHands.ix p.handPublic.handCalled.each . filtered isShoum %~ promoteToKantsu ]
 
     TurnTsumo ->
         [] -- XXX: should something happen?
@@ -487,7 +479,7 @@ dealTurnAction p ta = mconcat $ case ta of
 
 filterCouldShout :: Tile -- ^ Tile to shout
                  -> Kaze -- ^ Whose tile
-                 -> Map Kaze Hand
+                 -> Map Kaze HandA
                  -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
 filterCouldShout dt np =
     sortBy (shoutPrecedence np)

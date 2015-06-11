@@ -12,16 +12,25 @@
 -- (@Hand@), and functions that operate on a hand.
 ------------------------------------------------------------------------------
 module Mahjong.Hand
-    ( Hand(..)
-    , HandPublic(..)
+    ( Hand(..), HandA, HandP
     , Discard(..)
+    , RiichiState(..), DrawState(..), PickedTile(..), FuritenState(..)
     , module Mahjong.Hand
     , module Mahjong.Hand.Algo
     , module Mahjong.Hand.Mentsu
     , module Mahjong.Hand.Value
     , module Mahjong.Hand.Yaku
     -- * Lenses
-    , handPublic, handConcealed, handDiscards, handRiichi, handPick, handCalled, hDoubleRiichi
+    , handCalled   
+    , handDiscards 
+    , handRiichi   
+    , handIppatsu  
+    , handState    
+    , handPicks    
+    , handConcealed
+    , handFuriten  
+    , handCanTsumo 
+
     , dcTile, dcRiichi, dcTo
     ) where
 
@@ -40,21 +49,35 @@ import           Mahjong.Hand.Internal
 ------------------------------------------------------------------------------
 
 -- | Hide private info from the data type.
-maskPublicHand :: Hand -> Hand
-maskPublicHand = (handConcealed .~ []) . (handPick .~ Nothing)
-               . (handFuriten .~ Nothing)  . (hCanTsumo .~ False)
+maskPublicHand :: HandA -> HandP
+maskPublicHand hand =
+    hand { _handPicks = map maskPickedTile (_handPicks hand)
+         , _handConcealed = Nothing
+         , _handFuriten = Nothing
+         , _handCanTsumo = Nothing }
+    where
+        maskPickedTile (FromWall _)       = FromWall Nothing
+        maskPickedTile (FromWanpai _)     = FromWanpai Nothing
+        maskPickedTile (AgariTsumo t)     = AgariTsumo t
+        maskPickedTile (AgariCall t k)    = AgariCall t k
+        maskPickedTile (AgariRinshan t k) = AgariRinshan t k
 
 -- * Draw
 
-toHand :: CanError m => Tile -> Hand -> m Hand
-toHand t = do
-    h <- handPick .~ Just t
-    return $ return $ if' (complete h) (hCanTsumo .~ True) id h
+toHand :: CanError m => Tile -> HandA -> m HandA
+toHand t h = do
+    unless (h^.handState == DrawFromWall) $ throwError $ "Hand state was " <> tshow (h^.handState) <> ", but expected " <> tshow DrawFromWall
+    return $ setPickAndTsumo (FromWall $ pure t) h
 
-toHandWanpai :: CanError m => Tile -> Hand -> m Hand
+toHandWanpai :: CanError m => Tile -> HandA -> m HandA
 toHandWanpai t h = do
-    unless (h^.handPublic.handDrawWanpai) (throwError "Cannot draw from wanpai")
-    toHand t h <&> handPublic.handDrawWanpai .~ False
+    unless (h^.handState == DrawFromWanpai) $ throwError $ "Hand state was " <> tshow (h^.handState) <> ", but expected " <> tshow DrawFromWanpai
+    return $ setPickAndTsumo (FromWanpai $ pure t) h
+
+setPickAndTsumo :: PickedTile Identity -> HandA -> HandA
+setPickAndTsumo pick h =
+    let h' = handPicks %~ (++ [pick]) $ handState.~DrawNone $ h
+        in if' (complete h') (handCanTsumo .~ pure True) id h'
 
 -- * Discard
 
@@ -63,97 +86,99 @@ toHandWanpai t h = do
 --  1. tile not in the hand
 --  2. riichi restriction
 --  3. need to draw first
-discard :: CanError m => Discard -> Hand -> m Hand
+discard :: CanError m => Discard -> HandA -> m HandA
 discard d@Discard{..} hand
-    | _dcRiichi && hand ^. handPublic.handRiichi      = throwError "Already in riichi"
-    | hand^.handPublic.handDrawWanpai || canDraw hand = throwError "You need to draw first"
-    | _dcRiichi && not (canRiichiWith _dcTile hand)   = throwError "Cannot riichi: not tenpai"
-    | hand^.handPick /= Just _dcTile
-    , hand^.handPublic.handRiichi                     = throwError "Cannot change wait in riichi"
-    | otherwise = setRiichi . setNoTsumo . movePick . setDiscard <$> tileFromHand _dcTile hand
+    | _dcRiichi, hand^.handRiichi /= NoRiichi     = throwError "Already in riichi"
+    | _dcRiichi, not (canRiichiWith _dcTile hand) = throwError "Cannot riichi: not tenpai"
+    | hand^.handState /= DrawNone                 = throwError "You need to draw first"
+
+    | hand^.handRiichi /= NoRiichi
+    , p : _ <- hand^.handPicks
+    , pickedTile p /= _dcTile                     = throwError "Cannot change wait in riichi"
+
+    | otherwise = setRiichi . setIppatsu . setNoTsumo . movePicks . setDiscard <$> tileFromHand _dcTile hand
   where
-    movePick h
-        | Just p <- _handPick h = h & (handConcealed %~ (`snoc` p)) . (handPick .~ Nothing)
-        | otherwise             = h
-    setDiscard = handPublic.handDiscards %~ (|> d)
-    setNoTsumo = hCanTsumo .~ False
+    movePicks h = h & handConcealed._Wrapped %~ (++ map pickedTile (_handPicks h)) & handPicks .~ []
+    setDiscard  = handDiscards %~ (|> d)
+    setNoTsumo  = handCanTsumo._Wrapped .~ False
     setRiichi
-        | _dcRiichi = handPublic.handRiichi .~ True
-        | otherwise = id
+        | _dcRiichi, hand^.handDiscards == [] = handRiichi .~ DoubleRiichi
+        | _dcRiichi                           = handRiichi .~ Riichi
+        | otherwise                           = id
+    setIppatsu = handIppatsu .~ if _dcRiichi then True else False
 
 -- | Automatically execute a discard necessary to advance the game (in case
 -- of inactive players).
-handAutoDiscard :: CanError m => Hand -> m Discard
+handAutoDiscard :: CanError m => HandA -> m Discard
 handAutoDiscard hand
-    | Just tile <- _handPick hand = return $ Discard tile Nothing False
-    | otherwise                   = return $ Discard (hand ^?! handConcealed._last) Nothing False
+    | p : _ <- _handPicks hand = return $ Discard (pickedTile p) Nothing False
+    | otherwise                = return $ Discard (hand ^?! handConcealed._Wrapped._last) Nothing False
 
 -- * Winning
 
 -- | Shout is Nothing if Tsumo
-handWin :: CanError m => Maybe Shout -> Hand -> m Hand
+handWin :: CanError m => Maybe Shout -> HandA -> m HandA
 handWin ms h
-    | not (complete h)       = throwError "Cannot win with an incomplete hand"
-    | isJust ms && furiten h = throwError "You are furiten"
-    | otherwise              = return $ setAgari ms h
+    | not (complete h)                                 = throwError "Cannot win with an incomplete hand"
+    | isJust ms, h^.handFuriten._Wrapped /= NotFuriten = throwError "You are furiten"
+    | otherwise                                        = return $ setAgari ms h
 
 -- * Kan
 
 -- | Ankan on the given tile if possible.
 --
 -- Remember to flip dora when this succeeds.
-ankanOn :: CanError m => Tile -> Hand -> m Hand
+ankanOn :: CanError m => Tile -> HandA -> m HandA
 ankanOn tile hand
     | [_,_,_,_] <- sameConcealed  = return hand'
     | [_,_,_]   <- sameConcealed
-    , hand^.handPick == Just tile = return $ hand' & handPick .~ Nothing
-    | otherwise                   = throwError "Not enough same tiles"
+    , tile `elem` map pickedTile (hand^.handPicks) = return $ hand' & handPicks %~ filter ((/= tile) . pickedTile)
+    | otherwise                                    = throwError "Not enough same tiles"
     where
-        sameConcealed = hand^.handConcealed^..folded.filtered (== tile)
-        hand'         = hand & handConcealed %~ filter (/= tile)
-                             & handPublic.handCalled %~ (:) (kantsu tile)
-                             & handPublic.handDrawWanpai .~ True
+        sameConcealed = hand^.handConcealed._Wrapped^..folded.filtered (== tile)
+        hand'         = hand & handConcealed._Wrapped %~ filter (/= tile)
+                             & handCalled %~ (:) (kantsu tile)
+                             & handState .~ DrawFromWanpai
 
 -- | Shouminkan with the tile if possible.
 --
 -- Remember to flip dora when this succeeds.
-shouminkanOn :: CanError m => Tile -> Hand -> m Hand
+shouminkanOn :: CanError m => Tile -> HandA -> m HandA
 shouminkanOn tile hand = do
     hand' <- tile `tileFromHand` hand
     let isShoum m = mentsuKind m == Koutsu && mentsuTile m == tile
-    case hand' ^? handPublic.handCalled.each.filtered isShoum of
+    case hand' ^? handCalled.each.filtered isShoum of
         Nothing -> throwError "Shouminkan not possible: no such open koutsu"
-        Just _  -> return $ handPublic.handCalled.each.filtered isShoum %~ promoteToKantsu $ hand'
+        Just _  -> return $ handCalled.each.filtered isShoum %~ promoteToKantsu $ hand'
 
 -- * Call
 
 -- | Meld the mentsu to the hand
-meldTo :: CanError m => Shout -> Mentsu -> Hand -> m Hand
+meldTo :: CanError m => Shout -> Mentsu -> HandA -> m HandA
 meldTo shout mentsu hand
-    | hand^.handConcealed.to (\xs -> length ih + length (xs L.\\ ih) == length xs)
+    | hand^.handConcealed._Wrapped.to (\xs -> length ih + length (xs L.\\ ih) == length xs)
     = if' (shoutKind shout == Ron) (handWin $ Just shout) return
-    $ if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
-    $ handPublic.handCalled %~ (|> mentsu)
-    $ handConcealed         %~ (L.\\ ih)
+    $ if' (shoutKind shout == Kan) (handState .~ DrawFromWanpai) id
+    $ handCalled %~ (|> mentsu)
+    $ handConcealed._Wrapped %~ (L.\\ ih)
     $ hand
     | otherwise = throwError "meldTo: Tiles not available"
   where ih = shoutTo shout
 
 -- | Transfer the discard from the hand to a mentsu specified by the shout.
-shoutFromHand :: CanError m => Kaze -> Shout -> Hand -> m (Mentsu, Hand)
+shoutFromHand :: CanError m => Kaze -> Shout -> HandA -> m (Mentsu, HandA)
 shoutFromHand sk shout hand =
-    case hand ^? handPublic.handDiscards._last of
+    case hand ^? handDiscards._last of
         Nothing          -> throwError "Player hasn't discarded anything"
         Just Discard{..} -> do
             isJust _dcTo `when` throwError "The discard has already been claimed"
             (shoutTile shout /= _dcTile) `when` throwError "The discard is not the shouted tile"
-            return (fromShout shout,
-                   hand & handPublic.handDiscards._last.dcTo .~ Just sk)
+            return (fromShout shout, hand & handDiscards._last.dcTo .~ Just sk)
 
 -- * Valued hand
 
-valueHand :: Kaze -> Hand -> Kyoku -> ValuedHand
-valueHand player h deal = ValuedHand (h^.handPublic.handCalled) (h^.handConcealed) (getValue vi)
+valueHand :: Kaze -> HandA -> Kyoku -> ValuedHand
+valueHand player h deal = ValuedHand (h^.handCalled) (h^.handConcealed._Wrapped) (getValue vi)
   where vi = ValueInfo deal player h
 
 -- * Utility
@@ -162,14 +187,14 @@ valueHand player h deal = ValuedHand (h^.handPublic.handCalled) (h^.handConceale
 shoutsOn :: Kaze -- ^ Shout from (player in turn)
          -> Tile -- ^ Tile to shout
          -> Kaze -- ^ Shouter
-         -> Hand -- ^ shouter's
+         -> HandA -- ^ shouter's
          -> [Shout]
 shoutsOn np t p hand
     | np == p   = [] -- You're not shouting the thing you just discarded from yourself, right?
     | otherwise = concatMap toShout $ possibleShouts t
   where
     normalShuntsu     = nextKaze np == p
-    ih                = sort (_handConcealed hand) -- NOTE: sort
+    ih                = sort (runIdentity $ _handConcealed hand) -- NOTE: sort
     toShout (mk, xs)  = do
         guard $ xs `isSubListOf` ih
         s <- case mk of
@@ -178,31 +203,25 @@ shoutsOn np t p hand
                 Koutsu  -> [Pon, Ron]
                 Shuntsu -> [Chi, Ron]
         when (s == Chi) $ guard normalShuntsu
-        when (hand^.handPublic.handRiichi) $ guard (s == Ron)
+        when (hand^.handRiichi /= NoRiichi) $ guard (s == Ron)
         guard $ if s == Ron
-            then complete ( toMentsu mk t xs : (hand^.handPublic.handCalled), _handConcealed hand L.\\ xs )
+            then complete ( toMentsu mk t xs : (hand^.handCalled), hand^.handConcealed._Wrapped L.\\ xs)
             else mk /= Jantou
         return $ Shout s np t xs
 
--- | From wall (not wanpai).
-canDraw :: Hand -> Bool
-canDraw h = not (h^.handPublic.handDrawWanpai)
-    && isNothing (h^.handPick)
-    && (3 * length (h^.handPublic.handCalled) + length (h^.handConcealed) == 13)
-
 -- | Tiles the hand can discard for a riichi.
-handCanRiichiWith :: Hand -> [Tile]
+handCanRiichiWith :: HandA -> [Tile]
 handCanRiichiWith h
-    | h^.handPublic.handRiichi = []
-    | otherwise                = h^.handConcealed.to (mapMaybe f)
+    | h^.handRiichi /= NoRiichi = []
+    | otherwise                 = h^.handConcealed._Wrapped.to (mapMaybe f)
     where f t = guard (canRiichiWith t h) >> return t
 
-canRiichiWith :: Tile -> Hand -> Bool
-canRiichiWith t h = null (h^.handPublic.handCalled) && tenpai (L.delete t tiles)
-    where tiles = h^.handConcealed ++ maybe [] return (h^.handPick)
+canRiichiWith :: Tile -> HandA -> Bool
+canRiichiWith t h = null (h^.handCalled) && tenpai (L.delete t tiles)
+    where tiles = h^.handConcealed._Wrapped ++ map pickedTile (h^.handPicks)
 
-furiten :: Hand -> Bool
-furiten h = any (`elem` (h^..handPublic.handDiscards.each.dcTile)) . concatMap getAgari
+furiten :: HandA -> Bool
+furiten h = any (`elem` (h^..handDiscards.each.dcTile)) . concatMap getAgari
           . filter tenpai $ getGroupings h
 
 -- | If there is a shuntsu wait, that is the only possible agari. If there
@@ -219,18 +238,18 @@ isShuntsuWait :: TileGroup -> Bool
 isShuntsuWait (GroupWait Shuntsu _ _) = True
 isShuntsuWait _                       = False
 
-setAgari :: Maybe Shout -> Hand -> Hand
-setAgari ms h = h & handPublic.handAgari .~ mt & handPublic.handAgariCall .~ mc 
-    where (mt, mc) = case ms of
-                         Just s -> (Just $ shoutTile s, Just s)
-                         Nothing -> (h^.handPick, Nothing)
+-- | Set PickedTile from a agari call
+setAgari :: Maybe Shout -> HandA -> HandA
+setAgari ms h = h & handPicks .~ agari
+    where agari | Just sh <- ms = [AgariCall (shoutTile sh) (shoutFrom sh)]
+                | otherwise     = h^.handPicks & _last %~ AgariTsumo . pickedTile
 
 -- | Take the tile from hand if possible
-tileFromHand :: CanError m => Tile -> Hand -> m Hand
+tileFromHand :: CanError m => Tile -> HandA -> m HandA
 tileFromHand tile hand
-    | Just tile' <- hand ^. handPick, tile == tile'         = return $ handPick .~ Nothing $ hand
-    | (xs, _ : ys) <- break (== tile) (_handConcealed hand) = return $ handConcealed .~ (xs ++ ys) $ hand
-    | otherwise                                             = throwError "Tile not in hand"
+    | pick : _ <- filter ((== tile).pickedTile) (hand^.handPicks) = return $ handPicks %~ L.delete pick $ hand
+    | (xs, _ : ys) <- break (== tile) (runIdentity $ _handConcealed hand) = return $ handConcealed._Wrapped .~ (xs ++ ys) $ hand
+    | otherwise                                                   = throwError "Tile not in hand"
 
 -- |
 -- >>> [1..5] `isSubListOf` [1..9]

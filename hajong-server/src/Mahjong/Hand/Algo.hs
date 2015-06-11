@@ -188,10 +188,10 @@ instance HasGroupings [x] => HasGroupings [[x]] where
                           min_ss = minimumEx ss
                           in concatMap fst . filter ((== min_ss) . snd) $ zip gs ss
 
-instance HasGroupings Hand where
+instance HasGroupings HandA where
     getGroupings h = getGroupings $ (,)
-        <$> _handCalled . _handPublic
-        <*> (liftA2 (\mp c -> maybe c (: c) mp) _handPick _handConcealed) $ h
+        <$> _handCalled
+        <*> (liftA2 (++) (map pickedTile._handPicks) (runIdentity._handConcealed)) $ h
 
 shanten :: HasGroupings x => x -> Shanten
 shanten = shantenBy shanten'

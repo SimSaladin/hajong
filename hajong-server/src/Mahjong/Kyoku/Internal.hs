@@ -30,7 +30,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen   as P
 --
 -- Fields starting @_p@ are for public consumption and @_s@ for internal
 -- only.
-data Kyoku = Kyoku
+data Kyoku' m = Kyoku
     -- always public
     { _pRound         :: Kaze
     , _pDeal          :: Int
@@ -47,14 +47,21 @@ data Kyoku = Kyoku
 
     -- secret
     , _sEvents        :: [GameEvent]
-    , _sHands         :: Map Kaze Hand
+    , _sHands         :: Map Kaze (Hand m)
     , _sWall          :: [Tile]
     , _sWanpai        :: [Tile]
     , _sWaiting       :: Maybe Waiting -- ^ Waiting turn action or shout(s)
-    } deriving (Show, Read, Typeable)
+    } deriving (Typeable)
+
+deriving instance Show       (Kyoku' Maybe)
+deriving instance Read       (Kyoku' Maybe)
+deriving instance Show       (Kyoku' Identity)
+deriving instance Read       (Kyoku' Identity)
+
+type Kyoku = Kyoku' Identity
 
 -- | Deal from a player's perspective
-type AsPlayer = Kyoku 
+type AsPlayer = Kyoku' Maybe
 
 -- | Left for turn, right for shout(s)
 type Waiting = Either WaitTurnAction [WaitShout]
@@ -70,8 +77,8 @@ data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a rou
                | DealTurnBegins Kaze
                | DealTurnAction Kaze TurnAction
                | DealTurnShouted Kaze Shout -- ^ Who, Shout
-               | DealPublicHandChanged Kaze HandPublic
-               | DealPrivateHandChanged Player Kaze Hand -- ^ Wholly private
+               | DealPublicHandChanged Kaze HandP
+               | DealPrivateHandChanged Player Kaze HandA -- ^ Wholly private
                | DealFlipDora Tile (Maybe Tile) -- ^ New dora, tile from wall to wanpai
                | DealNick Player Kaze Text
                | DealRiichi Kaze
@@ -148,7 +155,7 @@ data Yaku = Yaku
 data ValueInfo = ValueInfo
     { _vKyoku  :: Kyoku
     , _vPlayer :: Kaze
-    , _vHand   :: Hand
+    , _vHand   :: HandA
     } deriving (Show, Read)
 
 -- * Construct state
@@ -201,7 +208,7 @@ dealTiles deal = go <$> shuffleM riichiTiles
 -- * Lenses
 
 --
-makeLenses ''Kyoku
+makeLenses ''Kyoku'
 makeLenses ''ValueInfo
 makeLenses ''ValuedHand
 makeLenses ''Value

@@ -19,7 +19,7 @@ import Mahjong.Kyoku.Internal
 
 allStandard :: [YakuCheck Yaku]
 allStandard = 
-    [ chankan, chanta, chiitoitsu, chinitsu, doubleRiichi, fanpai
+    [ chankan, chanta, chiitoitsu, chinitsu, fanpai
     , honitsu, honroutou, houteiRaoyui, iipeikou, ippatsu, ittsuu
     , junchan, kuitan, menzenTsumo, pinfu, riichi, rinshanKaihou
     , ryanpeikou, sanAnkou, sanKantsu, sanshokuDoujin, sanshokuDoukou

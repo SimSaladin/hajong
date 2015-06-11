@@ -78,8 +78,8 @@ runYakuCheck info = fmap fst . (`runStateT` groups) . iterM f
 
         putRes (xs, t) = put xs >> return t
 
-        groups = info^.vHand.handPublic.handCalled -- TODO this is not complete; should iterate possibilites
-        isconc = info^.vHand.handPublic.hIsConcealed
+        groups = info^.vHand.handCalled -- TODO this is not complete; should iterate possibilites
+        isconc = null groups
 
 -- @MentsuProp@s
 

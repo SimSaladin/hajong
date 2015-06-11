@@ -280,11 +280,13 @@ afterDiscard = unsafeRoundM advanceAfterDiscard
 afterShout :: Player -> Shout -> WCont
 afterShout pp sh = do
     $logDebug $ "Advancing with shout " ++ tshow sh
+    gs <- rview wGame
+    $logDebug $ tshow gs
 
     let noEnd = do when (shoutKind sh == Kan) $ unsafeRoundM autoDrawWanpai
                    turnActionOrTimeout
 
-    unsafeRoundM (advanceWithShout sh pp) >>= maybe noEnd endDeal
+    unsafeRoundM (advanceWithShout sh pp) >>= maybe noEnd endDeal -- TODO Crashes when shouting Ron in furiten.
 
 -- | After a discard, there are three possible branchings:
 --

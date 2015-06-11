@@ -24,18 +24,7 @@ import            Mahjong.Hand.Yaku
 import            Mahjong.Hand.Mentsu
 ------------------------------------------------------------------------------
 
--- vRound          = vKyoku.pRound
--- inRiichi        = vHand.handPublic.handRiichi
-calledMentsu    = vHand.handPublic.handCalled
--- fullyConcealed  = vHand.handPublic.handCalled.to null -- TODO difference to shout
--- discardedTiles  = vHand.handPublic.handDiscards^..each.dcTile
-winTile         = vHand.handPublic.handAgari.to (?! "winTile: handAgari not set")
-winWithCall     = vHand.handPublic.handAgariCall
--- concealedTiles  = vHand.to (liftA2 (++) _handConcealed (maybe [] return . _handPick))
--- isIppatsu       = vHand.handPublic.hIppatsu
--- isDoubleRiichi  = vHand.handPublic.hDoubleRiichi
--- tilesLeft       = vKyoku.pWallTilesLeft
--- agariFromWanpai = vHand.handPublic.hLastFromWanpai
+calledMentsu    = vHand.handCalled
 
 -- ** Calculating
 
@@ -63,11 +52,11 @@ getFu ys | any (\y -> _yName y == "Chiitoitsu") ys = const 25
     where rounded = (* 10) . fst . (`divMod` 10)
 
 baseFu :: ValueInfo -> Fu
-baseFu vi | Just _ <- vi^.winWithCall = 30
-          | otherwise                 = 20
+baseFu vi | AgariCall _ _ <- vi^?!vHand.handPicks._last = 30
+          | otherwise                                   = 20
 
 waitValue :: ValueInfo -> Fu
-waitValue = go <$> view winTile <*> map mentsuTiles . filter (not . mentsuShouted) . view calledMentsu
+waitValue = go <$> pickedTile . (^?! vHand.handPicks._last) <*> map mentsuTiles . filter (not . mentsuShouted) . view calledMentsu
     where go tile = fromMaybe 0 . maximumMay . map (waitFu tile)
 
 waitFu :: Tile -> [Tile] -> Fu

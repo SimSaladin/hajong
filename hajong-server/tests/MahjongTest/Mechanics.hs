@@ -35,13 +35,15 @@ winningTest = testCase "Game ends when a Ron is called" $ do
     let tk = testKyoku & sHands.ix Nan .handConcealed .~ ["M5", "M5", "M5", "P5", "P6", "P7", "P8", "P8", "S4", "S5", "S6", "S7", "S8"]
                        & sHands.ix Ton .handConcealed .~ ["S3"]
 
-        gs = GameState (_pPlayers tk) "" (Just tk)
+        go k f = runRoundM f $ GameState (_pPlayers k) "" (Just k)
 
-        res = (`runRoundM` gs) $ do
-            startDeal
-            runTurn' Ton (TurnTileDraw False Nothing)
-            runTurn' Ton (TurnTileDiscard (Mahjong.Discard "S3" Nothing False))
-            advanceWithShout (Shout Ron Ton "S3" ["S4", "S5"]) (Player 1)
+        res = do
+            (_,k,_) <- go tk startDeal
+            (_,k,_) <- go k $ startTurn Ton
+            (_,k,_) <- go k $ runTurn' Ton (TurnTileDraw False Nothing)
+            error (show k)
+            (_,k,_) <- go k $ runTurn' Ton (TurnTileDiscard (Mahjong.Discard "S3" Nothing False))
+            go k $ advanceWithShout (Shout Ron Ton "S3" ["S4", "S5"]) (Player 1)
 
     case res of
         Left err -> assertFailure (unpack err)

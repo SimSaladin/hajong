@@ -12,9 +12,8 @@ module Mahjong.Hand.Yaku.Standard where
 
 ------------------------------------------------------------------------------
 import           Import
-import           Mahjong.Tiles (Number(..), kaze)
+import           Mahjong.Tiles (Tile, Number(..), kaze)
 import           Mahjong.Hand.Yaku.Builder
-import           Mahjong.Hand.Mentsu (Shout(..), ShoutKind(..))
 import           Mahjong.Hand.Algo (shantenBy, chiitoitsuShanten)
 ------------------------------------------------------------------------------
 import           Mahjong.Kyoku.Internal
@@ -157,7 +156,7 @@ chiitoitsu :: YakuCheck Yaku
 chiitoitsu = do
     concealedHand
     info <- yakuState
-    if Just (-1) == shantenBy chiitoitsuShanten (info^.vHand.handConcealed)
+    if Just (-1) == shantenBy chiitoitsuShanten (info^.vHand.handConcealed._Wrapped :: [Tile])
         then return (Yaku 2 "Chiitoitsu")
         else yakuFail
 
@@ -167,23 +166,24 @@ menzenTsumo :: YakuCheck Yaku
 menzenTsumo = do
     concealedHand
     info <- yakuState
-    if isNothing (info^.vHand.handPublic.handAgariCall)
-        then return (Yaku 1 "Menzen Tsumo")
-        else yakuFail
+    case info^?vHand.handPicks._last of
+        Just (AgariTsumo _) -> return (Yaku 1 "Menzen Tsumo")
+        _ -> yakuFail
 
 riichi :: YakuCheck Yaku
 riichi = do
     concealedHand
     info <- yakuState
-    if info^.vHand.handPublic.handRiichi
-        then return (Yaku 1 "Riichi")
-        else yakuFail
+    case info^.vHand.handRiichi of
+        NoRiichi     -> yakuFail
+        Riichi       -> return (Yaku 1 "Riichi")
+        DoubleRiichi -> return (Yaku 2 "Double riichi")
 
 ippatsu :: YakuCheck Yaku
 ippatsu = do
-    _ <- riichi
+    _    <- riichi
     info <- yakuState
-    if info^.vHand.handPublic.hIppatsu
+    if info^.vHand.handIppatsu
         then return (Yaku 1 "Ippatsu")
         else yakuFail
 
@@ -197,23 +197,16 @@ houteiRaoyui = do
 rinshanKaihou :: YakuCheck Yaku
 rinshanKaihou = do
     info <- yakuState
-    if info^.vHand.handPublic.hLastFromWanpai
-        then return (Yaku 1 "Rinshan Kaihou")
-        else yakuFail
+    case info^?vHand.handPicks._last of
+        Just (FromWanpai _) -> return (Yaku 1 "Rinshan Kaihou")
+        _                   -> yakuFail
 
 chankan :: YakuCheck Yaku
 chankan = do
     info <- yakuState
-    case info^.vHand.handPublic.handAgariCall of
-        Just s | shoutKind s == Chankan -> return (Yaku 1 "Chankan")
-        _ -> yakuFail
+    case info^?vHand.handPicks._last of
+        Just (AgariRinshan _ _) -> return (Yaku 1 "Rinshan Kaihou")
+        _                       -> yakuFail
 
 nagashiMangan :: YakuCheck Yaku
 nagashiMangan = yakuFail -- TODO Implement
-
-doubleRiichi :: YakuCheck Yaku
-doubleRiichi = do
-    info <- yakuState
-    if info^.vHand.handPublic.hDoubleRiichi
-        then return (Yaku 2 "Double Riichi")
-        else yakuFail
