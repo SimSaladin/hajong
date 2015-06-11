@@ -189,22 +189,36 @@ sortTiles = List.sortWith tileOrder
 -- {{{ Hands -----------------------------------------------------------------
 type alias Hand = HandPublic'
    { concealed : List Tile
-   , pick      : Maybe Tile
-   , furiten   : Maybe Bool
+   , picks     : List PickedTile
+   , furiten   : FuritenState
    , canTsumo  : Bool }
 
 type alias HandPublic = HandPublic' {}
 
 type alias HandPublic' a =
    { a
-   | called      : List Mentsu
+   | state       : DrawState
+   , called      : List Mentsu
    , discards    : List Discard
-   , riichi      : Bool }
+   , riichi      : Bool
+   , ippatsu     : Bool }
 
 type alias Discard =
    { tile   : Tile
    , to     : Maybe Kaze
    , riichi : Bool }
+
+type RiichiState = NoRiichi | Riichi | DoubleRiichi
+
+type DrawState = DrawFromWanpai | DrawFromWall | DrawNone
+
+type PickedTile = FromWall (Maybe Tile)
+                | FromWanpai (Maybe Tile)
+                | AgariTsumo Tile
+                | AgariCall Tile Kaze
+                | AgariRinshan Tile Kaze
+
+type FuritenState = NotFuriten | Furiten | TempFuriten
 
 -- }}}
 

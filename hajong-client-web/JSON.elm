@@ -106,25 +106,30 @@ gameEventOfType eventType = case eventType of
 -- ** Hand
 
 hand : Decoder Hand
-hand = object7 toHand
+hand = handPublic `andThen` (\hp -> object4 (toHand hp)
    ("concealed" := list tile)
-   ("pick"      := tileMaybe)
-   ("furiten"   := oneOf [map Just bool, succeed Nothing])
+   ("picks"     := list pickedTile)
+   ("furiten"   := furitenState)
    ("can-tsumo" := bool)
-   ("called"    := list mentsu)
-   ("discards"  := list discard)
-   ("riichi"    := bool)
+  )
 
-toHand con pick furit canTsumo called discards riichi =
-   { concealed = con, pick = pick, furiten = furit, canTsumo = canTsumo, called
-   = called, discards = discards, riichi = riichi }
+toHand hp con picks furit canTsumo =
+   let h0 = { hp | concealed = con }
+       h1 = { h0 | picks = picks }
+       h2 = { h1 | furiten = furit }
+       h3 = { h2 | canTsumo = canTsumo }
+   in h3
 
-handPublic = object3 toHandPublic
-    ("called"   := list mentsu)
-    ("discards" := list discard)
-    ("riichi"   := bool)
+handPublic : Decoder (HandPublic' {})
+handPublic = object5 toHandPublic
+   ("state"    := drawState)
+   ("called"   := list mentsu)
+   ("discards" := list discard)
+   ("riichi"   := bool)
+   ("ippatsu"  := bool)
 
-toHandPublic called discards riichi = { called = called, discards = discards, riichi = riichi }
+toHandPublic state called discards riichi ippatsu = { called = called, discards =
+   discards, riichi = riichi, ippatsu = ippatsu, state = state }
 
 playerHand : Decoder (Kaze, HandPublic)
 playerHand = tuple2 (,) kaze handPublic
@@ -132,6 +137,32 @@ playerHand = tuple2 (,) kaze handPublic
 discard : Decoder Discard
 discard = object3 Discard
    ("tile" := tile) (oneOf ["to" := map Just kaze, succeed Nothing]) ("riichi" := bool)
+
+riichiState : Decoder RiichiState
+riichiState = string |> map (\x -> case x of
+   "noriichi"     -> NoRiichi
+   "riichi"       -> Riichi
+   "doubleriichi" -> DoubleRiichi)
+
+pickedTile : Decoder PickedTile
+pickedTile = "type" := string `andThen` \t -> case t of
+   "from-wall"     -> object1 FromWall     (maybe ("tile" := tile))
+   "from-wanpai"   -> object1 FromWanpai   (maybe ("tile" := tile))
+   "agari-tsumo"   -> object1 AgariTsumo   ("tile" := tile)
+   "agari-call"    -> object2 AgariCall    ("tile" := tile) ("from-kaze" := kaze)
+   "agari-rinshan" -> object2 AgariRinshan ("tile" := tile) ("from-kaze" := kaze)
+
+furitenState : Decoder FuritenState
+furitenState = string |> map (\x -> case x of
+   "notfuriten"  -> NotFuriten
+   "furiten"     -> Furiten
+   "tempfuriten" -> TempFuriten)
+
+drawState : Decoder DrawState
+drawState = string |> map (\x -> case x of
+   "drawfromwanpai" -> DrawFromWanpai
+   "drawfromwall"   -> DrawFromWall
+   "drawnone"       -> DrawNone)
 
 -- }}}
 

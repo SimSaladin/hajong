@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-} -- Identity/Maybe paramaterization
 {-# LANGUAGE DeriveGeneric #-}
 ------------------------------------------------------------------------------
 -- |
@@ -29,6 +30,9 @@ import qualified Data.Binary as B
 import           Data.Text.Binary ()
 
 ------------------------------------------------------------------------------
+
+instance ToJSON m => ToJSON (Identity m) where
+    toJSON (Identity x) = toJSON x
 
 type Nick = Text
 
@@ -96,22 +100,6 @@ atType, atEvent :: Text -> [(Text, A.Value)] -> A.Value
 atType  t xs = object ("type"  .= t : xs)
 atEvent t xs = object ("event" .= t : xs)
 
--- Deal as a player
-
--- Adds "mypos", "player", "hands", "myhand", "event".
-dealAsPlayer :: Text -> Kyoku -> Kaze -> Player -> A.Value
-dealAsPlayer ev deal pk p =
-    let Object d = toJSON deal
-        Object o = object
-            [ "mypos"     .= pk
-            , "player"    .= p
-            , "hands"     .= map (toJSON *** toJSON)
-                                 (M.toList $ deal^.sHands <&> _handPublic)
-            , "myhand"    .= (deal^?sHands.at pk)
-            , "event"     .= ev
-            ]
-    in Object (d `mappend` o)
-
 loungeJSON :: Lounge -> [Pair]
 loungeJSON (Lounge nicks games) = [ "idle" .= nicks
                                   , "games" .= map gamePairs (itoList games)]
@@ -142,7 +130,9 @@ instance ToJSON Event where
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
-        DealStarts p pk deal                     -> dealAsPlayer "round-begin" deal pk p
+        DealStarts p pk kyoku                    -> let Object extra = atEvent "round-begin"  ["mypos" .= pk, "player" .= p, "myhand" .= (kyoku^?!sHands.at pk)]
+                                                        Object base  = toJSON kyoku
+                                                        in Object (extra <> base)
         DealWaitForShout (player, _, secs, xs)   -> atEvent "wait-shout"   ["player"      .= player, "seconds" .= secs, "shouts" .= xs]
         DealWaitForTurnAction (p,_,sec,rs)       -> atEvent "wait-turn"    ["player"      .= p, "seconds" .= sec, "riichi-with" .= rs]
         DealTurnBegins pk                        -> atEvent "turn-changed" ["player-kaze" .= pk]
@@ -167,15 +157,21 @@ instance ToJSON Player where toJSON (Player k) = toJSON k
 instance ToJSON Kaze where toJSON = toJSON . tshow
 instance ToJSON Number where toJSON = toJSON . (1 +) . fromEnum
 instance ToJSON TileKind where toJSON = toJSON . tshow
-instance ToJSON Hand where
-    toJSON h = Object $
-        (\(Object o) -> o) (object
-            [ "concealed" .= _handConcealed h
-            , "pick"      .= _handPick h
-            , "furiten"   .= _handFuriten h
-            , "can-tsumo" .= _hCanTsumo h
-            ])
-        <> (\(Object o) -> o) (toJSON (_handPublic h))
+
+instance (ToJSON (m Tile), ToJSON (m FuritenState), ToJSON (m RiichiState), ToJSON (m DrawState), ToJSON (m [Tile]), ToJSON (m Bool))
+        => ToJSON (Hand m) where
+    toJSON h = object
+        [ "called"    .= _handCalled h
+        , "discards"  .= _handDiscards h
+        , "riichi"    .= _handRiichi h
+        , "ippatsu"   .= _handIppatsu h
+        , "state"     .= _handState h
+        , "picks"     .= _handPicks h
+
+        , "concealed" .= _handConcealed h
+        , "furiten"   .= _handFuriten h
+        , "can-tsumo" .= _handCanTsumo h
+        ]
 
 instance ToJSON Tile where
     toJSON (Suited tk n a) = object [ "type" .= tk, "number" .= n, "aka" .= a ]
@@ -185,7 +181,7 @@ instance ToJSON Honor where
     toJSON (Sangenpai s) = toJSON (tshow s)
     toJSON (Kazehai k) = toJSON k
 
-instance ToJSON Kyoku where
+instance ToJSON (Kyoku' m) where
     toJSON x = object
         [ "round"      .= _pRound x
         , "deal"       .= _pDeal x
@@ -201,10 +197,16 @@ instance ToJSON Kyoku where
         , "prev-deals" .= _pDeals x
         ]
 
+instance ToJSON (m Tile) => ToJSON (PickedTile m) where
+    toJSON (FromWall t)   = atType "from-wall" [ "tile" .= t ]
+    toJSON (FromWanpai t) = atType "from-wanpai" [ "tile" .= t ]
+    toJSON (AgariTsumo t) = atType "agari-tsumo" [ "tile" .= t ]
+    toJSON (AgariCall t k)           = atType "agari-call" [ "tile" .= t, "from-kaze" .= k ]
+    toJSON (AgariRinshan t k)        = atType "agari-rinshan" [ "tile" .= t, "from-kaze" .= k ]
+
 -- derived
 
 --
-$(deriveJSON (aesonOptions 5) ''HandPublic)
 $(deriveJSON (aesonOptions 3) ''Discard)
 $(deriveJSON (aesonOptions 6) ''Mentsu)
 $(deriveJSON (aesonOptions 0) ''MentsuKind)
@@ -215,6 +217,9 @@ $(deriveJSON (aesonOptions 4) ''Yaku)
 $(deriveJSON (aesonOptions 3) ''Value)
 $(deriveJSON (aesonOptions 3) ''ValuedHand)
 $(deriveJSON (aesonOptions 0) ''AbortiveDraw)
+$(deriveJSON (aesonOptions 0) ''RiichiState)
+$(deriveJSON (aesonOptions 0) ''DrawState)
+$(deriveJSON (aesonOptions 0) ''FuritenState)
 
 -- FromJSON
 
