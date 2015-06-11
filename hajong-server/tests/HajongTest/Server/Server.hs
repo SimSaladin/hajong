@@ -12,6 +12,7 @@ module HajongTest.Server.Server (tests, setupProcess) where
 import Control.Concurrent (threadDelay)
 import System.IO.Silently
 import System.Posix
+import System.Log.FastLogger
 
 import Hajong.Server
 
@@ -23,6 +24,7 @@ tests = testGroup "The websocket server"
 -- | Start a server process silenced
 setupProcess :: IO ProcessID
 setupProcess = do
-    pid <- forkProcess $ hSilence [stdout, stderr] $ newServer >>= runServer
+    lgr <- newStderrLoggerSet defaultBufSize
+    pid <- forkProcess $ hSilence [stdout, stderr] $ initServer lgr >>= runServerMain
     threadDelay 1000000
     return pid

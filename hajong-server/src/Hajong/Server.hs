@@ -579,6 +579,11 @@ internalConnect secret = do
 
 -- * Debugger
 
+-- | How to use the debugger:
+--
+--      d   dump server state
+--      c   dump connected clients
+--      g   dump ongoing games
 serverDebugger :: Server ()
 serverDebugger = forever $ do
     i <- getLine

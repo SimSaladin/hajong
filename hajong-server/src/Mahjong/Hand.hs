@@ -21,7 +21,7 @@ module Mahjong.Hand
     , module Mahjong.Hand.Value
     , module Mahjong.Hand.Yaku
     -- * Lenses
-    , handPublic, handDiscards, handRiichi, handPick, handCalled, hDoubleRiichi
+    , handPublic, handConcealed, handDiscards, handRiichi, handPick, handCalled, hDoubleRiichi
     , dcTile, dcRiichi, dcTo
     ) where
 
@@ -90,6 +90,7 @@ handAutoDiscard hand
 
 -- * Winning
 
+-- | Shout is Nothing if Tsumo
 handWin :: CanError m => Maybe Shout -> Hand -> m Hand
 handWin ms h
     | not (complete h)       = throwError "Cannot win with an incomplete hand"

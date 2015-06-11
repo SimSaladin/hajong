@@ -25,7 +25,8 @@ import qualified Test.QuickCheck.Property as Q
 import qualified Data.Set                 as Set
 import qualified Data.Map                 as Map
 
-import Mahjong
+import Mahjong hiding (elements)
+import Mahjong.Hand.Internal (initHand)
 import Hajong.Connections
 
 -- | "action =~ expected" => expected `isInfixOf` (result of action)
@@ -89,31 +90,23 @@ instance Arbitrary GameAction where
 
 instance Arbitrary TurnAction where
     arbitrary = oneof
-        [ TurnTileDiscard <$> arbitrary <*> arbitrary
-        , TurnTileDraw    <$> arbitrary <*> arbitrary
+        [ TurnTileDraw    <$> arbitrary <*> arbitrary
         , TurnAnkan       <$> arbitrary
         ]
 
 instance Arbitrary Shout where
-    arbitrary = oneof
-        [ Pon <$> arbitrary <*> arbitrary
-        , Kan <$> arbitrary <*> arbitrary
-        , Chi <$> arbitrary <*> arbitrary <*> arbitrary
-        , Ron <$> arbitrary <*> arbitrary <*> arbitrary
-        ]
+    arbitrary = Shout Ron <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary GameEvent where
     arbitrary = oneof
         [ DealTurnBegins <$> arbitrary
         , DealTurnAction <$> arbitrary <*> arbitrary
         , DealTurnShouted <$> arbitrary <*> arbitrary
-        , DealHandChanged <$> arbitrary <*> arbitrary
-        , DealEnded <$> arbitrary
         ]
 
 instance Arbitrary Event where
     arbitrary = oneof
-        [ JoinServer <$> arbitrary
+        [ {- JoinServer <$> arbitrary
         , PartServer <$> arbitrary
         , ClientIdentity <$> arbitrary
         , Message <$> arbitrary <*> arbitrary
@@ -121,23 +114,16 @@ instance Arbitrary Event where
 
         , LoungeInfo <$> arbitrary
         , (\a b -> GameCreated (a,b,mempty)) <$> arbitrary <*> arbitrary
-        , CreateGame <$> arbitrary
         , JoinGame <$> arbitrary <*> arbitrary
         , ForceStart <$> arbitrary
 
         , InGamePrivateEvent <$> arbitrary
-        , InGameEvents <$> arbitrary
-        , InGameAction <$> arbitrary
+        , InGameEvents <$> arbitrary -}
+         InGameAction <$> arbitrary
         ]
 
 instance Arbitrary HandPublic where
-    arbitrary = HandPublic <$> arbitrary <*> arbitrary <*> arbitrary <*> pure Nothing
-
-instance Arbitrary RoundResults where
-    arbitrary = elements [RoundTsumo, RoundRon, RoundDraw] <*> arbitrary <*> arbitrary
-
-instance Arbitrary Lounge where
-    arbitrary = Lounge <$> fmap Set.fromList arbitrary <*> fmap (fmap (second Set.fromList) . Map.fromList) arbitrary
+    arbitrary = HandPublic <$> arbitrary <*> pure [] <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary TileGroup where
     arbitrary = oneof

@@ -37,8 +37,8 @@ tests = testGroup "Hand value"
     ]
 
 ankoutsu  = mentsuValue . koutsu
-minkoutsu = mentsuValue . fromShout . Pon undefined
+minkoutsu t = mentsuValue . fromShout $ Shout Pon undefined t [t,t]
 
 ankantsu  = mentsuValue . kantsu
-minkantsu = mentsuValue . fromShout . Kan undefined
+minkantsu t = mentsuValue . fromShout $ Shout Kan undefined t [t,t,t]
 
