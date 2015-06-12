@@ -148,8 +148,9 @@ unsafeStep :: MachineInput -> Worker Machine
 unsafeStep inp = do
     $logDebug $ "Taking unsafe step " <> tshow inp
     m <- rview wMachine
-    unsafeRoundM (step m inp) >>= rswap wMachine
-    return m
+    m' <- unsafeRoundM (step m inp)
+    rswap wMachine m'
+    return m'
 
 -- | Begin the game including the first round when all players have joined.
 waitPlayersAndBegin :: WCont

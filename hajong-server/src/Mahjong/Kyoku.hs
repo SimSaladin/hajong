@@ -217,9 +217,11 @@ autoDiscard tk = processDiscard tk =<< handAutoDiscard =<< handOf' tk
 
 -- ** Turn-passing
 
+-- | Next player who draws a tile
 advanceTurn :: InKyoku m => m Kaze
 advanceTurn = do
     pk <- view pTurn <&> nextKaze
+    updateHand pk . set handState DrawFromWall =<< handOf' pk
     tellEvent $ DealTurnBegins pk
     return pk
 
