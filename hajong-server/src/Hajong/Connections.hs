@@ -181,7 +181,7 @@ instance ToJSON Honor where
     toJSON (Sangenpai s) = toJSON (tshow s)
     toJSON (Kazehai k) = toJSON k
 
-instance ToJSON (Kyoku' m) where
+instance (ToJSON (m Bool), ToJSON (m [Tile]), ToJSON (m Tile), ToJSON (m RiichiState), ToJSON (m FuritenState), ToJSON (m DrawState)) => ToJSON (Kyoku' m) where
     toJSON x = object
         [ "round"      .= _pRound x
         , "deal"       .= _pDeal x
@@ -195,6 +195,7 @@ instance ToJSON (Kyoku' m) where
         , "in-table"   .= _pRiichi x
         , "results"    .= _pResults x
         , "prev-deals" .= _pDeals x
+        , "hands"      .= map (toJSON *** toJSON) (M.toList $ _sHands x)
         ]
 
 instance ToJSON (m Tile) => ToJSON (PickedTile m) where

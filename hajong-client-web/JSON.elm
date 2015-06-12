@@ -120,16 +120,16 @@ toHand hp con picks furit canTsumo =
        h3 = { h2 | canTsumo = canTsumo }
    in h3
 
-handPublic : Decoder (HandPublic' {})
+handPublic : Decoder HandPublic
 handPublic = object5 toHandPublic
    ("state"    := drawState)
    ("called"   := list mentsu)
    ("discards" := list discard)
-   ("riichi"   := bool)
+   ("riichi"   := riichiState)
    ("ippatsu"  := bool)
 
 toHandPublic state called discards riichi ippatsu = { called = called, discards =
-   discards, riichi = riichi, ippatsu = ippatsu, state = state }
+   discards, riichiState = riichi, ippatsu = ippatsu, state = state }
 
 playerHand : Decoder (Kaze, HandPublic)
 playerHand = tuple2 (,) kaze handPublic

@@ -200,7 +200,7 @@ type alias HandPublic' a =
    | state       : DrawState
    , called      : List Mentsu
    , discards    : List Discard
-   , riichi      : Bool
+   , riichiState : RiichiState
    , ippatsu     : Bool }
 
 type alias Discard =

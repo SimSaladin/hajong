@@ -62,6 +62,18 @@ maskPublicHand hand =
         maskPickedTile (AgariCall t k)    = AgariCall t k
         maskPickedTile (AgariRinshan t k) = AgariRinshan t k
 
+convertHand :: HandA -> HandP
+convertHand hand = hand { _handPicks = map convertPickedTile (_handPicks hand)
+                        , _handConcealed = Just . runIdentity $ _handConcealed hand
+                        , _handFuriten = Just . runIdentity $ _handFuriten hand
+                        , _handCanTsumo = Just . runIdentity $ _handCanTsumo hand }
+    where
+        convertPickedTile (FromWall t)       = FromWall (Just $ runIdentity t)
+        convertPickedTile (FromWanpai t)     = FromWanpai (Just $ runIdentity t)
+        convertPickedTile (AgariTsumo t)     = AgariTsumo t
+        convertPickedTile (AgariCall t k)    = AgariCall t k
+        convertPickedTile (AgariRinshan t k) = AgariRinshan t k
+
 -- * Draw
 
 toHand :: CanError m => Tile -> HandA -> m HandA

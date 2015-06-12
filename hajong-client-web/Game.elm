@@ -78,7 +78,7 @@ display co gs = case gs.roundState of
             , dispDiscards co gs rs |> scale 0.7
             , dispCalled co gs rs |> scale 0.6
             , group <| map (fst >> \k -> moveRotateKaze riichi_off rs.mypos k playerRiichi)
-                    <| List.filter (snd >> .riichi) rs.hands
+                    <| List.filter (snd >> .riichiState >> \x -> x /= NoRiichi) rs.hands
             , maybe (toForm empty) dispResults rs.results
             ]
         , container 1000 40 midTop <| flow right
@@ -203,7 +203,7 @@ dispYaku {han, name} = show name `beside` show " " `beside` show han
 dispHand k co hand = flow right
    [ flow right <| map (dispTileClickable co) <| sortTiles hand.concealed
    , spacer 10 10
-   , maybe empty (dispTileClickable co >> color lightGreen) hand.pick
+   , flow right <| map (pickedTile >> dispTileClickable co >> color lightGreen) hand.picks
    , spacer 10 10
    , flow right <| map (dispMentsu k) hand.called
    ]
@@ -288,10 +288,10 @@ nocareButton w str = case w of
    _                -> empty
 
 findFourTiles : RoundState -> Maybe Tile
-findFourTiles rs = counted 4 <| sortTiles <| rs.myhand.concealed ++ maybe [] (\x -> [x]) rs.myhand.pick
+findFourTiles rs = counted 4 <| sortTiles <| rs.myhand.concealed ++ map pickedTile rs.myhand.picks
 
 findShouminkan h = List.filter (\x -> x.mentsuKind == Koutsu &&
-   (List.any (\t -> t == x.tile) h.concealed || h.pick == Just x.tile)) h.called
+   (List.any (\t -> t == x.tile) h.concealed || map pickedTile h.picks == [x.tile])) h.called -- TODO This fails when picked more than one tile
    |> map .tile
 
 -- | The nth unique tile
@@ -381,8 +381,8 @@ flipDora tile gs = case gs.roundState of
                                         , tilesleft <- rs.tilesleft - 1 } }
    Nothing -> gs
 
-setRiichi pk gs = case gs.roundState of
-   Just rs -> { gs | roundState <- Just { rs | hands <- Util.listModify pk (\h -> { h | riichi <- True }) rs.hands } }
+setRiichi pk gs = case gs.roundState of -- TODO does not differentiate from doubleriichi
+   Just rs -> { gs | roundState <- Just { rs | hands <- Util.listModify pk (\h -> { h | riichiState <- Riichi }) rs.hands } }
    Nothing -> gs
 
 setPoints p n gs = case gs.roundState of
@@ -401,7 +401,7 @@ processTurnAction player action gs =
             { gs | roundState <-
                   Just { rs | hands  <- Util.listModify player
                                           (\h -> { h | discards <- h.discards ++ [discard]
-                                                     , riichi <- h.riichi || discard.riichi
+                                                     , riichiState <- if discard.riichi then Riichi else h.riichiState
                                           }) rs.hands
                        }
             }

@@ -1882,8 +1882,8 @@ Elm.Game.make = function (_elm) {
                                                                                       ,A2($Basics._op["++"],
                                                                                       h.discards,
                                                                                       _L.fromArray([action._0]))]
-                                                                                     ,["riichi"
-                                                                                      ,h.riichi || action._0.riichi]],
+                                                                                     ,["riichiState"
+                                                                                      ,action._0.riichi ? $GameTypes.Riichi : h.riichiState]],
                                                                    h);
                                                                 },
                                                                 _v0._0.hands)]],
@@ -1936,8 +1936,8 @@ Elm.Game.make = function (_elm) {
                                                         ,A3($Util.listModify,
                                                         pk,
                                                         function (h) {
-                                                           return _U.replace([["riichi"
-                                                                              ,true]],
+                                                           return _U.replace([["riichiState"
+                                                                              ,$GameTypes.Riichi]],
                                                            h);
                                                         },
                                                         _v12._0.hands)]],
@@ -2205,20 +2205,19 @@ Elm.Game.make = function (_elm) {
          function (t) {
             return _U.eq(t,x.tile);
          },
-         h.concealed) || _U.eq(h.pick,
-         $Maybe.Just(x.tile)));
+         h.concealed) || _U.eq(A2($List.map,
+         $Util.pickedTile,
+         h.picks),
+         _L.fromArray([x.tile])));
       },
       h.called));
    };
    var findFourTiles = function (rs) {
       return counted(4)($GameTypes.sortTiles(A2($Basics._op["++"],
       rs.myhand.concealed,
-      A3($Util.maybe,
-      _L.fromArray([]),
-      function (x) {
-         return _L.fromArray([x]);
-      },
-      rs.myhand.pick))));
+      A2($List.map,
+      $Util.pickedTile,
+      rs.myhand.picks))));
    };
    var tileImage = function (tile) {
       return function () {
@@ -2817,12 +2816,11 @@ Elm.Game.make = function (_elm) {
                    ,A2($Graphics$Element.spacer,
                    10,
                    10)
-                   ,A3($Util.maybe,
-                   $Graphics$Element.empty,
+                   ,$Graphics$Element.flow($Graphics$Element.right)(A2($List.map,
                    function ($) {
-                      return $Graphics$Element.color($Color.lightGreen)(dispTileClickable(co)($));
+                      return $Graphics$Element.color($Color.lightGreen)(dispTileClickable(co)($Util.pickedTile($)));
                    },
-                   hand.pick)
+                   hand.picks))
                    ,A2($Graphics$Element.spacer,
                    10,
                    10)
@@ -2866,9 +2864,12 @@ Elm.Game.make = function (_elm) {
                                            }($Basics.fst($));
                                         })(A2($List.filter,
                                         function ($) {
-                                           return function (_) {
-                                              return _.riichi;
-                                           }($Basics.snd($));
+                                           return function (x) {
+                                              return !_U.eq(x,
+                                              $GameTypes.NoRiichi);
+                                           }(function (_) {
+                                              return _.riichiState;
+                                           }($Basics.snd($)));
                                         },
                                         _v102._0.hands)))
                                         ,A3($Util.maybe,
@@ -3019,6 +3020,39 @@ Elm.GameTypes.make = function (_elm) {
    var Kantsu = {ctor: "Kantsu"};
    var Koutsu = {ctor: "Koutsu"};
    var Shuntsu = {ctor: "Shuntsu"};
+   var TempFuriten = {ctor: "TempFuriten"};
+   var Furiten = {ctor: "Furiten"};
+   var NotFuriten = {ctor: "NotFuriten"};
+   var AgariRinshan = F2(function (a,
+   b) {
+      return {ctor: "AgariRinshan"
+             ,_0: a
+             ,_1: b};
+   });
+   var AgariCall = F2(function (a,
+   b) {
+      return {ctor: "AgariCall"
+             ,_0: a
+             ,_1: b};
+   });
+   var AgariTsumo = function (a) {
+      return {ctor: "AgariTsumo"
+             ,_0: a};
+   };
+   var FromWanpai = function (a) {
+      return {ctor: "FromWanpai"
+             ,_0: a};
+   };
+   var FromWall = function (a) {
+      return {ctor: "FromWall"
+             ,_0: a};
+   };
+   var DrawNone = {ctor: "DrawNone"};
+   var DrawFromWall = {ctor: "DrawFromWall"};
+   var DrawFromWanpai = {ctor: "DrawFromWanpai"};
+   var DoubleRiichi = {ctor: "DoubleRiichi"};
+   var Riichi = {ctor: "Riichi"};
+   var NoRiichi = {ctor: "NoRiichi"};
    var Discard = F3(function (a,
    b,
    c) {
@@ -3027,15 +3061,21 @@ Elm.GameTypes.make = function (_elm) {
              ,tile: a
              ,to: b};
    });
-   var HandPublic$ = F4(function (a,
+   var HandPublic$ = F6(function (a,
    b,
    c,
-   d) {
-      return _U.insert("riichi",
-      c,
+   d,
+   e,
+   f) {
+      return _U.insert("ippatsu",
+      e,
+      _U.insert("riichiState",
+      d,
       _U.insert("discards",
+      c,
+      _U.insert("called",
       b,
-      _U.insert("called",a,d)));
+      _U.insert("state",a,f)))));
    });
    var sangenNth = function (k) {
       return function () {
@@ -3552,6 +3592,20 @@ Elm.GameTypes.make = function (_elm) {
                            ,sortTiles: sortTiles
                            ,HandPublic$: HandPublic$
                            ,Discard: Discard
+                           ,NoRiichi: NoRiichi
+                           ,Riichi: Riichi
+                           ,DoubleRiichi: DoubleRiichi
+                           ,DrawFromWanpai: DrawFromWanpai
+                           ,DrawFromWall: DrawFromWall
+                           ,DrawNone: DrawNone
+                           ,FromWall: FromWall
+                           ,FromWanpai: FromWanpai
+                           ,AgariTsumo: AgariTsumo
+                           ,AgariCall: AgariCall
+                           ,AgariRinshan: AgariRinshan
+                           ,NotFuriten: NotFuriten
+                           ,Furiten: Furiten
+                           ,TempFuriten: TempFuriten
                            ,Shuntsu: Shuntsu
                            ,Koutsu: Koutsu
                            ,Kantsu: Kantsu
@@ -4652,7 +4706,7 @@ Elm.JSON.make = function (_elm) {
                                          ,_0: "ident"
                                          ,_1: $Json$Encode.string($Basics.toString(tile._0._0))}]);}
                  _U.badCase($moduleName,
-                 "between lines 278 and 280");
+                 "between lines 309 and 311");
               }());
             case "Suited": return A2(atType,
               $Basics.toString(tile._0),
@@ -4663,7 +4717,7 @@ Elm.JSON.make = function (_elm) {
                             ,_0: "aka"
                             ,_1: $Json$Encode.bool(tile._2)}]));}
          _U.badCase($moduleName,
-         "between lines 276 and 280");
+         "between lines 307 and 311");
       }();
    };
    var toJSON_ShoutKind = function (sk) {
@@ -4674,7 +4728,7 @@ Elm.JSON.make = function (_elm) {
             case "Pon": return "pon";
             case "Ron": return "ron";}
          _U.badCase($moduleName,
-         "between lines 269 and 273");
+         "between lines 300 and 304");
       }());
    };
    var toJSON_GameAction = function (a) {
@@ -4736,7 +4790,7 @@ Elm.JSON.make = function (_elm) {
                    _L.fromArray([]));}
               break;}
          _U.badCase($moduleName,
-         "between lines 256 and 267");
+         "between lines 287 and 298");
       }();
    };
    var toJSON_Event = function (ev) {
@@ -4793,7 +4847,7 @@ Elm.JSON.make = function (_elm) {
                             ,_0: "nick"
                             ,_1: $Json$Encode.string(ev._0.nick)}]));}
          _U.badCase($moduleName,
-         "between lines 245 and 253");
+         "between lines 276 and 284");
       }();
    };
    var encodeEvent = function ($) {
@@ -4836,7 +4890,7 @@ Elm.JSON.make = function (_elm) {
             case "ron":
             return $GameTypes.Ron;}
          _U.badCase($moduleName,
-         "between lines 160 and 164");
+         "between lines 191 and 195");
       }();
    };
    var shoutKind = A2($Json$Decode.map,
@@ -4854,35 +4908,83 @@ Elm.JSON.make = function (_elm) {
             case "shuntsu":
             return $GameTypes.Shuntsu;}
          _U.badCase($moduleName,
-         "between lines 143 and 148");
+         "between lines 174 and 179");
       }();
    };
    var mentsuKind = A2($Json$Decode.map,
    readMentsuKind,
    $Json$Decode.string);
-   var toHandPublic = F3(function (called,
-   discards,
-   riichi) {
-      return {_: {}
-             ,called: called
-             ,discards: discards
-             ,riichi: riichi};
-   });
-   var toHand = F7(function (con,
-   pick,
-   furit,
-   canTsumo,
+   var drawState = $Json$Decode.map(function (x) {
+      return function () {
+         switch (x)
+         {case "drawfromwall":
+            return $GameTypes.DrawFromWall;
+            case "drawfromwanpai":
+            return $GameTypes.DrawFromWanpai;
+            case "drawnone":
+            return $GameTypes.DrawNone;}
+         _U.badCase($moduleName,
+         "between lines 162 and 165");
+      }();
+   })($Json$Decode.string);
+   var furitenState = $Json$Decode.map(function (x) {
+      return function () {
+         switch (x)
+         {case "furiten":
+            return $GameTypes.Furiten;
+            case "notfuriten":
+            return $GameTypes.NotFuriten;
+            case "tempfuriten":
+            return $GameTypes.TempFuriten;}
+         _U.badCase($moduleName,
+         "between lines 156 and 159");
+      }();
+   })($Json$Decode.string);
+   var riichiState = $Json$Decode.map(function (x) {
+      return function () {
+         switch (x)
+         {case "doubleriichi":
+            return $GameTypes.DoubleRiichi;
+            case "noriichi":
+            return $GameTypes.NoRiichi;
+            case "riichi":
+            return $GameTypes.Riichi;}
+         _U.badCase($moduleName,
+         "between lines 142 and 145");
+      }();
+   })($Json$Decode.string);
+   var toHandPublic = F5(function (state,
    called,
    discards,
-   riichi) {
+   riichi,
+   ippatsu) {
       return {_: {}
              ,called: called
-             ,canTsumo: canTsumo
-             ,concealed: con
              ,discards: discards
-             ,furiten: furit
-             ,pick: pick
-             ,riichi: riichi};
+             ,ippatsu: ippatsu
+             ,riichiState: riichi
+             ,state: state};
+   });
+   var toHand = F5(function (hp,
+   con,
+   picks,
+   furit,
+   canTsumo) {
+      return function () {
+         var h0 = _U.insert("concealed",
+         con,
+         hp);
+         var h1 = _U.insert("picks",
+         picks,
+         h0);
+         var h2 = _U.insert("furiten",
+         furit,
+         h1);
+         var h3 = _U.insert("canTsumo",
+         canTsumo,
+         h2);
+         return h3;
+      }();
    });
    var kaze = $Json$Decode.map(function (x) {
       return function () {
@@ -4908,18 +5010,18 @@ Elm.JSON.make = function (_elm) {
    kaze,
    $Json$Decode.$int);
    var players = A3($Json$Decode.tuple2,
-   F2(function (p,_v28) {
+   F2(function (p,_v31) {
       return function () {
-         switch (_v28.ctor)
+         switch (_v31.ctor)
          {case "_Tuple3":
             return {ctor: "_Tuple2"
-                   ,_0: _v28._0
+                   ,_0: _v31._0
                    ,_1: {ctor: "_Tuple3"
                         ,_0: p
-                        ,_1: _v28._1
-                        ,_2: _v28._2}};}
+                        ,_1: _v31._1
+                        ,_2: _v31._2}};}
          _U.badCase($moduleName,
-         "on line 194, column 37 to 50");
+         "on line 225, column 37 to 50");
       }();
    }),
    $Json$Decode.$int,
@@ -5020,6 +5122,53 @@ Elm.JSON.make = function (_elm) {
    A2($Json$Decode._op[":="],
    "riichi",
    $Json$Decode.bool));
+   var pickedTile = A2($Json$Decode.andThen,
+   A2($Json$Decode._op[":="],
+   "type",
+   $Json$Decode.string),
+   function (t) {
+      return function () {
+         switch (t)
+         {case "agari-call":
+            return A3($Json$Decode.object2,
+              $GameTypes.AgariCall,
+              A2($Json$Decode._op[":="],
+              "tile",
+              tile),
+              A2($Json$Decode._op[":="],
+              "from-kaze",
+              kaze));
+            case "agari-rinshan":
+            return A3($Json$Decode.object2,
+              $GameTypes.AgariRinshan,
+              A2($Json$Decode._op[":="],
+              "tile",
+              tile),
+              A2($Json$Decode._op[":="],
+              "from-kaze",
+              kaze));
+            case "agari-tsumo":
+            return A2($Json$Decode.object1,
+              $GameTypes.AgariTsumo,
+              A2($Json$Decode._op[":="],
+              "tile",
+              tile));
+            case "from-wall":
+            return A2($Json$Decode.object1,
+              $GameTypes.FromWall,
+              $Json$Decode.maybe(A2($Json$Decode._op[":="],
+              "tile",
+              tile)));
+            case "from-wanpai":
+            return A2($Json$Decode.object1,
+              $GameTypes.FromWanpai,
+              $Json$Decode.maybe(A2($Json$Decode._op[":="],
+              "tile",
+              tile)));}
+         _U.badCase($moduleName,
+         "between lines 148 and 153");
+      }();
+   });
    var shout = A5($Json$Decode.object4,
    $GameTypes.Shout,
    A2($Json$Decode._op[":="],
@@ -5049,35 +5198,12 @@ Elm.JSON.make = function (_elm) {
    A2($Json$Decode._op[":="],
    "shout",
    shoutMaybe));
-   var hand = A8($Json$Decode.object7,
-   toHand,
-   A2($Json$Decode._op[":="],
-   "concealed",
-   $Json$Decode.list(tile)),
-   A2($Json$Decode._op[":="],
-   "pick",
-   tileMaybe),
-   A2($Json$Decode._op[":="],
-   "furiten",
-   $Json$Decode.oneOf(_L.fromArray([A2($Json$Decode.map,
-                                   $Maybe.Just,
-                                   $Json$Decode.bool)
-                                   ,$Json$Decode.succeed($Maybe.Nothing)]))),
-   A2($Json$Decode._op[":="],
-   "can-tsumo",
-   $Json$Decode.bool),
-   A2($Json$Decode._op[":="],
-   "called",
-   $Json$Decode.list(mentsu)),
-   A2($Json$Decode._op[":="],
-   "discards",
-   $Json$Decode.list(discard)),
-   A2($Json$Decode._op[":="],
-   "riichi",
-   $Json$Decode.bool));
-   var handPublic = A4($Json$Decode.object3,
+   var handPublic = A6($Json$Decode.object5,
    toHandPublic,
    A2($Json$Decode._op[":="],
+   "state",
+   drawState),
+   A2($Json$Decode._op[":="],
    "called",
    $Json$Decode.list(mentsu)),
    A2($Json$Decode._op[":="],
@@ -5085,7 +5211,28 @@ Elm.JSON.make = function (_elm) {
    $Json$Decode.list(discard)),
    A2($Json$Decode._op[":="],
    "riichi",
+   riichiState),
+   A2($Json$Decode._op[":="],
+   "ippatsu",
    $Json$Decode.bool));
+   var hand = A2($Json$Decode.andThen,
+   handPublic,
+   function (hp) {
+      return A5($Json$Decode.object4,
+      toHand(hp),
+      A2($Json$Decode._op[":="],
+      "concealed",
+      $Json$Decode.list(tile)),
+      A2($Json$Decode._op[":="],
+      "picks",
+      $Json$Decode.list(pickedTile)),
+      A2($Json$Decode._op[":="],
+      "furiten",
+      furitenState),
+      A2($Json$Decode._op[":="],
+      "can-tsumo",
+      $Json$Decode.bool));
+   });
    var playerHand = A3($Json$Decode.tuple2,
    F2(function (v0,v1) {
       return {ctor: "_Tuple2"
@@ -5146,7 +5293,7 @@ Elm.JSON.make = function (_elm) {
             case "tsumo":
             return $Json$Decode.succeed($GameTypes.TurnTsumo);}
          _U.badCase($moduleName,
-         "between lines 231 and 236");
+         "between lines 262 and 267");
       }();
    };
    var turnAction = A2($Json$Decode.andThen,
@@ -5213,7 +5360,7 @@ Elm.JSON.make = function (_elm) {
               "payers",
               $Json$Decode.list(payer)));}
          _U.badCase($moduleName,
-         "between lines 202 and 205");
+         "between lines 233 and 236");
       }();
    };
    var results = A2($Json$Decode.andThen,
@@ -5542,14 +5689,14 @@ Elm.JSON.make = function (_elm) {
    eventOfType);
    var decodeEvent = function (str) {
       return function () {
-         var _v39 = A2($Json$Decode.decodeString,
+         var _v43 = A2($Json$Decode.decodeString,
          event,
          str);
-         switch (_v39.ctor)
+         switch (_v43.ctor)
          {case "Err":
             return $GameTypes.Invalid({_: {}
-                                      ,content: _v39._0});
-            case "Ok": return _v39._0;}
+                                      ,content: _v43._0});
+            case "Ok": return _v43._0;}
          _U.badCase($moduleName,
          "between lines 18 and 20");
       }();
@@ -5581,6 +5728,10 @@ Elm.JSON.make = function (_elm) {
                       ,toHandPublic: toHandPublic
                       ,playerHand: playerHand
                       ,discard: discard
+                      ,riichiState: riichiState
+                      ,pickedTile: pickedTile
+                      ,furitenState: furitenState
+                      ,drawState: drawState
                       ,mentsu: mentsu
                       ,mentsuKind: mentsuKind
                       ,readMentsuKind: readMentsuKind
@@ -14788,6 +14939,25 @@ Elm.Util.make = function (_elm) {
    $GameTypes = Elm.GameTypes.make(_elm),
    $List = Elm.List.make(_elm),
    $Maybe = Elm.Maybe.make(_elm);
+   var pickedTile = function (pt) {
+      return function () {
+         switch (pt.ctor)
+         {case "AgariCall": return pt._0;
+            case "AgariRinshan":
+            return pt._0;
+            case "AgariTsumo": return pt._0;
+            case "FromWall":
+            switch (pt._0.ctor)
+              {case "Just": return pt._0._0;}
+              break;
+            case "FromWanpai":
+            switch (pt._0.ctor)
+              {case "Just": return pt._0._0;}
+              break;}
+         _U.badCase($moduleName,
+         "between lines 49 and 54");
+      }();
+   };
    var isNothing = function (x) {
       return function () {
          switch (x.ctor)
@@ -14804,10 +14974,10 @@ Elm.Util.make = function (_elm) {
       f,
       m));
    });
-   var fromJust = function (_v2) {
+   var fromJust = function (_v12) {
       return function () {
-         switch (_v2.ctor)
-         {case "Just": return _v2._0;}
+         switch (_v12.ctor)
+         {case "Just": return _v12._0;}
          _U.badCase($moduleName,
          "on line 37, column 21 to 22");
       }();
@@ -14909,6 +15079,7 @@ Elm.Util.make = function (_elm) {
                       ,listFind: listFind
                       ,fromJust: fromJust
                       ,maybe: maybe
-                      ,isNothing: isNothing};
+                      ,isNothing: isNothing
+                      ,pickedTile: pickedTile};
    return _elm.Util.values;
 };

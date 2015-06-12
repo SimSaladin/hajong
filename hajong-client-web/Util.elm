@@ -43,3 +43,13 @@ isNothing : Maybe a -> Bool
 isNothing x = case x of
    Nothing -> True
    Just _ -> False
+
+-- TODO this is not complete
+pickedTile : PickedTile -> Tile
+pickedTile pt = case pt of
+   FromWall (Just t) -> t
+   FromWanpai (Just t) -> t
+   AgariTsumo t -> t
+   AgariCall t _ -> t
+   AgariRinshan t _ -> t
+

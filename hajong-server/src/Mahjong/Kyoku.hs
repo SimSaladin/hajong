@@ -8,6 +8,9 @@
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
+--
+-- This module provides a mahjong state machine @Machine@ with state
+-- @Kyoku@.
 ------------------------------------------------------------------------------
 module Mahjong.Kyoku
     ( module Mahjong.Kyoku
@@ -24,7 +27,7 @@ import           Mahjong.Kyoku.Internal
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
 import           Data.Monoid (Endo(..))
-import qualified Data.List as L (delete)
+import qualified Data.List as L (delete, find)
 ------------------------------------------------------------------------------
 
 -- | Context of game and deal flow.
@@ -48,87 +51,73 @@ handOf pk = sHands.at pk
 
 -- * Logic
 
-startDeal :: InKyoku m => m ()
-startDeal = do
+-- TODO Something like this instead?
+-- | Game automata
+data Machine = NotBegun
+             | CheckEndConditionsAfterDiscard
+             | WaitingDraw Kaze Bool
+             | WaitingDiscard Kaze
+             | WaitingShouts (Maybe (Player, Shout)) [WaitShout]
+             | Ended KyokuResults
+
+data MachineInput = InpAuto
+                  | InpTurnAction Kaze TurnAction
+                  | InpShout Kaze Shout
+                  | InpPass Kaze
+
+-- | Remember to publish the turn action when successful
+step :: InKyoku m => Machine -> MachineInput -> m Machine
+step NotBegun InpAuto         = sendDealStarts >> waitForDraw -- startDeal
+
+step (WaitingDraw pk wanpai) InpAuto = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded
+step (WaitingDraw pk wanpai) (InpTurnAction pk' (TurnTileDraw wanpai' _))
+            | wanpai /= wanpai' = throwError "You are not supposed to draw there"
+            | pk /= pk'         = throwError "Not your turn"
+            | otherwise         = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded
+
+step (WaitingDiscard pk) InpAuto      = autoDiscard pk
+step (WaitingDiscard pk) (InpTurnAction pk' ta)
+            | pk /= pk'               = throwError "Not your turn"
+            | TurnTileDiscard d <- ta = processDiscard pk d
+            | TurnAnkan t <- ta       = handOf' pk >>= ankanOn t >>= updateHand pk >> return (WaitingDiscard pk)
+            | TurnTsumo <- ta         = tsumo pk <&> Ended
+            | TurnShouminkan t <- ta  = handOf' pk >>= shouminkanOn t >>= updateHand pk >> return (WaitingDraw pk True) -- TODO Wait shout robbing
+
+step (WaitingShouts winning shouts) (InpShout pk shout) -- TODO Precedences not implemented
+            | Just (_,_,_,xs) <- L.find (\(_,pk',_,_) -> pk' == pk) shouts
+            , shout `elem` xs               = processShout pk shout >> return (WaitingDiscard pk)
+            | otherwise                     = throwError "No such call is possible"
+step (WaitingShouts Nothing shouts) InpAuto = return CheckEndConditionsAfterDiscard
+
+step CheckEndConditionsAfterDiscard InpAuto = do
+            tilesLeft <- view pWallTilesLeft
+            dora      <- view pDora
+            case () of
+                _ | tilesLeft == 0   -> endDraw <&> Ended
+                  | length dora == 5 -> error "Special condition handling not yet implemented" -- TODO Implement
+                  | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
+
+-- ** Beginning
+
+-- | Send the very first Kyoku events to everyone. Contains the game state.
+sendDealStarts :: InKyoku m => m ()
+sendDealStarts = do
     deal <- ask
-    imapM_ (\p (pk,_,_) -> tellEvent . DealStarts p pk $ buildPlayerState deal pk)
-          (deal^.pPlayers)
-    view pTurn >>= startTurn
+    imapM_ (\p (pk,_,_) -> tellEvent . DealStarts p pk $ buildPlayerState deal pk) (deal^.pPlayers)
 
--- | n seconds
-turnWaiting :: InKyoku m => Int -> m ()
-turnWaiting n = do
-    tk <- view pTurn
-    tp <- kazeToPlayer tk
-    rt <- handOf' tk <&> handCanRiichiWith
-    tellEvent $ DealWaitForTurnAction (tp, tk, n, rt)
+-- ** Drawing
 
-startTurn :: InKyoku m => Kaze -> m ()
-startTurn = tellEvent . DealTurnBegins
-
-advanceTurn :: InKyoku m => m ()
-advanceTurn = startTurn . nextKaze =<< view pTurn
-
--- | If win(s) were declared, wall was exhausted or four kans were declared
--- (and TODO declarer is not in the yakuman tenpai): return "KyokuResults".
---
--- Otherwise the turn is passed to next player as if the player in turn
--- discarded previously.
-advanceAfterDiscard :: InKyoku m => m (Maybe KyokuResults)
-advanceAfterDiscard = do
-    tilesLeft <- view pWallTilesLeft
-    dora      <- view pDora
-    case () of
-        _ | tilesLeft == 0 || length dora == 5 -> Just <$> endDraw
-          | otherwise                          -> advanceTurn >> return Nothing
-
--- | @advanceWithShout shout shouter@
-advanceWithShout :: InKyoku m => Shout -> Player -> m (Maybe KyokuResults)
-advanceWithShout shout sp = do
-    sk <- playerToKaze sp
-    tk <- view pTurn
-    tp <- kazeToPlayer tk
-    sh <- handOf' sk
-    th <- handOf' tk
-    (m, th') <- shoutFromHand sk shout th
-    sh' <- meldTo shout m sh
-    updateHand sk sh' >> updateHand tk th'
-    tellEvent $ DealTurnShouted sk shout
-    if shoutKind shout == Ron
-        then Just <$> endRon sp tp
-        else startTurn sk >> return Nothing
-
--- ** Actions
-
--- *** Run
-
--- | Attempt to run a @TurnAction@ as the given player. Fails if it is not
--- his turn or the action would be invalid.
-runTurn :: InKyoku m => Player -> TurnAction -> m (Maybe KyokuResults)
-runTurn tp ta = flip runTurn' ta =<< playerToKaze tp
-
--- | Like 'runTurn' but takes a kaze.
-runTurn' :: InKyoku m => Kaze -> TurnAction -> m (Maybe KyokuResults)
-runTurn' pk ta = do
-    view pTurn >>= (`when` throwError "Not your turn") . (/= pk)
-    publishTurnAction pk ta
+-- | WaitingDraw, not wanpai
+waitForDraw :: InKyoku m => m Machine
+waitForDraw = do
+    pk <- view pTurn
     h <- handOf' pk
-    case ta of
-        -- TODO no updateHands
-        TurnTileDiscard d    -> do
-            when (d^.dcTo.to isJust) $ throwError "You cannot specify who shouted your discard when discarding it"
-            when (d^.dcRiichi) $ doRiichi pk
-            h' <- discard d h
-            endTurn (d^.dcTile)
-            updateHand pk h'
-            return Nothing
-        TurnAnkan tile       -> ankanOn tile h >>= updateHand pk >> return Nothing
-        TurnTileDraw False _ -> drawWall h >>= updateHand pk >> return Nothing
-        TurnTileDraw True  _ -> drawDeadWall h >>= updateHand pk >> return Nothing
-        TurnTsumo            -> handWin Nothing h >>= updateHand' pk (Just <$> endTsumo)
-        TurnShouminkan tile  -> shouminkanOn tile h >>= updateHand' pk (runTurn' pk (TurnTileDraw True (error "not used")))
+    updateHand pk $ h & handState .~ DrawFromWall
+    tellEvent $ DealTurnBegins pk
+    return $ WaitingDraw pk False
 
--- *** Player in turn
+draw :: InKyoku m => Kaze -> Bool -> m ()
+draw pk wanpai = do updateHand pk =<< (if wanpai then drawDeadWall else drawWall) =<< handOf' pk
 
 drawWall :: InKyoku m => HandA -> m HandA
 drawWall hand = do
@@ -142,6 +131,20 @@ drawDeadWall hand = preview (sWall._last) >>= \case
         tellEvent $ DealFlipDora t (Just tow)
         t `toHandWanpai` hand
 
+-- ** Discarding
+
+processDiscard :: InKyoku m => Kaze -> Discard -> m Machine
+processDiscard pk d' = do
+    let d = d' & dcTo .~ Nothing
+    when (d^.dcRiichi) $ doRiichi pk
+    updateHand pk =<< discard d =<< handOf' pk
+
+    waits <- waitingShouts (d^.dcTile)
+    tell $ map DealWaitForShout waits
+    return $ if null waits
+                 then CheckEndConditionsAfterDiscard
+                 else WaitingShouts Nothing waits
+
 doRiichi :: InKyoku m => Kaze -> m ()
 doRiichi pk = do
     p <- kazeToPlayer pk
@@ -149,22 +152,57 @@ doRiichi pk = do
     when (np < 0) $ throwError "Cannot riichi: not enough points"
     tell [DealRiichi pk, GamePoints p np]
 
--- | Set sWaitingShouts to players who could shout the discard.
-endTurn :: InKyoku m => Tile -> m ()
-endTurn dt = waitingShouts dt >>= tell . map DealWaitForShout
+autoDiscard :: InKyoku m => Kaze -> m Machine
+autoDiscard tk = processDiscard tk =<< handAutoDiscard =<< handOf' tk
 
--- *** Automatic actions
+-- ** Turn-passing
 
-autoDiscard :: InKyoku m => m ()
-autoDiscard = do
+advanceTurn :: InKyoku m => m Kaze
+advanceTurn = do
+    pk <- view pTurn <&> nextKaze
+    tellEvent $ DealTurnBegins pk
+    return pk
+
+-- ** Waiting
+
+-- | n seconds
+askForTurnAction :: InKyoku m => Int -> m ()
+askForTurnAction n = do
     tk <- view pTurn
-    void $ runTurn' tk . TurnTileDiscard =<< handAutoDiscard =<< handOf' tk
+    tp <- kazeToPlayer tk
+    rt <- handOf' tk <&> handCanRiichiWith
+    tellEvent $ DealWaitForTurnAction (tp, tk, n, rt)
 
-autoDraw, autoDrawWanpai :: InKyoku m => m ()
-autoDraw = void . flip runTurn' (TurnTileDraw False Nothing) =<< view pTurn
-autoDrawWanpai = void . flip runTurn' (TurnTileDraw True Nothing) =<< view pTurn
+-- | @processShout shouter shout@
+processShout :: InKyoku m => Kaze -> Shout -> m Machine
+processShout sk shout = do
+    sp <- kazeToPlayer sk
+    sh <- handOf' sk
+    tk <- view pTurn
+    tp <- kazeToPlayer tk
+    th <- handOf' tk
+    (m, th') <- shoutFromHand sk shout th
+    sh' <- meldTo shout m sh
+    updateHand sk sh' >> updateHand tk th'
+    tellEvent $ DealTurnShouted sk shout
 
--- ** Results
+    if shoutKind shout == Ron
+        then endRon sp tp <&> Ended
+        else do tellEvent $ DealTurnBegins sk
+                return (WaitingDiscard sk)
+
+-- ** Ending
+
+tsumo :: InKyoku m => Kaze -> m KyokuResults
+tsumo pk = do
+    handOf' pk >>= handWin Nothing >>= updateHand pk
+    honba   <- view pHonba
+    tk      <- view pTurn
+    players <- view pPlayers <&> map fst . itoList
+    tp      <- kazeToPlayer tk
+    oja     <- view pOja
+    win     <- toWinner tp
+    dealEnds $ DealTsumo [win] (tsumoPayers honba oja (win^._3.vhValue.vaValue) $ L.delete tp players)
 
 endDraw :: InKyoku m => m KyokuResults
 endDraw = do
@@ -175,16 +213,6 @@ endDraw = do
     tp' <- mapM kazeToPlayer tp
     np' <- mapM kazeToPlayer np
     dealEnds $ DealDraw (map (,r) tp') (map (,p) np')
-
-endTsumo :: InKyoku m => m KyokuResults
-endTsumo = do
-    honba   <- view pHonba
-    tk      <- view pTurn
-    players <- view pPlayers <&> map fst . itoList
-    tp      <- kazeToPlayer tk
-    oja     <- view pOja
-    win     <- toWinner tp
-    dealEnds $ DealTsumo [win] (tsumoPayers honba oja (win^._3.vhValue.vaValue) $ L.delete tp players)
 
 endRon :: InKyoku m => Player -> Player -> m KyokuResults
 endRon sp tp = do
@@ -285,7 +313,7 @@ updatePlayerNick p nick = playerToKaze p >>= \pk -> tellEvent (DealNick p pk nic
 -- | Build the player's "@GamePlayer@" record, or the state of the game as
 -- seen by the player (hide "Deal" but show the player's own hand).
 buildPlayerState :: Kyoku -> Kaze -> AsPlayer
-buildPlayerState deal pk = flip appEndo (deal { _sHands = map maskPublicHand (_sHands deal) }) $ mconcat
+buildPlayerState deal pk = flip appEndo (deal { _sHands = imap (\k -> if pk == k then convertHand else maskPublicHand) (_sHands deal) }) $ mconcat
     [ Endo $ sEvents .~ []
     , Endo $ sWall .~ []
     , Endo $ sWanpai .~ []
@@ -420,7 +448,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
         ]
 
     -- TODO get rid these in favor of finer control
-    -- DealPublicHandChanged pk hp ->
+    DealPublicHandChanged pk hp -> [ ]
     --     [ Endo $ sHands.ix pk.handPublic .~ hp ]
 
     DealPrivateHandChanged _ pk h ->
@@ -433,8 +461,8 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
         [ Endo $ pPlayers.ix p._3 .~ nick ]
 
     -- player-private
-    DealStarts _ _ new
-        | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
+    DealStarts _ _ new -> [ ]
+        -- | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
         -- | otherwise           -> [ Endo $ const new ]
 
     DealWaitForShout ws ->

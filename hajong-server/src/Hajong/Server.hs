@@ -1,5 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-} -- SafeCopy
 {-# LANGUAGE MultiWayIf #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 ------------------------------------------------------------------------------
@@ -113,18 +114,16 @@ instance MonadLogger Server where
 
 -- * Safecopy
 
-$(deriveSafeCopy 0 'base ''GameSettings)
 $(deriveSafeCopy 0 'base ''Player)
+$(deriveSafeCopy 0 'base ''GameSettings)
 $(deriveSafeCopy 0 'base ''Tile)
 $(deriveSafeCopy 0 'base ''MentsuKind)
 $(deriveSafeCopy 0 'base ''Honor)
 $(deriveSafeCopy 0 'base ''Number)
 $(deriveSafeCopy 0 'base ''Sangen)
 $(deriveSafeCopy 0 'base ''TileKind)
-$(deriveSafeCopy 0 'base ''Kyoku)
 $(deriveSafeCopy 0 'base ''KyokuResults)
 $(deriveSafeCopy 0 'base ''AbortiveDraw)
-$(deriveSafeCopy 0 'base ''Hand)
 $(deriveSafeCopy 0 'base ''Value)
 $(deriveSafeCopy 0 'base ''Discard)
 $(deriveSafeCopy 0 'base ''TurnAction)
@@ -134,9 +133,41 @@ $(deriveSafeCopy 0 'base ''ShoutKind)
 $(deriveSafeCopy 0 'base ''Kaze)
 $(deriveSafeCopy 0 'base ''ValuedHand)
 $(deriveSafeCopy 0 'base ''Shout)
-$(deriveSafeCopy 0 'base ''HandPublic)
 $(deriveSafeCopy 0 'base ''GameEvent)
 $(deriveSafeCopy 0 'base ''Game)
+$(deriveSafeCopy 0 'base ''RiichiState)
+$(deriveSafeCopy 0 'base ''DrawState)
+$(deriveSafeCopy 0 'base ''FuritenState)
+
+instance (SafeCopy (m Bool), SafeCopy (m [Tile]), SafeCopy (m FuritenState), SafeCopy (PickedTile m)) => SafeCopy (Hand m) where
+    version          = 0
+    putCopy Hand{..} = contain $ do safePut _handCalled; safePut _handDiscards; safePut _handRiichi; safePut _handIppatsu; safePut _handState; safePut _handPicks; safePut _handConcealed; safePut _handFuriten; safePut _handCanTsumo;
+    getCopy          = contain $ Hand <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet
+
+instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
+    version = 0
+    putCopy (FromWall t)       = contain $ do safePut (0 :: Word8); safePut t
+    putCopy (FromWanpai t)     = contain $ do safePut (1 :: Word8); safePut t
+    putCopy (AgariTsumo t)     = contain $ do safePut (2 :: Word8); safePut t
+    putCopy (AgariCall t k)    = contain $ do safePut (3 :: Word8); safePut t; safePut k
+    putCopy (AgariRinshan t k) = contain $ do safePut (4 :: Word8); safePut t; safePut k
+    getCopy = contain $ do tag <- safeGet
+                           case tag :: Word8 of
+                               0 -> FromWall     <$> safeGet
+                               1 -> FromWanpai   <$> safeGet
+                               2 -> AgariTsumo   <$> safeGet
+                               3 -> AgariCall    <$> safeGet <*> safeGet
+                               4 -> AgariRinshan <$> safeGet <*> safeGet
+                               _ -> fail $ "Couldn't identify tag " ++ show tag
+
+instance SafeCopy a => SafeCopy (Identity a) where
+    putCopy (Identity a) = contain $ safePut a
+    getCopy = contain $ Identity <$> safeGet
+
+instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
+    version = 0
+    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pDeal; safePut _pTurn; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _pDeals; safePut _sEvents; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
+    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet 
 
 instance SafeCopy (GameState Int) where
     putCopy (GameState a b c) = contain $ do safePut a; safePut b; safePut c
@@ -320,6 +351,7 @@ startGame gid game = do
 createWorker :: Game -> Server WorkerData
 createWorker game = WorkerData (game^.gaSettings)
     <$> (liftIO . newTVarIO =<< attachClients (game^.gaState))
+    <*> (liftIO $ newTVarIO NotBegun)
     <*> liftIO newEmptyTMVarIO
     <*> view seLoggerSet
 

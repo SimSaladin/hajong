@@ -66,6 +66,7 @@ type AsPlayer = Kyoku' Maybe
 -- | Left for turn, right for shout(s)
 type Waiting = Either WaitTurnAction [WaitShout]
 
+-- | (shouting player, shouting kaze, seconds left, available shouts)
 type WaitShout = (Player, Kaze, Int, [Shout])
 type WaitTurnAction = (Player, Kaze, Int, [Tile])
 
