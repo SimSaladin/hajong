@@ -146,6 +146,7 @@ safeStep inp = do
 
 unsafeStep :: MachineInput -> Worker Machine
 unsafeStep inp = do
+    $logDebug $ "Taking unsafe step " <> tshow inp
     m <- rview wMachine
     unsafeRoundM (step m inp) >>= rswap wMachine
     return m

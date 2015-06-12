@@ -13,7 +13,9 @@
 -- @Kyoku@.
 ------------------------------------------------------------------------------
 module Mahjong.Kyoku
-    ( module Mahjong.Kyoku
+    ( InKyoku, Machine(..), MachineInput(..), step
+    , dealGameEvent
+    , playerToKaze, updatePlayerNick, tellPlayerState
     , module Mahjong.Kyoku.Internal
     ) where
 
@@ -51,7 +53,6 @@ handOf pk = sHands.at pk
 
 -- * Logic
 
--- TODO Something like this instead?
 -- | Game automata
 data Machine = NotBegun
              | CheckEndConditionsAfterDiscard
@@ -59,29 +60,31 @@ data Machine = NotBegun
              | WaitingDiscard Kaze
              | WaitingShouts (Maybe (Player, Shout)) [WaitShout]
              | Ended KyokuResults
+             deriving (Show, Read)
 
 data MachineInput = InpAuto
                   | InpTurnAction Kaze TurnAction
                   | InpShout Kaze Shout
                   | InpPass Kaze
+                  deriving (Show, Read, Eq)
 
 -- | Remember to publish the turn action when successful
 step :: InKyoku m => Machine -> MachineInput -> m Machine
-step NotBegun InpAuto         = sendDealStarts >> waitForDraw -- startDeal
+step NotBegun InpAuto                       = sendDealStarts >> waitForDraw -- startDeal
 
-step (WaitingDraw pk wanpai) InpAuto = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded
+step (WaitingDraw pk wanpai) InpAuto        = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded
 step (WaitingDraw pk wanpai) (InpTurnAction pk' (TurnTileDraw wanpai' _))
-            | wanpai /= wanpai' = throwError "You are not supposed to draw there"
-            | pk /= pk'         = throwError "Not your turn"
-            | otherwise         = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded
+            | wanpai /= wanpai'             = throwError "You are not supposed to draw there"
+            | pk /= pk'                     = throwError "Not your turn"
+            | otherwise                     = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded
 
-step (WaitingDiscard pk) InpAuto      = autoDiscard pk
+step (WaitingDiscard pk) InpAuto            = autoDiscard pk
 step (WaitingDiscard pk) (InpTurnAction pk' ta)
-            | pk /= pk'               = throwError "Not your turn"
-            | TurnTileDiscard d <- ta = processDiscard pk d
-            | TurnAnkan t <- ta       = handOf' pk >>= ankanOn t >>= updateHand pk >> return (WaitingDiscard pk)
-            | TurnTsumo <- ta         = tsumo pk <&> Ended
-            | TurnShouminkan t <- ta  = handOf' pk >>= shouminkanOn t >>= updateHand pk >> return (WaitingDraw pk True) -- TODO Wait shout robbing
+            | pk /= pk'                     = throwError "Not your turn"
+            | TurnTileDiscard d <- ta       = processDiscard pk d
+            | TurnAnkan t <- ta             = handOf' pk >>= ankanOn t >>= updateHand pk >> return (WaitingDiscard pk)
+            | TurnTsumo <- ta               = tsumo pk <&> Ended
+            | TurnShouminkan t <- ta        = handOf' pk >>= shouminkanOn t >>= updateHand pk >> return (WaitingDraw pk True) -- TODO Wait shout robbing
 
 step (WaitingShouts winning shouts) (InpShout pk shout) -- TODO Precedences not implemented
             | Just (_,_,_,xs) <- L.find (\(_,pk',_,_) -> pk' == pk) shouts
@@ -96,6 +99,64 @@ step CheckEndConditionsAfterDiscard InpAuto = do
                 _ | tilesLeft == 0   -> endDraw <&> Ended
                   | length dora == 5 -> error "Special condition handling not yet implemented" -- TODO Implement
                   | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
+
+step (Ended results) InpAuto
+            -- TODO Implement
+            | otherwise                     = error "Kyoku.step: Oh noes! we needz IOs for new tiles."
+
+step st inp                                 = throwError $ "Invalid input in state " <> tshow st <> ": " <> tshow inp
+
+-- | Results are returned if west or higher round has just ended and
+-- someone is winning (over 30000 points).
+maybeGameResults :: Kyoku -> Maybe FinalPoints
+maybeGameResults Kyoku{..}
+    | minimumOf (traversed._2) _pPlayers < Just 0 = score
+    | otherwise = do
+        guard (_pRound >= Nan)
+        guard (_pPlayers ^? at _pOja._Just._1 == Just Nan)
+        guard (maximumOf (traversed._2) _pPlayers > Just 30000)
+        score
+  where
+    score = return . finalPoints $ view _2 <$> _pPlayers
+
+-- | Advance the game to next deal, or end it.
+nextDeal :: Kyoku -> IO (Either FinalPoints Kyoku)
+nextDeal deal = case maybeGameResults deal of
+    Just r  -> return (Left r)
+    Nothing -> do
+        let po      = deal^.pOja
+            around  = deal^.pResults & goesAround po
+            honba   = deal^.pResults & newHonba po
+            np      = deal^.pPlayers & (if around then each._1 %~ prevKaze else id)
+
+            po_k                    = np^?!ix po._1
+            Just (oja, (oja_k,_,_)) = np & ifind (\_ (k,_,_) -> k == po_k)
+
+            go = set pPlayers np
+               . set pTurn Ton
+               . set pResults Nothing
+               . set pOja oja
+               . over pHonba honba
+               . over pRound (if' (oja_k == Shaa && around) nextKaze id)
+
+            in Right . go <$> dealTiles (logDeal deal)
+
+  where
+    goesAround po (Just DealDraw{..}) = not (null dTenpais) || all ((/= po) . fst) dTenpais
+    goesAround po (Just res)          = notElemOf (each._1) po (dWinners res)
+    goesAround _ _ = error "nextDeal: game ended prematurely, this is not possible"
+
+    newHonba _ (Just DealDraw{})  = (+1)
+    newHonba _ (Just DealAbort{}) = (+1)
+    newHonba po (Just x) | notElemOf (each._1) po (dWinners x) = const 0
+                         | otherwise                           = (+1)
+    newHonba _ _ = error "newHonba: game ended prematurely, this is not possible"
+    logDeal = do
+        k <- view pRound
+        over pDeals $ \case
+                        [] -> [(k, 1)]
+                        xs@((k',n):_) | k == k'   -> (k, n + 1) : xs
+                                      | otherwise -> (k, n) : xs
 
 -- ** Beginning
 
@@ -120,8 +181,7 @@ draw :: InKyoku m => Kaze -> Bool -> m ()
 draw pk wanpai = do updateHand pk =<< (if wanpai then drawDeadWall else drawWall) =<< handOf' pk
 
 drawWall :: InKyoku m => HandA -> m HandA
-drawWall hand = do
-    preview (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
+drawWall hand = preview (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
 
 drawDeadWall :: InKyoku m => HandA -> m HandA
 drawDeadWall hand = preview (sWall._last) >>= \case
@@ -371,58 +431,6 @@ handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") r
 ----------------------------------------------------------------------------------------
 
 -- * Kyoku ends
-
--- | Advance the game to next deal, or end it.
-nextDeal :: Kyoku -> IO (Either FinalPoints Kyoku)
-nextDeal deal = case maybeGameResults deal of
-    Just r  -> return (Left r)
-    Nothing -> do
-        let po      = deal^.pOja
-            around  = deal^.pResults & goesAround po
-            honba   = deal^.pResults & newHonba po
-            np      = deal^.pPlayers & (if around then each._1 %~ prevKaze else id)
-
-            po_k                    = np^?!ix po._1
-            Just (oja, (oja_k,_,_)) = np & ifind (\_ (k,_,_) -> k == po_k)
-
-            go = set pPlayers np
-               . set pTurn Ton
-               . set pResults Nothing
-               . set pOja oja
-               . over pHonba honba
-               . over pRound (if' (oja_k == Shaa && around) nextKaze id)
-
-            in Right . go <$> dealTiles (logDeal deal)
-
-  where
-    goesAround po (Just DealDraw{..}) = not (null dTenpais) || all ((/= po) . fst) dTenpais
-    goesAround po (Just res)          = notElemOf (each._1) po (dWinners res)
-    goesAround _ _ = error "nextDeal: game ended prematurely, this is not possible"
-
-    newHonba _ (Just DealDraw{})  = (+1)
-    newHonba _ (Just DealAbort{}) = (+1)
-    newHonba po (Just x) | notElemOf (each._1) po (dWinners x) = const 0
-                         | otherwise                           = (+1)
-    newHonba _ _ = error "newHonba: game ended prematurely, this is not possible"
-    logDeal = do
-        k <- view pRound
-        over pDeals $ \case
-                        [] -> [(k, 1)]
-                        xs@((k',n):_) | k == k'   -> (k, n + 1) : xs
-                                      | otherwise -> (k, n) : xs
-
--- | Results are returned if west or higher round has just ended and
--- someone is winning (over 30000 points).
-maybeGameResults :: Kyoku -> Maybe FinalPoints
-maybeGameResults Kyoku{..}
-    | minimumOf (traversed._2) _pPlayers < Just 0 = score
-    | otherwise = do
-        guard (_pRound >= Nan)
-        guard (_pPlayers ^? at _pOja._Just._1 == Just Nan)
-        guard (maximumOf (traversed._2) _pPlayers > Just 30000)
-        score
-  where
-    score = return . finalPoints $ view _2 <$> _pPlayers
 
 -- * Apply events
 
