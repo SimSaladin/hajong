@@ -5,21 +5,11 @@ x = done, / = half done, ! = needs testing
 [/] (game) tenhou, chiihou and renhou: tests done, implementations missing
 [ ] (game) ankan in riichi
 [ ] (game) dora, ura dora count in hans
-[/] (game) refactor everything behind GameEvents
 [ ] (worker/game) available shouts when refreshing game
 [ ] (game) tochuu ryuukoku
    [ ] ask for new round when enough non-related tiles
    [ ] other
-[ ] (game) yaku tests
-[!] (game) "harder yaku" checks
-[!] (game) final scoring and possible next rounds
-[!] (game) honba in scoring
-[!] (game) shout only ron on last tile from wall
-[!] (game) no wait-shout other than ron if riichi
-[!] (game) BUG: riichi even if hand open
-[!] (game, elm, server) tsumo
-[!] minshoukan
-[!] ankan
+[/] (game) Test all standard yaku; make them work
 
 # elm
 [ ] (elm) chat/dialog
@@ -31,18 +21,18 @@ x = done, / = half done, ! = needs testing
 [?] (web) BUG game ended and back in lobby -> cannot join games
 [!] (elm) show honba
 [ ] (elm) undisplay riichi when clicked
-[ ] (elm) riichi options: order right way
+[ ] (elm) highlight corresponding tiles on shout hovers
 
 # worker
 [ ] (worker) pause
-[x] (server, elm) DealResults JSON parsing
 
 # site
-[ ] (site) reconnect automatically to server socket
-[ ] (site) gravatar support
-[/] (server) worker logging in file
-[ ] (site) Optional mic communication via webrtc
+[ ] (site) saving game results to relational database
 [/] (site) games/worker status query
+[ ] (site) reconnect automatically to server socket
+[/] (server) worker logging in file
+[ ] (site) gravatar support
+[ ] (site) Optional mic communication via webrtc
 [ ] (site, elm) player last.fm integration
 
 # other
@@ -75,3 +65,11 @@ x = done, / = half done, ! = needs testing
 [x] (site) nick set
 [x] (game) nagashi mangan check
 [x] (game) chankan
+[!] (game) final scoring and possible next rounds
+[!] (game) honba in scoring
+[!] (game) shout only ron on last tile from wall
+[!] (game) no wait-shout other than ron if riichi
+[!] (game) BUG: riichi even if hand open
+[!] (game, elm, server) tsumo
+[!] minshoukan
+[!] ankan

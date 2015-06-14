@@ -211,10 +211,23 @@ ippatsu = do
         then return (Yaku 1 "Ippatsu")
         else yakuFail
 
+haiteiRaoyui :: YakuCheck Yaku
+haiteiRaoyui = do
+    info <- yakuState
+    let tsumo = case info^.vHand.handPicks of
+                     [AgariTsumo{}] -> True
+                     _              -> False
+    if info^.vKyoku.pWallTilesLeft == 0 && tsumo
+        then return (Yaku 1 "Haitei Raoyui")
+        else yakuFail
+
 houteiRaoyui :: YakuCheck Yaku
 houteiRaoyui = do
     info <- yakuState
-    if info^.vKyoku.pWallTilesLeft == 0
+    let called = case info^.vHand.handPicks of
+                     [AgariCall{}] -> True
+                     _             -> False
+    if info^.vKyoku.pWallTilesLeft == 0 && called
         then return (Yaku 1 "Houtei Raoyui")
         else yakuFail
 
@@ -222,8 +235,8 @@ rinshanKaihou :: YakuCheck Yaku
 rinshanKaihou = do
     info <- yakuState
     case info^?vHand.handPicks._last of
-        Just FromWanpai{} -> return (Yaku 1 "Rinshan Kaihou")
-        _                 -> yakuFail
+        Just AgariTsumoWanpai{} -> return (Yaku 1 "Rinshan Kaihou")
+        _                       -> yakuFail
 
 chankan :: YakuCheck Yaku
 chankan = do

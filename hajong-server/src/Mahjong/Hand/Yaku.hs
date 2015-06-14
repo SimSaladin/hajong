@@ -21,7 +21,7 @@ allStandard :: [YakuCheck Yaku]
 allStandard = 
     [ chankan, chanta, chiitoitsu, chinitsu
     , yakuhaiRoundWind, yakuhaiSeatWind, yakuhaiRed, yakuhaiGreen, yakuhaiWhite
-    , honitsu, honroutou, houteiRaoyui, iipeikou, ippatsu, ittsuu
+    , honitsu, honroutou, haiteiRaoyui, houteiRaoyui, iipeikou, ippatsu, ittsuu
     , junchan, kuitan, menzenTsumo, pinfu, riichi, rinshanKaihou
     , ryanpeikou, sanAnkou, sanKantsu, sanshokuDoujin, sanshokuDoukou
     , shouSangen, tanyao, toitoi, nagashiMangan ]

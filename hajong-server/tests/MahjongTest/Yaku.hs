@@ -141,4 +141,30 @@ tests = testGroup "Standard Yaku"
                            & vHand.handIppatsu .~ True
         snd (getYaku vi) @?= [Yaku 1 "Riichi", Yaku 1 "Ippatsu"]
 
+    , testCase "Houtei Raoyui" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M1", "S5", "S6", "S7", "S2", "S3", "S4", "S8", "S8"]
+                           & vHand.handPicks .~ [AgariCall "M1" Nan]
+                           & vHand.handCalled .~ [Mentsu Shuntsu "P2" (Just undefined)]
+                           & vKyoku.pWallTilesLeft .~ 0
+        snd (getYaku vi) @?= [Yaku 1 "Houtei Raoyui"]
+
+    , testCase "Haitei Raoyui" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M1", "S5", "S6", "S7", "S2", "S3", "S4", "S8", "S8"]
+                           & vHand.handPicks .~ [AgariTsumo "M1"]
+                           & vHand.handCalled .~ [Mentsu Shuntsu "P2" (Just undefined)]
+                           & vKyoku.pWallTilesLeft .~ 0
+        snd (getYaku vi) @?= [Yaku 1 "Haitei Raoyui"]
+
+    , testCase "Rinshan Kaihou" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M1", "S5", "S6", "S7", "S2", "S3", "S4", "S8", "S8"]
+                           & vHand.handPicks .~ [AgariTsumoWanpai "M1"] -- TODO Rinshan its own Tsumo?
+                           & vHand.handCalled .~ [Mentsu Shuntsu "P2" (Just undefined)]
+        snd (getYaku vi) @?= [Yaku 1 "Rinshan Kaihou"]
+
+    , testCase "Chankan" $ do
+        error "test not implemented (here) (yet)"
+
+    , testCase "Nagashi Mangan" $ do
+        error "TODO special: handle somewhere else"
+
     ]

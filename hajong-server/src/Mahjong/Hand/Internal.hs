@@ -21,7 +21,7 @@ data RiichiState = NoRiichi | Riichi | DoubleRiichi
 data DrawState = DrawFromWanpai | DrawFromWall | DrawNone
                deriving (Show, Read, Eq)
 
-data PickedTile m = FromWall (m Tile) | FromWanpai (m Tile) | AgariTsumo Tile | AgariCall Tile Kaze | AgariChankan Tile Kaze
+data PickedTile m = FromWall (m Tile) | FromWanpai (m Tile) | AgariTsumo Tile | AgariTsumoWanpai Tile | AgariCall Tile Kaze | AgariChankan Tile Kaze
 deriving instance Show (PickedTile Maybe)
 deriving instance Read (PickedTile Maybe)
 deriving instance Eq   (PickedTile Maybe)
@@ -33,6 +33,7 @@ pickedTile :: PickedTile Identity -> Tile
 pickedTile (FromWall (Identity t))   = t
 pickedTile (FromWanpai (Identity t)) = t
 pickedTile (AgariTsumo t)            = t
+pickedTile (AgariTsumoWanpai t)      = t
 pickedTile (AgariCall t _)           = t
 pickedTile (AgariChankan t _)        = t
 
