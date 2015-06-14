@@ -17,6 +17,7 @@ module Mahjong.Hand.Value where
 ------------------------------------------------------------------------------
 import            Import
 import            Mahjong.Kyoku.Internal
+import            Mahjong.Configuration
 import            Mahjong.Tiles
 ------------------------------------------------------------------------------
 import            Mahjong.Hand.Internal
@@ -29,7 +30,8 @@ calledMentsu    = vHand.handCalled
 -- ** Calculating
 
 -- |
--- >>> getValue (ValueInfo {vRound = Ton, vPlayer = Ton, vRiichi = True, vConcealed = True, vDiscarded = ["N" ,"W" ,"G!","S7","P9","M6","S2","R!","S9","P1"], vMentsu = [], vWinWith = "P2", vWinCalled = Nothing, vTiles = ["S5","P6","S6","P5","P4","S4","M5","S2","P3","P7","S7","S3","M5","P2"], vIppatsu = False, vDoubleRiichi = False, vTilesLeft = 29, vFromWanpai = False})
+-- >>> let kyoku = Kyoku {_pRound = Ton, _pDeal = 1, _pTurn = Ton, _pOja = Player 3, _pFirstOja = Player 3, _pWallTilesLeft = 70, _pDora = ["P4"], _pPlayers = error "not used", _pHonba = 0, _pRiichi = 0, _pResults = Nothing, _pDeals = [], _sEvents = [], _sHands = error "not used", _sWall = [], _sWanpai = [], _sWaiting = Nothing}
+-- >>> getValue $ ValueInfo kyoku Ton $ Hand [] (map (\t -> Discard t Nothing False) ["N" ,"W" ,"G!","S7","P9","M6","S2","R!","S9","P1"]) Riichi False DrawNone [AgariTsumo "P2"] (return ["S5","P6","S6","P5","P4","S4","M5","S2","P3","P7","S7","S3","M5"]) (return NotFuriten) (return False)
 -- Value {_vaYaku = [Yaku {_yHan = 1, _yName = "Menzen Tsumo"},Yaku {_yHan = 1, _yName = "Riichi"}], _vaFu = 20, _vaHan = 2, _vaValue = 320, _vaNamed = Nothing}
 getValue :: ValueInfo -> Value
 getValue vi = Value yaku fu han val name

@@ -14,7 +14,6 @@ x = done, / = half done, ! = needs testing
    [ ] ask for new round when enough non-related tiles
    [ ] other
 [ ] (game) yaku tests
-[ ] ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4", "P5"] - riichi, bug?
 [!] (game) "harder yaku" checks
 [!] (game) final scoring and possible next rounds
 [!] (game) honba in scoring

@@ -13,8 +13,8 @@
 -- @Kyoku@.
 ------------------------------------------------------------------------------
 module Mahjong.Kyoku
-    -- * Types
-    ( InKyoku, Machine(..), MachineInput(..)
+    ( -- * Types
+      InKyoku, Machine(..), MachineInput(..)
 
     -- * Actions
     , step
@@ -42,11 +42,9 @@ import qualified Data.List as L (delete, find)
 
 -- | Context of game and deal flow.
 --
--- @Kyoku@ data type is read-only. Modifications must be encoded in
--- 'GameEvent's. This way it is trivial to keep clients' public states in
--- sync.
+-- Don't use the state monad yourself! always use tellEvent
 type InKyoku m =
-    ( MonadReader Kyoku m
+    ( MonadState Kyoku m
     , MonadWriter [GameEvent] m
     , MonadError Text m
     , Functor m
@@ -100,8 +98,8 @@ step (WaitingShouts winning shouts) (InpShout pk shout) -- TODO Precedences not 
 step (WaitingShouts Nothing shouts) InpAuto = return CheckEndConditionsAfterDiscard
 
 step CheckEndConditionsAfterDiscard InpAuto = do
-            tilesLeft <- view pWallTilesLeft
-            dora      <- view pDora
+            tilesLeft <- use pWallTilesLeft
+            dora      <- use pDora
             case () of
                 _ | length dora == 5 -> return $ KyokuEnded $ DealAbort SuukanSanra -- TODO check that someone is not waiting for the yakuman
                   | tilesLeft == 0   -> endDraw <&> KyokuEnded
@@ -138,8 +136,8 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
 
     -- player-private
     DealStarts _ _ new -> [ ]
-        -- | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
-        -- | otherwise           -> [ Endo $ const new ]
+        -- null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
+        -- otherwise           -> [ Endo $ const new ]
 
     DealWaitForShout ws ->
         [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
@@ -239,7 +237,7 @@ nextDeal deal = do tiles <- shuffleTiles
 -- | Send the very first Kyoku events to everyone. Contains the game state.
 sendDealStarts :: InKyoku m => m ()
 sendDealStarts = do
-    deal <- ask
+    deal <- get
     imapM_ (\p (pk,_,_) -> tellEvent . DealStarts p pk $ buildPlayerState deal pk) (deal^.pPlayers)
 
 -- ** Drawing
@@ -247,7 +245,7 @@ sendDealStarts = do
 -- | WaitingDraw, not wanpai
 waitForDraw :: InKyoku m => m Machine
 waitForDraw = do
-    pk <- view pTurn
+    pk <- use pTurn
     h <- handOf' pk
     updateHand pk $ h & handState .~ DrawFromWall
     tellEvent $ DealTurnBegins pk
@@ -255,17 +253,17 @@ waitForDraw = do
 
 draw :: InKyoku m => Kaze -> Bool -> m ()
 draw pk wanpai = do
-    tellEvent $ DealTurnAction pk $ TurnTileDraw wanpai Nothing
     updateHand pk =<< (if wanpai then drawDeadWall else drawWall) =<< handOf' pk
+    tellEvent $ DealTurnAction pk $ TurnTileDraw wanpai Nothing
 
 drawWall :: InKyoku m => HandA -> m HandA
-drawWall hand = preview (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
+drawWall hand = preuse (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
 
 drawDeadWall :: InKyoku m => HandA -> m HandA
-drawDeadWall hand = preview (sWall._last) >>= \case
+drawDeadWall hand = preuse (sWall._last) >>= \case
     Nothing  -> throwError "Wall is empty"
     Just tow -> do
-        t <- view (sWanpai.singular _head)
+        t <- use (sWanpai.singular _head)
         tellEvent $ DealFlipDora t (Just tow)
         t `toHandWanpai` hand
 
@@ -278,7 +276,7 @@ processDiscard pk d' = do
     updateHand pk =<< discard d =<< handOf' pk
 
     waits <- waitingShouts (d^.dcTile)
-    tell $ map DealWaitForShout waits
+    tellEvents $ map DealWaitForShout waits
     return $ if null waits
                  then CheckEndConditionsAfterDiscard
                  else WaitingShouts Nothing waits
@@ -286,9 +284,9 @@ processDiscard pk d' = do
 doRiichi :: InKyoku m => Kaze -> m ()
 doRiichi pk = do
     p <- kazeToPlayer pk
-    np <- view $ pPlayers.at p.singular _Just._2.to (\a -> a - 1000)
+    np <- use $ pPlayers.at p.singular _Just._2.to (\a -> a - 1000)
     when (np < 0) $ throwError "Cannot riichi: not enough points"
-    tell [DealRiichi pk, GamePoints p np]
+    tellEvents [DealRiichi pk, GamePoints p np]
 
 autoDiscard :: InKyoku m => Kaze -> m Machine
 autoDiscard tk = processDiscard tk =<< handAutoDiscard =<< handOf' tk
@@ -298,7 +296,7 @@ autoDiscard tk = processDiscard tk =<< handAutoDiscard =<< handOf' tk
 -- | Next player who draws a tile
 advanceTurn :: InKyoku m => m Kaze
 advanceTurn = do
-    pk <- view pTurn <&> nextKaze
+    pk <- use pTurn <&> nextKaze
     updateHand pk . set handState DrawFromWall =<< handOf' pk
     tellEvent $ DealTurnBegins pk
     return pk
@@ -308,7 +306,7 @@ advanceTurn = do
 -- | n seconds
 askForTurnAction :: InKyoku m => Int -> m ()
 askForTurnAction n = do
-    tk <- view pTurn
+    tk <- use pTurn
     tp <- kazeToPlayer tk
     rt <- handOf' tk <&> handCanRiichiWith
     tellEvent $ DealWaitForTurnAction (tp, tk, n, rt)
@@ -318,7 +316,7 @@ processShout :: InKyoku m => Kaze -> Shout -> m Machine
 processShout sk shout = do
     sp <- kazeToPlayer sk
     sh <- handOf' sk
-    tk <- view pTurn
+    tk <- use pTurn
     tp <- kazeToPlayer tk
     th <- handOf' tk
     (m, th') <- shoutFromHand sk shout th
@@ -336,17 +334,17 @@ processShout sk shout = do
 tsumo :: InKyoku m => Kaze -> m KyokuResults
 tsumo pk = do
     handOf' pk >>= handWin Nothing >>= updateHand pk
-    honba   <- view pHonba
-    tk      <- view pTurn
-    players <- view pPlayers <&> map fst . itoList
+    honba   <- use pHonba
+    tk      <- use pTurn
+    players <- use pPlayers <&> map fst . itoList
     tp      <- kazeToPlayer tk
-    oja     <- view pOja
+    oja     <- use pOja
     win     <- toWinner tp
     dealEnds $ DealTsumo [win] (tsumoPayers honba oja (win^._3.vhValue.vaValue) $ L.delete tp players)
 
 endDraw :: InKyoku m => m KyokuResults
 endDraw = do
-    hands <- view sHands
+    hands <- use sHands
     let x@(tp, np) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
     let (r, p) | null tp || null np = (0, 0)
                | otherwise          = x & both %~ div 3000 . fromIntegral . length
@@ -356,16 +354,16 @@ endDraw = do
 
 endRon :: InKyoku m => Player -> Player -> m KyokuResults
 endRon sp tp = do
-    h   <- view pHonba
+    h   <- use pHonba
     win <- toWinner sp
-    oja <- view pOja
+    oja <- use pOja
     let basic = win^._3.vhValue.vaValue
     dealEnds $ DealRon [win] [(tp, negate $ roundKyokuPoints $ basic * if' (tp == oja) 6 4 + h * 100)]
 
 -- | Broadcast results with pass-through.
 dealEnds :: InKyoku m => KyokuResults -> m KyokuResults
 dealEnds results = do
-    tell $ DealEnded results : payPoints results
+    tellEvents $ DealEnded results : payPoints results
     return results
 
 -- ** Scoring
@@ -402,7 +400,7 @@ toWinner :: InKyoku m => Player -> m Winner
 toWinner p = do
     pk <- playerToKaze p
     h  <- handOf' pk
-    d  <- ask
+    d  <- get
     let vh  = valueHand pk h d
     return (p, roundKyokuPoints $ if' (p == _pOja d) 6 4 * (vh^.vhValue.vaValue) + _pHonba d * 300, vh)
 
@@ -410,10 +408,10 @@ toWinner p = do
 
 -- |
 -- >>> finalPoints (Map.fromList [(Player 0,25000), (Player 1,25000), (Player 2,25000), (Player 3,25000)])
--- fromList [(Player 0,35),(Player 1,5),(Player 2,-15),(Player 3,-25)]
+-- FinalPoints (fromList [(Player 0,35),(Player 1,5),(Player 2,-15),(Player 3,-25)])
 --
 -- >>> finalPoints (Map.fromList [(Player 0, 35700), (Player 1, 32400), (Player 2, 22200), (Player 3, 9700)])
--- fromList [(Player 0,46),(Player 1,12),(Player 2,-18),(Player 3,-40)]
+-- FinalPoints (fromList [(Player 0,46),(Player 1,12),(Player 2,-18),(Player 3,-40)])
 finalPoints :: PointsStatus -> FinalPoints
 finalPoints xs = final & _head._2 -~ sumOf (each._2) final -- fix sum to 0
                        & Map.fromList & FinalPoints
@@ -444,7 +442,7 @@ roundFinalPoints x = case x `divMod` 1000 of
 tellPlayerState :: InKyoku m => Player -> m ()
 tellPlayerState p = do
     pk <- playerToKaze p
-    deal <- ask
+    deal <- get
     tellEvent . DealStarts p pk $ buildPlayerState deal pk
 
 updatePlayerNick :: InKyoku m => Player -> Text -> m ()
@@ -468,20 +466,22 @@ buildPlayerState deal pk = flip appEndo (deal { _sHands = imap (\k -> if pk == k
 
 -- | Set the hand of player
 updateHand :: InKyoku m => Kaze -> HandA -> m ()
-updateHand pk = updateHand' pk (return ())
-
-updateHand' :: InKyoku m => Kaze -> m a -> HandA -> m a
-updateHand' pk ma new = do
+updateHand pk new = do
     p   <- kazeToPlayer pk
     old <- handOf' pk
+    sHands.at pk .= Just new
     when (old /= new)
         $ tellEvent (DealPrivateHandChanged p pk new)
     when (maskPublicHand old /= maskPublicHand new)
         $ tellEvent (DealPublicHandChanged pk $ maskPublicHand new)
-    local (sHands.at pk .~ Just new) ma
 
 tellEvent :: InKyoku m => GameEvent -> m ()
-tellEvent ev = tell [ev]
+tellEvent ev = do
+    modify $ dealGameEvent ev
+    tell [ev]
+
+tellEvents :: InKyoku m => [GameEvent] -> m ()
+tellEvents = mapM_ tellEvent
 
 -- | Turn a possibly sensitive TurnAction to a non-sensitive (fully public)
 -- DealEvent.
@@ -496,17 +496,17 @@ publishTurnAction pk ra = tellEvent $ case ra of
 
 kazeToPlayer :: InKyoku m => Kaze -> m Player
 kazeToPlayer k = do
-    mp <- view pPlayers <&> ifind (\_ x -> x^._1 == k)
+    mp <- use pPlayers <&> ifind (\_ x -> x^._1 == k)
     maybe (throwError "Player not found") (return . fst) mp
 
 playerToKaze :: InKyoku m => Player -> m Kaze
 playerToKaze p = do
-    rp <- view pPlayers
+    rp <- use pPlayers
     let mk = rp ^. at p
     maybe (throwError "Player not found") (return . (^._1)) mk
 
 handOf' :: InKyoku m => Kaze -> m HandA
-handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") return
+handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
 
 ----------------------------------------------------------------------------------------
 
@@ -525,8 +525,8 @@ waitingShouts :: InKyoku m => Tile -> m [WaitShout]
 waitingShouts dt = do
     let secs = 15 -- TODO hard-coded limit
 
-    lastTile <- view pWallTilesLeft <&> (== 0)
-    shouts'  <- filterCouldShout dt <$> view pTurn <*> view sHands
+    lastTile <- use pWallTilesLeft <&> (== 0)
+    shouts'  <- filterCouldShout dt <$> use pTurn <*> use sHands
 
     let shouts = map (liftA2 (,) (^?!_head._1) (^..each._2))
                 $ groupBy ((==) `on` view _1)

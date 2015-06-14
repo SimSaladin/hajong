@@ -67,9 +67,7 @@ runRoundM m gs = maybe (Left "No active round!") (flip runKyoku m) (_gameDeal gs
 
 -- | Run action and apply gameveents.
 runKyoku :: Kyoku -> RoundM a -> Either Text (a, Kyoku, [GameEvent])
-runKyoku k m = do
-        (a, k', xs) <- runRWST m k k
-        return $ (a, foldl' (flip dealGameEvent) k' xs, xs)
+runKyoku k m = runRWST m k k
 
 ------------------------------------------------------------------------------
 
