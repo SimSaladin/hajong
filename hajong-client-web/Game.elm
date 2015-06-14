@@ -164,39 +164,68 @@ dispPlayerInfo rs k =
 dispResults : RoundResult -> Form
 dispResults res =
    let (col, view) = case res of
-               DealTsumo {winners, payers} -> (lightBlue,
-                  [ show "Tsumo! " ]
-                  ++ [flow down <| map dispWinner winners]
-                  ++ [ show "Payers: " `beside` show payers ])
-               DealRon {winners, payers} -> (lightGreen,
-                  [ show "Win: " `beside` show winners
-                  , show "Payers: " `beside` show payers
-                  ])
-               DealDraw {tenpai, nooten} -> (lightYellow,
-                  [ show "Tenpai players: " `beside` show tenpai
-                  , show "Nooten: " `beside` show nooten
-                  ])
+            DealTsumo {winners, payers} -> (lightBlue,
+               titleText "Tsumo!"
+               :: flow down (map dispWinner winners)
+               :: flow down (map dispPayer payers) :: [])
+
+            DealRon {winners, payers} -> (lightGreen,
+               titleText "Ron!"
+               :: flow down (map dispWinner winners)
+               :: flow down (map dispPayer payers) :: [])
+
+            DealDraw {tenpai, nooten} -> (lightYellow,
+               titleText "Draw!"
+               :: flow down (map dispTenpai tenpai)
+               :: flow down (map dispPayer nooten) :: [])
    in toForm
          <| color col
          <| container 700 300 middle
          <| flow down view
 
+titleText : String -> Element
+titleText txt = T.fromString txt |> T.height 40 |> centered
+
 dispWinner : Winner -> Element
-dispWinner {player, valuehand} = flow down <|
-   [ show player, dispValued valuehand ]
+dispWinner {player, valuehand} =
+   [ T.concat [ T.fromString (toString player)
+              , T.fromString (toString valuehand.value.points) |> T.append (T.fromString "+") |> T.color green
+              ] |> centered
+   , dispValued valuehand ]
+   |> flow down
+
+dispPayer : Payer -> Element
+dispPayer {player, points} = T.concat
+   [ T.fromString (toString player), T.fromString "        "
+   , T.fromString (toString points) |> T.append (T.fromString "-") |> T.color red ]
+   |> centered
+
+dispTenpai : Payer -> Element
+dispTenpai {player, points} = T.concat
+   [ T.fromString (toString player), T.fromString "        "
+   , T.fromString (toString points) |> T.append (T.fromString "+") |> T.color green ]
+   |> centered
 
 dispValued : Valued -> Element
-dispValued {mentsu, tiles, value} = flow right
-   (map dispTile tiles ++ map (dispMentsu Ton) mentsu) -- TODO get player ton
-   `above` dispHandValue value
+dispValued {mentsu, tiles, value} =
+   [ collage 600 80
+      [ flow right (map dispTile tiles ++ map (dispMentsu Ton) mentsu) -- TODO get player ton
+        |> toForm |> scale 0.6 ]
+   , dispHandValue value
+   ] |> flow down
 
 dispHandValue : HandValue -> Element
-dispHandValue {yaku, fu, han, points, named} = flow right
-   [ show han, show " Han, ", show fu, show " Fu." ]
+dispHandValue {yaku, fu, han, points, named} = (T.concat
+   [ T.fromString (toString han), T.fromString " Han, "
+   , T.fromString (toString fu), T.fromString (" Fu.") ]
+   |> centered)
    `above` flow down (map dispYaku yaku)
 
 dispYaku : Yaku -> Element
-dispYaku {han, name} = show name `beside` show " " `beside` show han
+dispYaku {han, name} = T.concat
+   [ T.fromString name |> T.bold, T.fromString " "
+   , T.fromString (toString han) |> T.color green ]
+   |> centered
 -- }}}
 
 -- {{{ Hands --------------------------------------------------------------

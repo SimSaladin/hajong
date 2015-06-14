@@ -1897,10 +1897,10 @@ Elm.Game.make = function (_elm) {
                       gs);
                     case "TurnTsumo": return gs;}
                  _U.badCase($moduleName,
-                 "between lines 399 and 416");
+                 "between lines 428 and 445");
               }();}
          _U.badCase($moduleName,
-         "between lines 398 and 416");
+         "between lines 427 and 445");
       }();
    });
    var updateHand = F2(function (player,
@@ -1922,7 +1922,7 @@ Elm.Game.make = function (_elm) {
          {case "Just": return gs;
             case "Nothing": return gs;}
          _U.badCase($moduleName,
-         "between lines 388 and 390");
+         "between lines 417 and 419");
       }();
    });
    var setRiichi = F2(function (pk,
@@ -1945,7 +1945,7 @@ Elm.Game.make = function (_elm) {
               gs);
             case "Nothing": return gs;}
          _U.badCase($moduleName,
-         "between lines 384 and 386");
+         "between lines 413 and 415");
       }();
    });
    var flipDora = F2(function (tile,
@@ -1965,7 +1965,7 @@ Elm.Game.make = function (_elm) {
               gs);
             case "Nothing": return gs;}
          _U.badCase($moduleName,
-         "between lines 379 and 382");
+         "between lines 408 and 411");
       }();
    });
    var setResults = F2(function (res,
@@ -1981,7 +1981,7 @@ Elm.Game.make = function (_elm) {
               gs);
             case "Nothing": return gs;}
          _U.badCase($moduleName,
-         "between lines 375 and 377");
+         "between lines 404 and 406");
       }();
    });
    var setNick = F3(function (pk,
@@ -2004,7 +2004,7 @@ Elm.Game.make = function (_elm) {
                                                                         ,_1: _v20._1
                                                                         ,_2: nick};}
                                                               _U.badCase($moduleName,
-                                                              "on line 372, column 94 to 104");
+                                                              "on line 401, column 94 to 104");
                                                            }();
                                                         },
                                                         _v18._0.players)]],
@@ -2012,7 +2012,7 @@ Elm.Game.make = function (_elm) {
               gs);
             case "Nothing": return gs;}
          _U.badCase($moduleName,
-         "between lines 371 and 373");
+         "between lines 400 and 402");
       }();
    });
    var setPlayerHand = F3(function (player,
@@ -2032,7 +2032,7 @@ Elm.Game.make = function (_elm) {
               gs);
             case "Nothing": return gs;}
          _U.badCase($moduleName,
-         "between lines 367 and 369");
+         "between lines 396 and 398");
       }();
    });
    var setTurnPlayer = F2(function (player,
@@ -2048,7 +2048,7 @@ Elm.Game.make = function (_elm) {
               gs);
             case "Nothing": return gs;}
          _U.badCase($moduleName,
-         "between lines 363 and 365");
+         "between lines 392 and 394");
       }();
    });
    var setMyHand = F2(function (hand,
@@ -2064,7 +2064,7 @@ Elm.Game.make = function (_elm) {
               gs);
             case "Nothing": return gs;}
          _U.badCase($moduleName,
-         "between lines 359 and 361");
+         "between lines 388 and 390");
       }();
    });
    var processInGameEvent = F2(function (event,
@@ -2161,7 +2161,7 @@ Elm.Game.make = function (_elm) {
               $Basics.toString(event._0.shout))),
               gs);}
          _U.badCase($moduleName,
-         "between lines 316 and 356");
+         "between lines 345 and 385");
       }();
    });
    var buttonElem$ = F2(function (str,
@@ -2250,7 +2250,7 @@ Elm.Game.make = function (_elm) {
                            ,_1: 237};}
                  break;}
             _U.badCase($moduleName,
-            "between lines 255 and 261");
+            "between lines 284 and 290");
          }(),
          row = $._0,
          col = $._1;
@@ -2265,28 +2265,41 @@ Elm.Game.make = function (_elm) {
    };
    var dispYaku = function (_v58) {
       return function () {
-         return A2($Graphics$Element.beside,
-         A2($Graphics$Element.beside,
-         $Graphics$Element.show(_v58.name),
-         $Graphics$Element.show(" ")),
-         $Graphics$Element.show(_v58.han));
+         return $Graphics$Element.centered($Text.concat(_L.fromArray([$Text.bold($Text.fromString(_v58.name))
+                                                                     ,$Text.fromString(" ")
+                                                                     ,$Text.color($Color.green)($Text.fromString($Basics.toString(_v58.han)))])));
       }();
    };
    var dispHandValue = function (_v60) {
       return function () {
          return A2($Graphics$Element.above,
-         A2($Graphics$Element.flow,
-         $Graphics$Element.right,
-         _L.fromArray([$Graphics$Element.show(_v60.han)
-                      ,$Graphics$Element.show(" Han, ")
-                      ,$Graphics$Element.show(_v60.fu)
-                      ,$Graphics$Element.show(" Fu.")])),
+         $Graphics$Element.centered($Text.concat(_L.fromArray([$Text.fromString($Basics.toString(_v60.han))
+                                                              ,$Text.fromString(" Han, ")
+                                                              ,$Text.fromString($Basics.toString(_v60.fu))
+                                                              ,$Text.fromString(" Fu.")]))),
          A2($Graphics$Element.flow,
          $Graphics$Element.down,
          A2($List.map,
          dispYaku,
          _v60.yaku)));
       }();
+   };
+   var dispTenpai = function (_v62) {
+      return function () {
+         return $Graphics$Element.centered($Text.concat(_L.fromArray([$Text.fromString($Basics.toString(_v62.player))
+                                                                     ,$Text.fromString("        ")
+                                                                     ,$Text.color($Color.green)($Text.append($Text.fromString("+"))($Text.fromString($Basics.toString(_v62.points))))])));
+      }();
+   };
+   var dispPayer = function (_v64) {
+      return function () {
+         return $Graphics$Element.centered($Text.concat(_L.fromArray([$Text.fromString($Basics.toString(_v64.player))
+                                                                     ,$Text.fromString("        ")
+                                                                     ,$Text.color($Color.red)($Text.append($Text.fromString("-"))($Text.fromString($Basics.toString(_v64.points))))])));
+      }();
+   };
+   var titleText = function (txt) {
+      return $Graphics$Element.centered($Text.height(40)($Text.fromString(txt)));
    };
    var dispPlayerInfo = F2(function (rs,
    k) {
@@ -2321,10 +2334,10 @@ Elm.Game.make = function (_elm) {
                                                      3,
                                                      80)))
                                                      ,$Graphics$Collage.moveY(30)($Graphics$Collage.toForm($Graphics$Element.show($Basics.floor(function () {
-                                                        var _v62 = gs.waitTurnAction;
-                                                        switch (_v62.ctor)
+                                                        var _v66 = gs.waitTurnAction;
+                                                        switch (_v66.ctor)
                                                         {case "Just":
-                                                           return $Basics.toFloat(_v62._0.seconds) - $Time.inSeconds(gs.updated - _v62._0.added);
+                                                           return $Basics.toFloat(_v66._0.seconds) - $Time.inSeconds(gs.updated - _v66._0.added);
                                                            case "Nothing":
                                                            return $Time.inSeconds(gs.updated - gs.turnBegan);}
                                                         _U.badCase($moduleName,
@@ -2340,10 +2353,10 @@ Elm.Game.make = function (_elm) {
    mypos,
    pos) {
       return function () {
-         var _v64 = A2($Basics._op["%"],
+         var _v68 = A2($Basics._op["%"],
          $GameTypes.kazeNth(pos) - $GameTypes.kazeNth(mypos),
          4);
-         switch (_v64)
+         switch (_v68)
          {case 0:
             return $Graphics$Collage.moveY(0 - off);
             case 1: return function ($) {
@@ -2406,20 +2419,20 @@ Elm.Game.make = function (_elm) {
    var ankanButton = F2(function (rs,
    str) {
       return function () {
-         var _v71 = findFourTiles(rs);
-         switch (_v71.ctor)
+         var _v75 = findFourTiles(rs);
+         switch (_v75.ctor)
          {case "Just":
             return A2($Graphics$Input.clickable,
               A2($Signal.message,
               ankan.address,
-              $Maybe.Just(_v71._0)),
+              $Maybe.Just(_v75._0)),
               A2(buttonElem$,
               str,
               $Color.green));
             case "Nothing":
             return $Graphics$Element.empty;}
          _U.badCase($moduleName,
-         "between lines 279 and 281");
+         "between lines 308 and 310");
       }();
    });
    var shout = $Signal.mailbox($Maybe.Nothing);
@@ -2495,7 +2508,7 @@ Elm.Game.make = function (_elm) {
                                                ,A2($Signal._op["<~"],
                                                A2($Util.maybe,
                                                $GameTypes.Noop,
-                                               function (_v73) {
+                                               function (_v77) {
                                                   return function () {
                                                      return $GameTypes.InGameAction($GameTypes.GameTurn($GameTypes.TurnTsumo));
                                                   }();
@@ -2567,21 +2580,21 @@ Elm.Game.make = function (_elm) {
    var dispMentsu = F2(function (k,
    m) {
       return function () {
-         var _v75 = m.from;
-         switch (_v75.ctor)
+         var _v79 = m.from;
+         switch (_v79.ctor)
          {case "Just":
             return function () {
-                 var t = $Graphics$Collage.rotate($Basics.degrees(90))($Graphics$Collage.toForm(dispTile(_v75._0.shoutTile)));
+                 var t = $Graphics$Collage.rotate($Basics.degrees(90))($Graphics$Collage.toForm(dispTile(_v79._0.shoutTile)));
                  var _ = A2($List.map,
                  dispTile,
-                 _v75._0.shoutTo);
+                 _v79._0.shoutTo);
                  var a = function () {
                     switch (_.ctor)
                     {case "::": switch (_._1.ctor)
                          {case "::": return _._0;}
                          break;}
                     _U.badCase($moduleName,
-                    "on line 230, column 28 to 50");
+                    "on line 259, column 28 to 50");
                  }();
                  var b = function () {
                     switch (_.ctor)
@@ -2589,7 +2602,7 @@ Elm.Game.make = function (_elm) {
                          {case "::": return _._1._0;}
                          break;}
                     _U.badCase($moduleName,
-                    "on line 230, column 28 to 50");
+                    "on line 259, column 28 to 50");
                  }();
                  var xs = function () {
                     switch (_.ctor)
@@ -2597,7 +2610,7 @@ Elm.Game.make = function (_elm) {
                          {case "::": return _._1._1;}
                          break;}
                     _U.badCase($moduleName,
-                    "on line 230, column 28 to 50");
+                    "on line 259, column 28 to 50");
                  }();
                  var shoutTile = function () {
                     switch (xs.ctor)
@@ -2617,8 +2630,8 @@ Elm.Game.make = function (_elm) {
                                  t)]));
                  }();
                  return $Graphics$Element.flow($Graphics$Element.right)(function () {
-                    var _v93 = $Basics.abs($GameTypes.kazeNth(_v75._0.shoutFrom) - $GameTypes.kazeNth(k));
-                    switch (_v93)
+                    var _v97 = $Basics.abs($GameTypes.kazeNth(_v79._0.shoutFrom) - $GameTypes.kazeNth(k));
+                    switch (_v97)
                     {case 1:
                        return A2($List._op["::"],
                          a,
@@ -2644,34 +2657,37 @@ Elm.Game.make = function (_elm) {
                          b,
                          _L.fromArray([]))));}
                     _U.badCase($moduleName,
-                    "between lines 235 and 238");
+                    "between lines 264 and 267");
                  }());
               }();
             case "Nothing":
             return $Graphics$Element.empty;}
          _U.badCase($moduleName,
-         "between lines 226 and 238");
+         "between lines 255 and 267");
       }();
    });
-   var dispValued = function (_v94) {
+   var dispValued = function (_v98) {
       return function () {
-         return A2($Graphics$Element.above,
-         A2($Graphics$Element.flow,
-         $Graphics$Element.right,
-         A2($Basics._op["++"],
-         A2($List.map,
-         dispTile,
-         _v94.tiles),
-         A2($List.map,
-         dispMentsu($GameTypes.Ton),
-         _v94.mentsu))),
-         dispHandValue(_v94.value));
+         return $Graphics$Element.flow($Graphics$Element.down)(_L.fromArray([A3($Graphics$Collage.collage,
+                                                                            600,
+                                                                            80,
+                                                                            _L.fromArray([$Graphics$Collage.scale(0.6)($Graphics$Collage.toForm(A2($Graphics$Element.flow,
+                                                                            $Graphics$Element.right,
+                                                                            A2($Basics._op["++"],
+                                                                            A2($List.map,
+                                                                            dispTile,
+                                                                            _v98.tiles),
+                                                                            A2($List.map,
+                                                                            dispMentsu($GameTypes.Ton),
+                                                                            _v98.mentsu)))))]))
+                                                                            ,dispHandValue(_v98.value)]));
       }();
    };
-   var dispWinner = function (_v96) {
+   var dispWinner = function (_v100) {
       return function () {
-         return $Graphics$Element.flow($Graphics$Element.down)(_L.fromArray([$Graphics$Element.show(_v96.player)
-                                                                            ,dispValued(_v96.valuehand)]));
+         return $Graphics$Element.flow($Graphics$Element.down)(_L.fromArray([$Graphics$Element.centered($Text.concat(_L.fromArray([$Text.fromString($Basics.toString(_v100.player))
+                                                                                                                                  ,$Text.color($Color.green)($Text.append($Text.fromString("+"))($Text.fromString($Basics.toString(_v100.valuehand.value.points))))])))
+                                                                            ,dispValued(_v100.valuehand)]));
       }();
    };
    var dispResults = function (res) {
@@ -2681,35 +2697,59 @@ Elm.Game.make = function (_elm) {
             {case "DealDraw":
                return {ctor: "_Tuple2"
                       ,_0: $Color.lightYellow
-                      ,_1: _L.fromArray([A2($Graphics$Element.beside,
-                                        $Graphics$Element.show("Tenpai players: "),
-                                        $Graphics$Element.show(res._0.tenpai))
-                                        ,A2($Graphics$Element.beside,
-                                        $Graphics$Element.show("Nooten: "),
-                                        $Graphics$Element.show(res._0.nooten))])};
+                      ,_1: A2($List._op["::"],
+                      titleText("Draw!"),
+                      A2($List._op["::"],
+                      A2($Graphics$Element.flow,
+                      $Graphics$Element.down,
+                      A2($List.map,
+                      dispTenpai,
+                      res._0.tenpai)),
+                      A2($List._op["::"],
+                      A2($Graphics$Element.flow,
+                      $Graphics$Element.down,
+                      A2($List.map,
+                      dispPayer,
+                      res._0.nooten)),
+                      _L.fromArray([]))))};
                case "DealRon":
                return {ctor: "_Tuple2"
                       ,_0: $Color.lightGreen
-                      ,_1: _L.fromArray([A2($Graphics$Element.beside,
-                                        $Graphics$Element.show("Win: "),
-                                        $Graphics$Element.show(res._0.winners))
-                                        ,A2($Graphics$Element.beside,
-                                        $Graphics$Element.show("Payers: "),
-                                        $Graphics$Element.show(res._0.payers))])};
+                      ,_1: A2($List._op["::"],
+                      titleText("Ron!"),
+                      A2($List._op["::"],
+                      A2($Graphics$Element.flow,
+                      $Graphics$Element.down,
+                      A2($List.map,
+                      dispWinner,
+                      res._0.winners)),
+                      A2($List._op["::"],
+                      A2($Graphics$Element.flow,
+                      $Graphics$Element.down,
+                      A2($List.map,
+                      dispPayer,
+                      res._0.payers)),
+                      _L.fromArray([]))))};
                case "DealTsumo":
                return {ctor: "_Tuple2"
                       ,_0: $Color.lightBlue
-                      ,_1: A2($Basics._op["++"],
-                      _L.fromArray([$Graphics$Element.show("Tsumo! ")]),
-                      A2($Basics._op["++"],
-                      _L.fromArray([$Graphics$Element.flow($Graphics$Element.down)(A2($List.map,
+                      ,_1: A2($List._op["::"],
+                      titleText("Tsumo!"),
+                      A2($List._op["::"],
+                      A2($Graphics$Element.flow,
+                      $Graphics$Element.down,
+                      A2($List.map,
                       dispWinner,
-                      res._0.winners))]),
-                      _L.fromArray([A2($Graphics$Element.beside,
-                      $Graphics$Element.show("Payers: "),
-                      $Graphics$Element.show(res._0.payers))])))};}
+                      res._0.winners)),
+                      A2($List._op["::"],
+                      A2($Graphics$Element.flow,
+                      $Graphics$Element.down,
+                      A2($List.map,
+                      dispPayer,
+                      res._0.payers)),
+                      _L.fromArray([]))))};}
             _U.badCase($moduleName,
-            "between lines 166 and 179");
+            "between lines 166 and 181");
          }(),
          col = $._0,
          view = $._1;
@@ -2831,8 +2871,8 @@ Elm.Game.make = function (_elm) {
    var display = F2(function (co,
    gs) {
       return function () {
-         var _v102 = gs.roundState;
-         switch (_v102.ctor)
+         var _v106 = gs.roundState;
+         switch (_v106.ctor)
          {case "Just":
             return A2($Graphics$Element.flow,
               $Graphics$Element.down,
@@ -2845,20 +2885,20 @@ Elm.Game.make = function (_elm) {
                            _L.fromArray([A3(dispInfoBlock,
                                         co,
                                         gs,
-                                        _v102._0)
+                                        _v106._0)
                                         ,$Graphics$Collage.scale(0.7)(A3(dispDiscards,
                                         co,
                                         gs,
-                                        _v102._0))
+                                        _v106._0))
                                         ,$Graphics$Collage.scale(0.6)(A3(dispCalled,
                                         co,
                                         gs,
-                                        _v102._0))
+                                        _v106._0))
                                         ,$Graphics$Collage.group($List.map(function ($) {
                                            return function (k) {
                                               return A4(moveRotateKaze,
                                               riichi_off,
-                                              _v102._0.mypos,
+                                              _v106._0.mypos,
                                               k,
                                               playerRiichi);
                                            }($Basics.fst($));
@@ -2871,11 +2911,11 @@ Elm.Game.make = function (_elm) {
                                               return _.riichiState;
                                            }($Basics.snd($)));
                                         },
-                                        _v102._0.hands)))
+                                        _v106._0.hands)))
                                         ,A3($Util.maybe,
                                         $Graphics$Collage.toForm($Graphics$Element.empty),
                                         dispResults,
-                                        _v102._0.results)])))
+                                        _v106._0.results)])))
                            ,A3($Graphics$Element.container,
                            1000,
                            40,
@@ -2888,25 +2928,25 @@ Elm.Game.make = function (_elm) {
                            gs.waitShout),
                            A2($Basics._op["++"],
                            A2(shouminkanButtons,
-                           _v102._0,
+                           _v106._0,
                            "Shouminkan"),
                            A2($Basics._op["++"],
                            _L.fromArray([A2(ankanButton,
-                                        _v102._0,
+                                        _v106._0,
                                         "Ankan")
                                         ,A2(nocareButton,
                                         gs.waitShout,
                                         "Pass")]),
                            A2($Basics._op["++"],
                            riichiButtons(gs.riichiWith),
-                           _L.fromArray([tsumoButton(_v102._0.myhand.canTsumo)])))))))
+                           _L.fromArray([tsumoButton(_v106._0.myhand.canTsumo)])))))))
                            ,A3($Graphics$Element.container,
                            1000,
                            100,
                            $Graphics$Element.midTop)(A3(dispHand,
-                           _v102._0.mypos,
+                           _v106._0.mypos,
                            co,
-                           _v102._0.myhand))]));
+                           _v106._0.myhand))]));
             case "Nothing":
             return $Graphics$Element.show("Hmm, roundState is Nothing but I should be in a game");}
          _U.badCase($moduleName,
@@ -2941,7 +2981,10 @@ Elm.Game.make = function (_elm) {
                       ,turnIndicator: turnIndicator
                       ,dispPlayerInfo: dispPlayerInfo
                       ,dispResults: dispResults
+                      ,titleText: titleText
                       ,dispWinner: dispWinner
+                      ,dispPayer: dispPayer
+                      ,dispTenpai: dispTenpai
                       ,dispValued: dispValued
                       ,dispHandValue: dispHandValue
                       ,dispYaku: dispYaku
@@ -4878,6 +4921,14 @@ Elm.JSON.make = function (_elm) {
    A2($Json$Decode._op[":="],
    "named",
    $Json$Decode.maybe($Json$Decode.string)));
+   var payer = A3($Json$Decode.tuple2,
+   F2(function (p,v) {
+      return A2($GameTypes.Payer,
+      p,
+      v);
+   }),
+   $Json$Decode.$int,
+   $Json$Decode.$int);
    var readShoutKind = function (s) {
       return function () {
          switch (s)
@@ -5262,61 +5313,6 @@ Elm.JSON.make = function (_elm) {
    $Json$Decode.$int,
    $Json$Decode.$int,
    valuedHand);
-   var turnActionOfType = function (taType) {
-      return function () {
-         switch (taType)
-         {case "ankan":
-            return A2($Json$Decode.object1,
-              $GameTypes.TurnAnkan,
-              A2($Json$Decode._op[":="],
-              "tile",
-              tile));
-            case "discard":
-            return A2($Json$Decode.object1,
-              $GameTypes.TurnTileDiscard,
-              discard);
-            case "draw":
-            return A3($Json$Decode.object2,
-              $GameTypes.TurnTileDraw,
-              A2($Json$Decode._op[":="],
-              "wanpai",
-              $Json$Decode.bool),
-              A2($Json$Decode._op[":="],
-              "tile",
-              $Json$Decode.maybe(tile)));
-            case "shouminkan":
-            return A2($Json$Decode.object1,
-              $GameTypes.TurnShouminkan,
-              A2($Json$Decode._op[":="],
-              "tile",
-              tile));
-            case "tsumo":
-            return $Json$Decode.succeed($GameTypes.TurnTsumo);}
-         _U.badCase($moduleName,
-         "between lines 262 and 267");
-      }();
-   };
-   var turnAction = A2($Json$Decode.andThen,
-   A2($Json$Decode._op[":="],
-   "type",
-   $Json$Decode.string),
-   turnActionOfType);
-   var playerKaze = A2($Json$Decode._op[":="],
-   "player-kaze",
-   A2($Json$Decode.map,
-   $GameTypes.readKaze,
-   $Json$Decode.string));
-   var player = A2($Json$Decode._op[":="],
-   "player",
-   $Json$Decode.$int);
-   var payer = A3($Json$Decode.tuple2,
-   F2(function (p,v) {
-      return A2($GameTypes.Payer,
-      p,
-      v);
-   }),
-   player,
-   $Json$Decode.$int);
    var resultsOfType = function (t) {
       return function () {
          switch (t)
@@ -5421,6 +5417,53 @@ Elm.JSON.make = function (_elm) {
       $Json$Decode.$int),
       $Json$Decode.succeed(_L.fromArray([])));
    });
+   var turnActionOfType = function (taType) {
+      return function () {
+         switch (taType)
+         {case "ankan":
+            return A2($Json$Decode.object1,
+              $GameTypes.TurnAnkan,
+              A2($Json$Decode._op[":="],
+              "tile",
+              tile));
+            case "discard":
+            return A2($Json$Decode.object1,
+              $GameTypes.TurnTileDiscard,
+              discard);
+            case "draw":
+            return A3($Json$Decode.object2,
+              $GameTypes.TurnTileDraw,
+              A2($Json$Decode._op[":="],
+              "wanpai",
+              $Json$Decode.bool),
+              A2($Json$Decode._op[":="],
+              "tile",
+              $Json$Decode.maybe(tile)));
+            case "shouminkan":
+            return A2($Json$Decode.object1,
+              $GameTypes.TurnShouminkan,
+              A2($Json$Decode._op[":="],
+              "tile",
+              tile));
+            case "tsumo":
+            return $Json$Decode.succeed($GameTypes.TurnTsumo);}
+         _U.badCase($moduleName,
+         "between lines 262 and 267");
+      }();
+   };
+   var turnAction = A2($Json$Decode.andThen,
+   A2($Json$Decode._op[":="],
+   "type",
+   $Json$Decode.string),
+   turnActionOfType);
+   var playerKaze = A2($Json$Decode._op[":="],
+   "player-kaze",
+   A2($Json$Decode.map,
+   $GameTypes.readKaze,
+   $Json$Decode.string));
+   var player = A2($Json$Decode._op[":="],
+   "player",
+   $Json$Decode.$int);
    var content = A2($Json$Decode._op[":="],
    "content",
    $Json$Decode.string);

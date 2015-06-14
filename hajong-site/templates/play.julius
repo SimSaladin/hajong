@@ -6,6 +6,7 @@ var socket;
 var mainDiv = document.getElementById('game');
 var waitDiv = document.getElementById('wait');
 var alertedDiv = document.getElementById('alerted');
+
 /* }}} */
 
 /* {{{ Sounds */
@@ -98,6 +99,10 @@ function debugEvent(data) {
     console.log("UNKNOWN", data);
   }
 }
+
+availableEvents = 
+  {"tsumo":{"events":[{"event":"end","results":{"payers":[[2,16000],[3,16000],[4,16000]],"winners":[[1,48000,{"tiles":[{"type":"ManTile","number":1,"aka":false},{"type":"ManTile","number":1,"aka":false},{"type":"ManTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"ident":"Shaa","type":"HonorTile"},{"ident":"Shaa","type":"HonorTile"},{"ident":"Shaa","type":"HonorTile"},{"ident":"Hatsu","type":"HonorTile"},{"ident":"Hatsu","type":"HonorTile"}],"value":{"value":48000,"han":12,"named":"Yakuman","fu":0,"yaku":[{"name":"Toitoi","han":2}]},"mentsu":[]}]],"type":"dealtsumo"}}],"type":"game-event"},"draw":{"events":[{"event":"end","results":{"nooten":[[2,1000],[3,1000],[4,1000]],"tenpais":[[1,3000]],"type":"dealdraw"}}],"type":"game-event"}}
+
 /* }}} */
 
 // MAIN -------------------------------------------------------

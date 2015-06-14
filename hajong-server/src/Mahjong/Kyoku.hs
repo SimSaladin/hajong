@@ -103,8 +103,8 @@ step CheckEndConditionsAfterDiscard InpAuto = do
             tilesLeft <- view pWallTilesLeft
             dora      <- view pDora
             case () of
-                _ | tilesLeft == 0   -> endDraw <&> KyokuEnded
-                  | length dora == 5 -> error "Special condition handling not yet implemented" -- TODO Implement
+                _ | length dora == 5 -> return $ KyokuEnded $ DealAbort SuukanSanra -- TODO check that someone is not waiting for the yakuman
+                  | tilesLeft == 0   -> endDraw <&> KyokuEnded
                   | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
 
 step (KyokuEnded results) _ = throwError "This kyoku has ended!"
@@ -191,7 +191,7 @@ maybeGameResults Kyoku{..}
         guard (maximumOf (traversed._2) _pPlayers > Just 30000)
         score
   where
-    score = return . finalPoints $ view _2 <$> _pPlayers
+    score = return $ finalPoints $ map (view _2) _pPlayers
 
 -- | Advance the game to next deal, or end it.
 -- TODO move to Round.hs
@@ -509,8 +509,6 @@ handOf' :: InKyoku m => Kaze -> m HandA
 handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") return
 
 ----------------------------------------------------------------------------------------
-
--- * Apply events
 
 -- * Waiting
 

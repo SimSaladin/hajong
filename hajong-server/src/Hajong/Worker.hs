@@ -168,7 +168,7 @@ waitPlayersAndBegin = $logInfo "Waiting for players" >> go
 beginDeal :: GameState Client -> WCont
 beginDeal gs = do
     void $ rswap wGame gs
-    $logInfo "Round begins"
+    $logInfo "Kyoku starts"
     processMachine =<< rview wMachine
 
 -- | Monitor the kyoku machine and perhaps do something in there.
@@ -182,10 +182,13 @@ processMachine (KyokuEnded res)               = processKyokuEnded res
 
 processKyokuEnded :: KyokuResults -> WCont
 processKyokuEnded results = do
+    $logInfo $ "Kyoku ended: " <> tshow results
     Just k <- rview wGame <&> _gameDeal
     liftIO (maybeNextDeal k) >>= either return go -- returns finalpoints or starts next kyoku
   where
-    go k = rmodify wGame (gameDeal.~Just k) >> processMachine NotBegun
+    go k = do rmodify wGame (gameDeal.~Just k)
+              rmodify wMachine (const NotBegun)
+              processMachine NotBegun
 
 -- * Managing connected players 
 
@@ -193,6 +196,7 @@ processKyokuEnded results = do
 -- the player with a dummy client.
 partPlayer :: Client -> (GameState Client -> IO ()) -> Worker ()
 partPlayer client callback = do
+    $logInfo $ "Client leaving: " <> tshow client
     gsv <- view wGame
 
     mgs <- atomically $ do
@@ -211,6 +215,7 @@ partPlayer client callback = do
 -- | Add a new or existing player to the game with the given connection.
 addPlayer :: Client -> (GameState Client -> IO ()) -> Worker ()
 addPlayer client callback = do
+    $logInfo $ "Client connecting: " <> tshow client
     gsv  <- view wGame
     e_gs <- atomically $ runEitherT $ do
         gs  <- lift $ readTVar gsv
@@ -248,7 +253,6 @@ safeStep inp = do
 -- Use with care, it may crash the worker on a logic bug!
 unsafeStep :: MachineInput -> Worker Machine
 unsafeStep inp = do
-    $logDebug $ "Taking unsafe step " <> tshow inp
     m <- rview wMachine
     m' <- unsafeRoundM (step m inp)
     rswap wMachine m'

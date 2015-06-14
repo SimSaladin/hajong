@@ -115,9 +115,9 @@ data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
 
 data AbortiveDraw = Unrelated9
                   | SuufontsuRenta -- ^ All four winds
-                  | SuuchaRiichi -- ^ All players riichi
-                  | SuukanSanra -- ^ Fourth kon declared (or fifth if one player declared all four)
-                  | Sanchahou -- ^ Three players ron
+                  | SuuchaRiichi   -- ^ All players riichi
+                  | SuukanSanra    -- ^ Fourth kon declared (or fifth if one player declared all four)
+                  | Sanchahou      -- ^ Three players ron
                   deriving (Show, Read, Typeable)
 
 type Winner = (Player, Points, ValuedHand)
@@ -128,7 +128,7 @@ type Payer  = (Player, Points)
 -- | A hand that won.
 data ValuedHand = ValuedHand
     { _vhMentsu :: [Mentsu]
-    , _vhTiles  :: [Tile] -- ^ TODO: is this all tiles(?)
+    , _vhTiles  :: [Tile] -- ^ Concealed tiles
     , _vhValue  :: Value
     } deriving (Show, Read)
 
@@ -148,7 +148,7 @@ data Value = Value
     } deriving (Show, Read)
 
 data Yaku = Yaku
-    { _yHan    :: Int -- TODO lens like naming to aeson/json
+    { _yHan    :: Int
     , _yName   :: Text
     } deriving (Show, Read)
 

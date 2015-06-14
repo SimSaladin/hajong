@@ -239,7 +239,7 @@ winner : Decoder Winner
 winner = tuple3 (\p points h -> Winner p points h) int int valuedHand
 
 payer : Decoder Payer
-payer = tuple2 (\p v -> Payer p v) player int
+payer = tuple2 (\p v -> Payer p v) int int
 -- }}}
 
 -- {{{ * Value
