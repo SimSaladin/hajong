@@ -3,7 +3,6 @@ x = done, / = half done, ! = needs testing
 # mechanics
 [ ] (elm) 'you are furiten' results in Game error
 [ ] (game) nagashi mangan check
-[x] (game) furiten
 [/] (game) chankan
 [ ] (game) ryanhan-shibari
 [ ] (game) tenhou
@@ -31,7 +30,7 @@ x = done, / = half done, ! = needs testing
 [ ] (elm) point sticks (1000 done)
 [ ] (elm) auto wait-for-shouts status after discard; indicator color?
 [ ] (elm) ankan mentsu view
-[ ] (elm) error prompts
+[ ] (elm) error prompts (furiten)
 [/] (elm) real tiles
 [?] (web) BUG game ended and back in lobby -> cannot join games
 [!] (elm) show honba
@@ -76,3 +75,4 @@ x = done, / = half done, ! = needs testing
 [x] mentsu (needs correct from indicator)
 [x] (game, elm) new dora when kan
 [x] (elm) limit log lengths
+[x] (game) furiten

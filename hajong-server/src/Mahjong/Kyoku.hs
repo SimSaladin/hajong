@@ -13,9 +13,18 @@
 -- @Kyoku@.
 ------------------------------------------------------------------------------
 module Mahjong.Kyoku
-    ( InKyoku, Machine(..), MachineInput(..), step
+    -- * Types
+    ( InKyoku, Machine(..), MachineInput(..)
+
+    -- * Actions
+    , step
     , dealGameEvent
-    , playerToKaze, updatePlayerNick, tellPlayerState
+    , updatePlayerNick
+    , tellPlayerState
+    , maybeNextDeal
+
+    -- * Utility
+    , playerToKaze
     , module Mahjong.Kyoku.Internal
     ) where
 
@@ -30,7 +39,6 @@ import           Mahjong.Kyoku.Internal
 import qualified Data.Map as Map
 import           Data.Monoid (Endo(..))
 import qualified Data.List as L (delete, find)
-------------------------------------------------------------------------------
 
 -- | Context of game and deal flow.
 --
@@ -43,8 +51,7 @@ type InKyoku m =
     , MonadError Text m
     , Functor m
     , Applicative m
-    , Monad m
-    )
+    , Monad m )
 
 handOf :: Kaze -> Lens Kyoku Kyoku (Maybe HandA) (Maybe HandA)
 handOf pk = sHands.at pk
@@ -59,7 +66,7 @@ data Machine = NotBegun
              | WaitingDraw Kaze Bool
              | WaitingDiscard Kaze
              | WaitingShouts (Maybe (Player, Shout)) [WaitShout]
-             | Ended KyokuResults
+             | KyokuEnded KyokuResults
              deriving (Show, Read)
 
 data MachineInput = InpAuto
@@ -83,7 +90,7 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | pk /= pk'                     = throwError "Not your turn"
             | TurnTileDiscard d <- ta       = processDiscard pk d
             | TurnAnkan t <- ta             = handOf' pk >>= ankanOn t >>= updateHand pk >> return (WaitingDiscard pk)
-            | TurnTsumo <- ta               = tsumo pk <&> Ended
+            | TurnTsumo <- ta               = tsumo pk <&> KyokuEnded
             | TurnShouminkan t <- ta        = handOf' pk >>= shouminkanOn t >>= updateHand pk >> return (WaitingDraw pk True) -- TODO Wait shout robbing
 
 step (WaitingShouts winning shouts) (InpShout pk shout) -- TODO Precedences not implemented
@@ -96,15 +103,12 @@ step CheckEndConditionsAfterDiscard InpAuto = do
             tilesLeft <- view pWallTilesLeft
             dora      <- view pDora
             case () of
-                _ | tilesLeft == 0   -> endDraw <&> Ended
+                _ | tilesLeft == 0   -> endDraw <&> KyokuEnded
                   | length dora == 5 -> error "Special condition handling not yet implemented" -- TODO Implement
                   | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
 
-step (Ended results) InpAuto
-            -- TODO Implement
-            | otherwise                     = error "Kyoku.step: Oh noes! we needz IOs for new tiles."
-
-step st inp                                 = throwError $ "Invalid input in state " <> tshow st <> ": " <> tshow inp
+step (KyokuEnded results) _ = throwError "This kyoku has ended!"
+step st inp                 = throwError $ "Invalid input in state " <> tshow st <> ": " <> tshow inp
 
 dealGameEvent :: GameEvent -> Kyoku -> Kyoku
 dealGameEvent ev = appEndo . mconcat $ case ev of
@@ -190,28 +194,30 @@ maybeGameResults Kyoku{..}
     score = return . finalPoints $ view _2 <$> _pPlayers
 
 -- | Advance the game to next deal, or end it.
-nextDeal :: Kyoku -> IO (Either FinalPoints Kyoku)
-nextDeal deal = case maybeGameResults deal of
-    Just r  -> return (Left r)
-    Nothing -> do
-        let po      = deal^.pOja
-            around  = deal^.pResults & goesAround po
-            honba   = deal^.pResults & newHonba po
-            np      = deal^.pPlayers & (if around then each._1 %~ prevKaze else id)
+-- TODO move to Round.hs
+maybeNextDeal :: Kyoku -> IO (Either FinalPoints Kyoku)
+maybeNextDeal deal = maybe (Right <$> nextDeal deal) (return . Left) $ maybeGameResults deal
 
-            po_k                    = np^?!ix po._1
-            Just (oja, (oja_k,_,_)) = np & ifind (\_ (k,_,_) -> k == po_k)
-
-            go = set pPlayers np
-               . set pTurn Ton
-               . set pResults Nothing
-               . set pOja oja
-               . over pHonba honba
-               . over pRound (if' (oja_k == Shaa && around) nextKaze id)
-
-            in Right . go <$> dealTiles (logDeal deal)
-
+-- | TODO move to Round.hs
+nextDeal :: Kyoku -> IO Kyoku
+nextDeal deal = do tiles <- shuffleTiles
+                   return $ go $ dealTiles tiles (logDeal deal)
   where
+    po      = deal^.pOja
+    around  = deal^.pResults & goesAround po
+    honba   = deal^.pResults & newHonba po
+    np      = deal^.pPlayers & (if around then each._1 %~ prevKaze else id)
+
+    po_k                    = np^?!ix po._1
+    Just (oja, (oja_k,_,_)) = np & ifind (\_ (k,_,_) -> k == po_k)
+
+    go = set pPlayers np
+       . set pTurn Ton
+       . set pResults Nothing
+       . set pOja oja
+       . over pHonba honba
+       . over pRound (if' (oja_k == Shaa && around) nextKaze id)
+
     goesAround po (Just DealDraw{..}) = not (null dTenpais) || all ((/= po) . fst) dTenpais
     goesAround po (Just res)          = notElemOf (each._1) po (dWinners res)
     goesAround _ _ = error "nextDeal: game ended prematurely, this is not possible"
@@ -321,7 +327,7 @@ processShout sk shout = do
     tellEvent $ DealTurnShouted sk shout
 
     if shoutKind shout == Ron
-        then endRon sp tp <&> Ended
+        then endRon sp tp <&> KyokuEnded
         else do tellEvent $ DealTurnBegins sk
                 return (WaitingDiscard sk)
 

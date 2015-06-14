@@ -1,6 +1,7 @@
 /* {{{ globals */
 var game;
-var debug; // set to true to debug events
+var debug = localStorage.getItem("debug"); // set to true to debug events
+var debugEVS = []; // DEBUG: list of events
 var socket;
 var mainDiv = document.getElementById('game');
 var waitDiv = document.getElementById('wait');
@@ -15,6 +16,7 @@ var sounds = {
 function soundHandler(x) { sounds[x] && sounds[x].play() }
 /* }}} */
 
+/*{{{ elm initialization  */
 mainDiv.hidden = true;
 
 function initElm() {
@@ -23,36 +25,6 @@ function initElm() {
   } else {
     return Elm.embed(Elm.Main, mainDiv, { downstream : "" });
   }
-}
-
-/* {{{ Errors */
-function alerted(data, fatal) {
-  console.log(data);
-  alertedDiv.innerHTML = data;
-  if (!fatal && alertedDiv.hidden)
-    setTimeout(function(){ alertedDiv.hidden = true; }, 8000);
-  alertedDiv.hidden = false;
-}
-window.onerror = function(msg, file, lineNr) {
-  alerted("FATAL ERROR: " + msg + file + lineNr + " please report this.", true);
-  game.destroy();
-  return false;
-}
-/* }}} */
-
-function setIdentity(nick, ident, token) {
-  localStorage.setItem("nick", nick);
-  localStorage.setItem("ident", ident);
-  localStorage.setItem("token", token);
-}
-
-function debugEvent(data) {
-  if (data.type == "game-event") {
-    for (ev in data.events) {
-      console.log(ev);
-    }
-  } else {
-    console.log("UNKNOWN", data);
 }
 
 function startGame(doJoin) {
@@ -90,6 +62,43 @@ function startGame(doJoin) {
      game.ports.downstream.send(e.data);
   }
 }
+/*}}}*/
+
+/* {{{ error handling (notifications) */
+function alerted(data, fatal) {
+  console.log(data);
+  alertedDiv.innerHTML = data;
+  if (!fatal && alertedDiv.hidden)
+    setTimeout(function(){ alertedDiv.hidden = true; }, 8000);
+  alertedDiv.hidden = false;
+}
+window.onerror = function(msg, file, lineNr) {
+  alerted("FATAL ERROR: " + msg + file + lineNr + " please report this.", true);
+  game.destroy();
+  return false;
+}
+/* }}} */
+
+/* {{{ Authentication */
+function setIdentity(nick, ident, token) {
+  localStorage.setItem("nick", nick);
+  localStorage.setItem("ident", ident);
+  localStorage.setItem("token", token);
+}
+/* }}} */
+
+/* {{{ Debug */
+function debugEvent(data) {
+  if (data.type == "game-event") {
+    for (ev in data.events) {
+      console.log(data.events[ev]);
+      debugEVS = debugEVS.concat(data.events[ev]);
+    }
+  } else {
+    console.log("UNKNOWN", data);
+  }
+}
+/* }}} */
 
 // MAIN -------------------------------------------------------
 

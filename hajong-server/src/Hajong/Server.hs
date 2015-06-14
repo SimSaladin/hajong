@@ -11,6 +11,9 @@
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
+--
+-- This module defines ACID game server state,
+-- and WebSocket input layer.
 ------------------------------------------------------------------------------
 module Hajong.Server where
 
@@ -19,7 +22,6 @@ import           Hajong.Connections
 import           Hajong.Client
 import           Hajong.Worker
 import           Mahjong
-
 ------------------------------------------------------------------------------
 import           Control.Monad.Logger
 import           Control.Concurrent
@@ -35,7 +37,6 @@ import           System.Log.FastLogger (LoggerSet, pushLogStr, toLogStr)
 import           System.Directory (removeFile)
 import           System.Random
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
-
 ------------------------------------------------------------------------------
 
 -- * Types

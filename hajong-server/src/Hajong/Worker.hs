@@ -17,6 +17,7 @@
 --  - Takes care of timeouts and confirmations after a discard, and
 --  timeouts players inactive on their turn (and applies some random action
 --  to end his turn).
+--
 ------------------------------------------------------------------------------
 module Hajong.Worker
     ( WorkerData(..), wGame, wSettings, wInput, wLogger
@@ -24,11 +25,9 @@ module Hajong.Worker
     , startWorker
     ) where
 
-------------------------------------------------------------------------------
 import           Hajong.Connections
 import           Hajong.Client
 import           Mahjong
-
 ------------------------------------------------------------------------------
 import           Control.Concurrent
 import           Control.Monad.Logger
@@ -36,11 +35,10 @@ import           Control.Concurrent.Async
 import           Data.Maybe (fromJust)
 import           System.Log.FastLogger
 import qualified Data.List as L
-
 ------------------------------------------------------------------------------
 default (Text)
 
--- * Worker
+-- * Types and lenses
 
 -- type WorkerState = (TVar (GameState Client), TMVar WorkerInput)
 data WorkerData = WorkerData
@@ -60,23 +58,23 @@ data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
                  | WorkerGameAction Client GameAction
                  | WorkerForceStart
 
---  TODO This could probably use ContT.
 newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerData IO) a }
-                   deriving ( Functor, Applicative, Monad, MonadIO
-                            , MonadLogger, MonadReader WorkerData)
+                   deriving ( Functor, Applicative, Monad, MonadIO, MonadLogger, MonadReader WorkerData)
 
-type WCont = Worker FinalPoints -- TODO Include the whole game state
+-- | When a worker exits gracefully it spits out @FinalPoints@.
+type WCont = Worker FinalPoints
 
--- ** Lenses
+-- | Because the worker lives as a separete thread, we provide a callback
+-- with this type for when the worker dies.
+type Finalize = Either SomeException FinalPoints -> IO ()
 
---
+-- * Lenses
 makeLenses ''WorkerData
 
 -- * Entry points
 
--- | Fork a new worker thread
-startWorker :: (Either SomeException FinalPoints -> IO ()) -- ^ Finalization
-            -> WorkerData -> IO ThreadId
+-- | Start the worker in a new thread.
+startWorker :: Finalize -> WorkerData -> IO ThreadId
 startWorker ends wdata = runWCont wdata waitPlayersAndBegin `forkFinally` ends
 
 -- * Unwrap monads
@@ -96,8 +94,6 @@ unsafeRoundM :: RoundM a -> Worker a
 unsafeRoundM = roundM >=> either failed go
   where failed e  = error $ "unsafeRoundM: unexpected Left: " <> unpack e
         go (a, m) = m >> return a
-
-------------------------------------------------------------------------------
 
 -- * Update state and emit events
 
@@ -123,66 +119,11 @@ sendGameEvents events = do
         maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
         return False
 
-------------------------------------------------------------------------------
-
--- * Take input
+-- * Input layer
 
 -- | Take the next element from input queue (blocking).
 takeInput :: Worker WorkerInput
 takeInput = liftIO . atomically . takeTMVar =<< view wInput
-
-------------------------------------------------------------------------------
-
--- * Game play
-
-safeStep :: MachineInput -> Worker (Either Text (Machine, Worker ()))
-safeStep inp = do
-    m  <- rview wMachine
-    roundM (step m inp)
-
-unsafeStep :: MachineInput -> Worker Machine
-unsafeStep inp = do
-    $logDebug $ "Taking unsafe step " <> tshow inp
-    m <- rview wMachine
-    m' <- unsafeRoundM (step m inp)
-    rswap wMachine m'
-    return m'
-
--- | Begin the game including the first round when all players have joined.
-waitPlayersAndBegin :: WCont
-waitPlayersAndBegin = $logInfo "Waiting for players" >> go
-  where
-    go = rview wGame >>= maybe (takeInput >>= processInput >> go)
-                               (liftIO >=> beginDeal) . maybeBeginGame
-
-beginDeal :: GameState Client -> WCont
-beginDeal gs = do
-    void $ rswap wGame gs
-    $logInfo "Round begins"
-    processMachine =<< rview wMachine
-
-processMachine :: Machine -> WCont
-processMachine NotBegun                       = unsafeStep InpAuto    >>= processMachine -- start
-processMachine CheckEndConditionsAfterDiscard = unsafeStep InpAuto    >>= processMachine
-processMachine (WaitingDraw _ _)              = unsafeStep InpAuto    >>= processMachine -- auto draw
-processMachine (WaitingDiscard _)             = stepByClientOrTimeout >>= processMachine
-processMachine (WaitingShouts _ _)            = stepByClientOrTimeout >>= processMachine
-processMachine (Ended res)                    = return undefined -- TODO do something
-
-stepByClientOrTimeout :: Worker Machine
-stepByClientOrTimeout = do
-    let secs = 15
-    join $ workerRace secs stepByClient
-         $ do $logDebug "Time-out, proceeding automatically."
-              unsafeStep InpAuto
-
-stepByClient :: Worker (Worker Machine)
-stepByClient = go
-    where go = do inp <- takeInput
-                  res <- processInput inp
-                  case res of
-                      Nothing -> go
-                      Just (m, a) -> return $ a >> rswap wMachine m >> return m
 
 -- | Process input. If a WorkerGameAction would succeed, return
 -- corresponding MachineInput.
@@ -209,7 +150,48 @@ processInput (WorkerGameAction c ga)            = do
                     Right (m, a) | GameDontCare <- ga -> a >> rswap wMachine m >> return Nothing -- XXX: This transaction, a >> rswap,  is possibly racy
                                  | otherwise          -> return $ Just (m, a)
 
--- | 
+-- * Game play
+
+-- | Begin the game including the first round when all players have joined.
+--
+--  Internal flow:
+--      @waitPlayersAndBegin@
+--      -> @beginDeal@
+--      -> @processMachine@
+--      -> @processKyokuEnded@ (-> @processMachine@)
+waitPlayersAndBegin :: WCont
+waitPlayersAndBegin = $logInfo "Waiting for players" >> go
+  where
+    go = rview wGame >>= maybe (takeInput >>= processInput >> go)
+                               (liftIO >=> beginDeal) . maybeBeginGame
+
+beginDeal :: GameState Client -> WCont
+beginDeal gs = do
+    void $ rswap wGame gs
+    $logInfo "Round begins"
+    processMachine =<< rview wMachine
+
+-- | Monitor the kyoku machine and perhaps do something in there.
+processMachine :: Machine -> WCont
+processMachine NotBegun                       = unsafeStep InpAuto    >>= processMachine -- start
+processMachine CheckEndConditionsAfterDiscard = unsafeStep InpAuto    >>= processMachine
+processMachine (WaitingDraw _ _)              = unsafeStep InpAuto    >>= processMachine -- auto draw
+processMachine (WaitingDiscard _)             = stepByClientOrTimeout >>= processMachine
+processMachine (WaitingShouts _ _)            = stepByClientOrTimeout >>= processMachine
+processMachine (KyokuEnded res)               = processKyokuEnded res
+
+processKyokuEnded :: KyokuResults -> WCont
+processKyokuEnded results = do
+    Just k <- rview wGame <&> _gameDeal
+    liftIO (maybeNextDeal k) >>= either return go -- returns finalpoints or starts next kyoku
+  where
+    go k = rmodify wGame (gameDeal.~Just k) >> processMachine NotBegun
+
+-- * Managing connected players 
+
+-- | Remove the player identified by connection from the game and replace
+-- the player with a dummy client.
+partPlayer :: Client -> (GameState Client -> IO ()) -> Worker ()
 partPlayer client callback = do
     gsv <- view wGame
 
@@ -226,7 +208,8 @@ partPlayer client callback = do
     maybe ($logError $ "Parting client " ++ getNick client ++ ", but it doesn't exist.")
           (liftIO . callback) mgs
 
--- | 
+-- | Add a new or existing player to the game with the given connection.
+addPlayer :: Client -> (GameState Client -> IO ()) -> Worker ()
 addPlayer client callback = do
     gsv  <- view wGame
     e_gs <- atomically $ runEitherT $ do
@@ -246,11 +229,47 @@ addPlayer client callback = do
 
 -- * Helper combinators
 
--- | "workerRace n ma b" races between "ma" and "threadDelay n" (return b)
+-- | "workerRace n ma b" races between actions "ma" and "threadDelay n >> return b".
 workerRace :: Int -> Worker a -> a -> Worker a
 workerRace secs ma b = do
     s   <- view id
     res <- liftIO $ runWCont s ma `race` threadDelay (secs * 1000000)
     either return (\_ -> return b) res
 
--- ????????
+-- | Safe kyoku step. Checks whether the step is valid, but does not do
+-- any relevant modifications to the worker state. The modifications can be
+-- done by running the @Worker@ action of the result.
+safeStep :: MachineInput -> Worker (Either Text (Machine, Worker ()))
+safeStep inp = do
+    m  <- rview wMachine
+    roundM (step m inp)
+
+-- | Takes an unsafe step in the kyoku machine.
+-- Use with care, it may crash the worker on a logic bug!
+unsafeStep :: MachineInput -> Worker Machine
+unsafeStep inp = do
+    $logDebug $ "Taking unsafe step " <> tshow inp
+    m <- rview wMachine
+    m' <- unsafeRoundM (step m inp)
+    rswap wMachine m'
+    return m'
+
+-- | Wait until someone inputs a valid action to the kyoku machine
+-- (@stepByClient@) or a timeout is reached. After timeout we continue with
+-- an @InpAuto@.
+stepByClientOrTimeout :: Worker Machine
+stepByClientOrTimeout = do
+    let secs = 15
+    join $ workerRace secs stepByClient
+         $ do $logDebug "Time-out, proceeding automatically."
+              unsafeStep InpAuto
+
+-- | Wait indefinetely until someone inputs a valid action to the kyoku
+-- machine.
+stepByClient :: Worker (Worker Machine)
+stepByClient = go
+    where go = do inp <- takeInput
+                  res <- processInput inp
+                  case res of
+                      Nothing -> go
+                      Just (m, a) -> return $ a >> rswap wMachine m >> return m

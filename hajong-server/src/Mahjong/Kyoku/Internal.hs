@@ -22,7 +22,6 @@ import qualified Data.List                      as L
 import           System.Random.Shuffle          (shuffleM)
 import           System.Random                  (randomRIO)
 import qualified Text.PrettyPrint.ANSI.Leijen   as P
-------------------------------------------------------------------------------
 
 -- * Types
 
@@ -105,6 +104,7 @@ data GameAction = GameTurn TurnAction
 
 type PointsStatus = Map Player Points
 
+-- | Results from a whole game of mahjong.
 newtype FinalPoints = FinalPoints PointsStatus deriving (Show, Read)
 
 data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
@@ -170,7 +170,8 @@ newKyoku :: [Player] -- ^ Players, from Ton to Shaa
          -> IO Kyoku
 newKyoku players names = do
     oja <- (players L.!!) <$> randomRIO (0, 3)
-    dealTiles $ Kyoku
+    tiles <- shuffleTiles
+    return $ dealTiles tiles $ Kyoku
         { _pDeal          = 1
         , _pDeals         = []
         , _pDora          = []
@@ -194,10 +195,8 @@ newKyoku players names = do
 {-# DEPRECATED newKyoku "use newKyoku" #-}
 newRound = newKyoku
 
-dealTiles :: Kyoku -> IO Kyoku
-dealTiles deal = go <$> shuffleM riichiTiles
-  where
-    go tiles = deal
+dealTiles :: [Tile] -> Kyoku -> Kyoku
+dealTiles tiles deal = deal
         { _pWallTilesLeft = length wall
         , _pDora          = [dora]
         , _sEvents        = []
@@ -208,6 +207,9 @@ dealTiles deal = go <$> shuffleM riichiTiles
            (hands, xs)             = splitAt (13 * 4) tiles
            ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
            (dora : wanpai, wall)   = splitAt 14 xs
+
+shuffleTiles :: IO [Tile]
+shuffleTiles = shuffleM riichiTiles
 
 -- * Lenses
 

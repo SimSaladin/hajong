@@ -233,8 +233,8 @@ instance FromJSON Event where
             "msg"          -> Message            <$> o .: "from" <*> o .: "content"
             "game-created" -> (\x y z -> GameCreated (x,y,z)) <$> o .: "ident" <*> o .: "topic" <*> o .: "players"
             "game-join"    -> JoinGame           <$> o .: "ident" <*> o .: "nick"
-            "game-secret"  -> fail "From server only event" -- InGamePrivateEvent <$> undefined
-            "game-public"  -> fail "From server only event" -- InGameEvents       <$> undefined
+            "game-secret"  -> fail "InGamePrivateEvent: This event is only sent from server and not received"
+            "game-public"  -> fail "InGameEvents: This event is only sent from server and not received"
             "game-action"  -> InGameAction       <$> parseJSON v
             "game-fstart"  -> ForceStart         <$> o .: "ident"
             "internal"     -> InternalControl    <$> o .: "secret"

@@ -12,7 +12,9 @@ compile with
 hajong/hajong-client-web $ elm make Main.elm
 ```
 
-# Authentication scheme
+# Technical notes
+
+## Authentication scheme
 
 ??
 
