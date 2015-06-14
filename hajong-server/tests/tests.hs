@@ -16,6 +16,7 @@ import qualified MahjongTest.Mentsu          as Mentsu
 import qualified MahjongTest.Hand            as Hand
 import qualified MahjongTest.HandValue       as HandValue
 import qualified MahjongTest.Mechanics       as Mechanics
+import qualified MahjongTest.Yaku            as Yaku
 
 -- import qualified HajongTest.CLI.PrettyPrint  as PrettyPrint
 -- import qualified HajongTest.CLI.Client       as Client
@@ -35,6 +36,7 @@ main = do
 tests :: TestTree
 tests = testGroup "Hajong tests"
     [ Mentsu.tests
+    , Yaku.tests
     , Mechanics.tests
     , HandValue.tests
     , Hand.tests

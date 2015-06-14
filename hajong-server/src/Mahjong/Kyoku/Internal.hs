@@ -16,6 +16,7 @@ import           Mahjong.Configuration
 import           Mahjong.Hand.Mentsu
 ------------------------------------------------------------------------------
 import           Mahjong.Hand.Internal
+import           Mahjong.Hand.Algo
 ------------------------------------------------------------------------------
 import qualified Data.Map                       as Map
 import qualified Data.List                      as L
@@ -158,6 +159,8 @@ data ValueInfo = ValueInfo
     , _vPlayer :: Kaze
     , _vHand   :: HandA
     } deriving (Show, Read)
+
+instance HasGroupings ValueInfo where getGroupings = getGroupings . _vHand
 
 -- * Construct state
 

@@ -1,9 +1,8 @@
 x = done, / = half done, ! = needs testing
 
 # mechanics
-[/] (game) chankan
 [ ] (game) ryanhan-shibari
-[ ] (game) tenhou
+[/] (game) tenhou, chiihou and renhou: tests done, implementations missing
 [ ] (game) ankan in riichi
 [ ] (game) dora, ura dora count in hans
 [/] (game) refactor everything behind GameEvents
@@ -75,3 +74,4 @@ x = done, / = half done, ! = needs testing
 [x] (game) furiten
 [x] (site) nick set
 [x] (game) nagashi mangan check
+[x] (game) chankan

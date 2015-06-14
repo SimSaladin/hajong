@@ -12,7 +12,7 @@ module Mahjong.Hand.Yaku.Standard where
 
 ------------------------------------------------------------------------------
 import           Import
-import           Mahjong.Tiles (Tile, Number(..), kaze)
+import           Mahjong.Tiles (Tile, Number(..), kaze, tileNumber)
 import           Mahjong.Hand.Yaku.Builder
 import           Mahjong.Hand.Algo (shantenBy, chiitoitsuShanten)
 ------------------------------------------------------------------------------
@@ -27,14 +27,28 @@ import           Mahjong.Hand.Internal
 pinfu :: YakuCheck Yaku
 pinfu = do
     concealedHand
-    replicateM_ 4 (anyShuntsu suited)
-    anyJantou suited
-    return (Yaku 1 "Pinfu")
+    anyJantou suited -- pair
+
+    [pick] <- yakuState <&> view (vHand.handPicks)
+    let agari = case pick of -- TODO agari used somewhere else perhaps too?
+            FromWall (Identity t) -> t
+            FromWanpai (Identity t) -> t
+            AgariTsumo t -> t
+            AgariCall t _ -> t
+            AgariChankan t _ -> t
+
+    -- wait two-sided
+    [a, b, c] <- anyShuntsu' (suited &. containsTile agari) <&> tileGroupTiles
+    if (tileNumber a == Just Ii && agari == c) || (tileNumber c == Just Chuu && agari == a)
+        then yakuFail
+        else do
+            replicateM_ 3 (anyShuntsu suited)
+            return (Yaku 1 "Pinfu")
 
 iipeikou :: YakuCheck Yaku
 iipeikou = do
     concealedHand
-    tile <- anyShuntsu' anyTile
+    tile <- anyShuntsu' anyTile <&> tileGroupHead
     anyShuntsu (sameTile tile)
     return (Yaku 1 "Iipeikou")
 
@@ -44,8 +58,8 @@ ryanpeikou = concealedHand >> iipeikou >> iipeikou >> return (Yaku 3 "Ryanpeikou
 sanshokuDoujin :: YakuCheck Yaku
 sanshokuDoujin = do
     concealedHandDegrade
-    tile  <- anyShuntsu' anyTile
-    tile' <- anyShuntsu' (f tile)
+    tile  <- anyShuntsu' anyTile <&> tileGroupHead
+    tile' <- anyShuntsu' (f tile) <&> tileGroupHead
     anyShuntsu (f tile' &. f tile)
     return (Yaku 2 "Sanshoku Doujin")
     where
@@ -54,7 +68,7 @@ sanshokuDoujin = do
 ittsuu :: YakuCheck Yaku
 ittsuu = do
     concealedHandDegrade
-    tile <- anyShuntsu' (ofNumber Ii)
+    tile <- anyShuntsu' (ofNumber Ii) <&> tileGroupHead
     anyShuntsu (sameSuit tile &. ofNumber Suu)
     anyShuntsu (sameSuit tile &. ofNumber Chii)
     return (Yaku 2 "Ittsuu")
@@ -85,7 +99,7 @@ sanKantsu = do
 
 sanshokuDoukou :: YakuCheck Yaku
 sanshokuDoukou = do
-    tile <- anyKoutsuKantsu' anyTile
+    tile <- anyKoutsuKantsu' anyTile <&> tileGroupHead
     replicateM_ 2 $ anyKoutsuKantsu (sameNumber tile)
     return (Yaku 2 "San Shoku Doukou")
 
@@ -99,31 +113,41 @@ shouSangen = do
 
 -- ** Tile kind based
 
-fanpai :: YakuCheck Yaku
-fanpai = do
+
+
+yakuhai :: Tile -> Text -> YakuCheck Yaku
+yakuhai tile desc = do
+    anyKoutsuKantsu (sameTile tile)
+    return $ Yaku 1 desc
+
+yakuhaiRoundWind = do
     info <- yakuState
-    let roundTile  = kaze $ info^.vKyoku.pRound
-        playerKaze = kaze $ info^.vPlayer
-    tile <- anyMentsu' (sangenpai |. sameTile roundTile |. sameTile playerKaze)
-    return (Yaku
-        (if roundTile == playerKaze && roundTile == tile then 2 else 1)
-                                                         "Fanpai")
+    let roundTile = kaze $ info^.vKyoku.pRound
+    yakuhai roundTile "Round Wind"
+
+yakuhaiSeatWind = do
+    info <- yakuState
+    let playerKaze = kaze $ info^.vPlayer
+    yakuhai playerKaze "Seat Wind"
+
+yakuhaiRed = yakuhai "R!" "Red"
+yakuhaiGreen = yakuhai "G!" "Green"
+yakuhaiWhite = yakuhai "W!" "White"
 
 tanyao :: YakuCheck Yaku
 tanyao = do
     concealedHand
-    allMentsuOfKind suited
+    allMentsuOfKind (suited &. propNot terminal)
     return (Yaku 1 "Tanyao")
 
 kuitan :: YakuCheck Yaku
 kuitan = do
     openHand
-    allMentsuOfKind suited
+    allMentsuOfKind (suited &. propNot terminal)
     return (Yaku 1 "Kuitan")
 
 chanta :: YakuCheck Yaku
-chanta = do -- TODO this does not notice 7-8-9 Shuntsu!
-            -- FIXME this looks very bonken indeed
+chanta = do
     anyShuntsu terminal
     replicateM_ 4 $ anyMentsuJantou (terminal |. honor)
     return (Yaku 2 "Chanta")
@@ -132,20 +156,20 @@ honitsu :: YakuCheck Yaku
 honitsu = do
     concealedHandDegrade
     anyMentsuJantou honor
-    tile <- anyMentsuJantou' suited
+    tile <- anyMentsuJantou' suited <&> tileGroupHead
     replicateM_ 3 $ anyMentsuJantou (honor |. sameSuit tile)
     return (Yaku 3 "Honitsu")
 
 junchan :: YakuCheck Yaku
 junchan = do
     concealedHandDegrade
-    allMentsuOfKind terminal -- TODO this does not notice 7-8-9 shuntsu
+    allMentsuOfKind terminal
     return (Yaku 3 "Junchan")
 
 chinitsu :: YakuCheck Yaku
 chinitsu = do
     concealedHandDegrade
-    tile <- anyMentsu' suited
+    tile <- anyMentsu' suited <&> tileGroupHead
     replicateM_ 3 (anyMentsu $ sameSuit tile)
     anyJantou (sameSuit tile)
     return (Yaku 6 "Chinitsu")
@@ -209,4 +233,4 @@ chankan = do
         _                   -> yakuFail
 
 nagashiMangan :: YakuCheck Yaku
-nagashiMangan = yakuFail -- TODO Implement
+nagashiMangan = yakuFail -- NOTE: this is implemented in @Mahjong.Kyoku@ currently.

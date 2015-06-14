@@ -22,6 +22,7 @@ import            Mahjong.Tiles
 ------------------------------------------------------------------------------
 import            Mahjong.Hand.Internal
 import            Mahjong.Hand.Yaku
+import            Mahjong.Hand.Algo
 import            Mahjong.Hand.Mentsu
 ------------------------------------------------------------------------------
 
@@ -36,13 +37,20 @@ calledMentsu    = vHand.handCalled
 getValue :: ValueInfo -> Value
 getValue vi = Value yaku fu han val name
   where
-    yaku        = getYaku vi
+    (_, yaku)   = getYaku vi -- TODO save grouping?
     fu          = getFu yaku vi
     han         = (each.yHan) `sumOf` yaku
     (val, name) = valued yaku han fu
 
-getYaku :: ValueInfo -> [Yaku]
-getYaku vi = mapMaybe (runYakuCheck vi) allStandard
+-- | NOTE: we assume that the hand has at least one valid grouping.
+getYaku :: ValueInfo -> (Grouping, [Yaku])
+getYaku vi | null possibleYakuCombos = (headEx groupings, [])
+           | otherwise               = maximumByEx (comparing $ hanSum . snd) possibleYakuCombos
+  where groupings          = filter complete $ getGroupings vi
+        possibleYakuCombos = map (\grouping -> (grouping, mapMaybe (runYakuCheck vi grouping) allStandard)) groupings
+
+hanSum :: [Yaku] -> Int
+hanSum = sum . map _yHan
 
 -- | Calculate fu points.
 getFu :: [Yaku] -> ValueInfo -> Fu

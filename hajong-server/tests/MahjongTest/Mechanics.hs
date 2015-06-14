@@ -8,7 +8,7 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
-module MahjongTest.Mechanics (tests) where
+module MahjongTest.Mechanics where
 
 import Control.Monad.State (runStateT)
 import Mahjong
@@ -112,13 +112,45 @@ tests = testGroup "Game mechanics"
             stepped_ $ InpTurnAction Ton $ TurnAnkan "P5"
             stepped $ InpShout Nan $ Shout Chankan Ton "P5" ["P5"]
       requireRight res $ \case
-          (_, (KyokuEnded (DealRon [win] _), _)) -> win^._3.vhValue.vaYaku @=? [Yaku 1 "Chankan"]
+          (_, (KyokuEnded (DealRon [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 1 "Chankan"]
           x -> assertFailure (show x)
 
---   , testCase "Only the player in turn can draw"             undefined
---   , testCase "Discarding a tile in riichi results in error" undefined
---   , testCase "Chiitoitsu tenpai"                            undefined
+  , testCase "Tenhou (dealer goes out on first draw)" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sWall %~ ("P5" <|)
+      let res = runKyokuState kyoku $ do
+            stepped_ InpAuto -- start
+            stepped_ InpAuto -- draw
+            stepped $ InpTurnAction Ton $ TurnTsumo
+      requireRight res $ \case
+          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Tenhou"]
+          x -> assertFailure (show x)
 
+  , testCase "Renhou (out on first round uninterrupted)" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sWall %~ ("P5" <|)
+      let res = runKyokuState kyoku $ do
+            stepped_ InpAuto -- start
+            stepped_ InpAuto -- draw
+            stepped_ InpAuto -- discard
+            stepped $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
+      requireRight res $ \case
+          (_, (KyokuEnded (DealRon [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Renhou"]
+          x -> assertFailure (show x)
+
+  , testCase "Chiihou (non-dealer goes out on first draw uninterrupted)" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sWall %~ ("P5" <|) . ("P5" <|)
+      let res = runKyokuState kyoku $ do
+            stepped_ InpAuto -- start
+            stepped_ InpAuto -- draw Ton
+            stepped_ InpAuto -- discard Ton
+            stepped_ InpAuto -- ignore shout wait
+            stepped_ InpAuto -- draw Nan
+            stepped $ InpTurnAction Ton $ TurnTsumo
+      requireRight res $ \case
+          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Chiihou"]
+          x -> assertFailure (show x)
   ]
 
 -- agari to pair

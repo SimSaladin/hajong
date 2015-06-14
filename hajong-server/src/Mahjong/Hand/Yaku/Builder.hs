@@ -25,10 +25,10 @@ module Mahjong.Hand.Yaku.Builder
 
     -- ** Specific
     , terminal, honor, sangenpai, suited, anyTile, concealed
-    , sameTile, sameNumber, sameSuit, ofNumber
+    , sameTile, containsTile, sameNumber, sameSuit, ofNumber
 
     -- ** Combinators
-    , (&.), (|.), propNot
+    , (&.), (|.), propNot, tileGroupHead, tileGroupTiles
     ) where
 
 ------------------------------------------------------------------------------
@@ -36,6 +36,7 @@ import           Import
 import           Mahjong.Tiles (Tile(..), Number(..))
 import qualified Mahjong.Tiles as T
 import           Mahjong.Hand.Mentsu
+import           Mahjong.Hand.Algo
 ------------------------------------------------------------------------------
 import           Mahjong.Hand.Internal
 import           Mahjong.Kyoku.Internal
@@ -51,9 +52,9 @@ data Check next = YakuMentsu MentsuProp next
                 -- first could allow for simple optimization by
                 -- removing some repeated checking.
 
-                | YakuMentsu' MentsuProp (Tile -> next)
+                | YakuMentsu' MentsuProp (TileGroup -> next)
                 -- ^ Require a mentsu property, but allow upcoming
-                -- properties depend on the matched tile.
+                -- properties depend on the matched TileGroup.
 
                 | YakuStateful (ValueInfo -> next)
                 -- ^ Depend on game state.
@@ -64,10 +65,11 @@ data Check next = YakuMentsu MentsuProp next
                 | YakuFailed
                 deriving (Functor)
 
-runYakuCheck :: ValueInfo -> YakuCheck Yaku -> Maybe Yaku
-runYakuCheck info = fmap fst . (`runStateT` groups) . iterM f
+-- | Run the yaku checker with the given grouping.
+runYakuCheck :: ValueInfo -> Grouping -> YakuCheck Yaku -> Maybe Yaku
+runYakuCheck info grouping = fmap fst . (`runStateT` grouping) . iterM f
     where
-        f :: Check (StateT [Mentsu] Maybe Yaku) -> StateT [Mentsu] Maybe Yaku
+        f :: Check (StateT Grouping Maybe Yaku) -> StateT Grouping Maybe Yaku
         f (YakuMentsu  mp s)            = get >>= lift . findMatch mp >>= putRes >>  s
         f (YakuMentsu' mp s)            = get >>= lift . findMatch mp >>= putRes >>= s
         f (YakuStateful s)              = s info
@@ -76,15 +78,14 @@ runYakuCheck info = fmap fst . (`runStateT` groups) . iterM f
         f (YakuHandOpen s)              = if isconc then lift Nothing else s
         f YakuFailed                    = lift Nothing
 
-        putRes (xs, t) = put xs >> return t
-
-        groups = info^.vHand.handCalled -- TODO this is not complete; should iterate possibilites
-        isconc = null groups
+        putRes (tg, g) = put g >> return tg
+        isconc         = info^.vHand.handCalled.to null
 
 -- @MentsuProp@s
 
 data MentsuProp = TileTerminal
                 | TileSameAs Tile
+                | TileContained Tile
                 | TileSuited
                 | TileSameSuit Tile
                 | TileSameNumber Tile
@@ -96,7 +97,7 @@ data MentsuProp = TileTerminal
                 | TileNot MentsuProp -- ^ not
                 | TileConcealed
                 | MentsuJantou
-                | MentsuAnyJantou
+                | MentsuOrJantou
                 | MentsuShuntsu
                 | MentsuKoutsu
                 | MentsuKantsu
@@ -147,15 +148,18 @@ anyShuntsu       tkind = liftF $ YakuMentsu (MentsuShuntsu      &. tkind) ()
 anyKantsu        tkind = liftF $ YakuMentsu (MentsuKantsu       &. tkind) ()
 anyJantou        tkind = liftF $ YakuMentsu (MentsuJantou       &. tkind) ()
 anyKoutsuKantsu  tkind = liftF $ YakuMentsu (MentsuKoutsuKantsu &. tkind) ()
-anyMentsuJantou  tkind = liftF $ YakuMentsu (MentsuAnyJantou    &. tkind) ()
+anyMentsuJantou  tkind = liftF $ YakuMentsu (MentsuOrJantou    &. tkind) ()
 
 -- | Require any mentsu with a property. Rest of the definition may depend
 -- on the matched tile.
-anyShuntsu', anyKoutsuKantsu', anyMentsu', anyMentsuJantou' :: MentsuProp -> YakuCheck Tile
+anyShuntsu', anyKoutsuKantsu', anyMentsu', anyMentsuJantou' :: MentsuProp -> YakuCheck TileGroup
 anyMentsu'       tkind = liftF $ YakuMentsu' tkind id
 anyKoutsuKantsu' tkind = liftF $ YakuMentsu' (MentsuKoutsuKantsu &. tkind) id
 anyShuntsu'      tkind = liftF $ YakuMentsu' (MentsuShuntsu      &. tkind) id
-anyMentsuJantou' tkind = liftF $ YakuMentsu' (MentsuAnyJantou    &. tkind) id
+anyMentsuJantou' tkind = liftF $ YakuMentsu' (MentsuOrJantou    &. tkind) id
+
+tileGroupHead :: TileGroup -> Tile
+tileGroupHead = headEx . tileGroupTiles
 
 -- Mentsu properties
 
@@ -170,8 +174,10 @@ concealed = TileConcealed
 
 sameTile, sameNumber, sameSuit :: Tile -> MentsuProp
 sameTile = TileSameAs
+containsTile = TileContained
 sameNumber = TileSameNumber
 sameSuit = TileSameSuit
+
 
 ofNumber :: Number -> MentsuProp
 ofNumber = TileNumber
@@ -183,35 +189,36 @@ propNot = TileNot
 -- Check MentsuProps directly.
 
 -- | Find a match in a list of mentsu. Returns the matches identifier tile and leftovers.
-findMatch :: MentsuProp -> [Mentsu] -> Maybe ([Mentsu], Tile)
+findMatch :: MentsuProp -> Grouping -> Maybe (TileGroup, Grouping)
 findMatch _  []   = Nothing
 findMatch mp (x:xs)
-    | matchProp mp x = Just (xs, unsafeHead $ mentsuTiles x)
-    | otherwise      = (_1 %~ (x:)) <$> findMatch mp xs
+    | matchProp mp x = Just (x, xs)
+    | otherwise      = findMatch mp xs & _Just._2 %~ (x:)
 
--- | Match a property on a mentsu.
-matchProp :: MentsuProp -> Mentsu -> Bool
-matchProp tt mentsu
-    | (firstTile:_) <- mentsuTiles mentsu = case tt of
-        MentsuJantou       | isJantou mentsu       -> True
-        MentsuAnyJantou    | not $ isJantou mentsu -> True
-        MentsuShuntsu      | isShuntsu mentsu      -> True
-        MentsuKoutsu       | isKoutsu mentsu       -> True
-        MentsuKantsu       | isKantsu mentsu       -> True
-        MentsuKoutsuKantsu | isKantsu mentsu || isKoutsu mentsu -> True
-        -- XXX: this is incomplete (shuntsu + terminals etc.)
-        TileTerminal        -> T.terminal firstTile
-        TileSameAs tile     -> firstTile == tile
-        TileSuited          -> T.isSuited firstTile
-        TileSameSuit tile   -> T.suitedSame tile firstTile
-        TileSameNumber tile -> T.tileNumber tile      == T.tileNumber firstTile
-        TileNumber n        -> T.tileNumber firstTile == Just n
-        TileHonor           -> not $ T.isSuited firstTile
-        TileSangenpai       -> T.sangenpai firstTile
-        TileAnd x y         -> matchProp x mentsu && matchProp y mentsu
-        TileOr x y          -> matchProp x mentsu || matchProp y mentsu
-        TileNot x           -> not $ matchProp x mentsu
-        TileConcealed       -> isNothing $ mentsuShout mentsu
-        PropAny             -> True
-        _ -> True
-    | otherwise = error "ofTileType: empty mentsu"
+-- | Match a property on a TileGroup
+matchProp :: MentsuProp -> TileGroup -> Bool
+matchProp MentsuJantou       tg                     = isPair tg
+matchProp MentsuOrJantou     tg                     = True
+matchProp MentsuShuntsu      (GroupComplete mentsu) = isShuntsu mentsu
+matchProp MentsuKoutsu       (GroupComplete mentsu) = isKoutsu mentsu
+matchProp MentsuKantsu       (GroupComplete mentsu) = isKantsu mentsu
+matchProp MentsuKoutsuKantsu (GroupComplete mentsu) = isKantsu mentsu || isKoutsu mentsu
+matchProp tt tg
+    | TileTerminal        <- tt = T.terminal (headEx tiles) || T.terminal (lastEx tiles)
+    | TileSameAs tile     <- tt = headEx tiles == tile
+    | TileContained tile  <- tt = tile `elem` tiles
+    | TileSuited          <- tt = T.isSuited (headEx tiles)
+    | TileSameSuit tile   <- tt = T.suitedSame tile (headEx tiles)
+    | TileSameNumber tile <- tt = isJust (T.tileNumber tile) && T.tileNumber tile == T.tileNumber (headEx tiles)
+    | TileNumber n        <- tt = T.tileNumber (headEx tiles) == Just n
+    | TileHonor           <- tt = not $ T.isSuited (headEx tiles)
+    | TileSangenpai       <- tt = T.sangenpai (headEx tiles)
+    | TileAnd x y         <- tt = matchProp x tg && matchProp y tg
+    | TileOr x y          <- tt = matchProp x tg || matchProp y tg
+    | TileNot x           <- tt = not $ matchProp x tg
+    | TileConcealed       <- tt = case tg of GroupComplete mentsu -> isNothing $ mentsuShout mentsu
+                                             _ -> True
+    | PropAny             <- tt = True
+    | otherwise                 = False
+  where
+    tiles = tileGroupTiles tg

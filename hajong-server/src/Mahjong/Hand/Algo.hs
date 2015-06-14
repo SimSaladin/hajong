@@ -20,7 +20,7 @@ module Mahjong.Hand.Algo
 
     -- * Tile grouping
     tilesGroupL, tilesSplitGroupL,
-    leftovers, waits, tileGroupTiles,
+    leftovers, waits, tileGroupTiles, isPair,
 
     -- * Types
     Wait, Grouping, TileGroup(..),
