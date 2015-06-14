@@ -25,6 +25,7 @@ module Mahjong.Kyoku
 
     -- * Utility
     , playerToKaze
+    , waitingShouts
     , module Mahjong.Kyoku.Internal
     ) where
 
@@ -521,6 +522,7 @@ filterCouldShout dt np =
     . concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
   where flatten (k, xs) = map (k,) xs
 
+-- | Calculate every possible shout.
 waitingShouts :: InKyoku m => Tile -> m [WaitShout]
 waitingShouts dt = do
     let secs = 15 -- TODO hard-coded limit

@@ -41,11 +41,11 @@ x = done, / = half done, ! = needs testing
 [x] (server, elm) DealResults JSON parsing
 
 # site
-[x] nick set
-[ ] (site) gravatar
+[ ] (site) reconnect automatically to server socket
+[ ] (site) gravatar support
 [/] (server) worker logging in file
-[ ] (site) webrtc
-[ ] (site) games/worker status query
+[ ] (site) Optional mic communication via webrtc
+[/] (site) games/worker status query
 [ ] (site, elm) player last.fm integration
 
 # other
@@ -75,3 +75,4 @@ x = done, / = half done, ! = needs testing
 [x] (game, elm) new dora when kan
 [x] (elm) limit log lengths
 [x] (game) furiten
+[x] (site) nick set

@@ -83,6 +83,7 @@ shantenTests = testGroup "`shanten` properties"
     , HU.testCase "Grouping iishanten"              $ Just 1    @=? shanten iishanten_1
     , HU.testCase "[Grouping] inc. a invalid hand"  $ Nothing   @=? shanten
         [ invalid_1, complete_1, tenpai_1, iishanten_1 ]
+    , HU.testCase "Jantou wait is complete" $ Just (-1) @=? shanten (toMentsu Jantou "P5" ["P5"] : [], ["M1","M2","M3","P1","P2","P3","P7","P8","P9","S2","S3","S4"] :: [Tile])
     ]
 
 gwtTests :: TestTree

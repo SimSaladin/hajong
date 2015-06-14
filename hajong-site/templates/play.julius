@@ -32,6 +32,7 @@ function startGame(doJoin) {
   socket = new WebSocket(#{String websocketURI});
 
   socket.onopen = function () {
+
     waitDiv.hidden = true;
     mainDiv.hidden = false;
     game = initElm();
@@ -41,26 +42,27 @@ function startGame(doJoin) {
       if (debug) console.log("out", d);
       if (d.type !== "noop") socket.send(e);
     });
+
+    socket.onclose = function () {
+      game.dispose();
+      mainDiv.hidden = true;
+      alerted("Connection to server has been lost! Please refresh this page", true);
+    }
+
+    socket.onmessage = function (e) {
+       var data = JSON.parse(e.data);
+        if (data.type == "identity") {
+          setIdentity(data.nick, data.ident, data.token);
+        }
+        if (data.type == "invalid") {
+          alerted(data.content);
+        } else {
+          if (debug) debugEvent(data);
+        }
+       game.ports.downstream.send(e.data);
+    }
+
     socket.send(JSON.stringify(doJoin));
-  }
-
-  socket.onclose = function () {
-    game.dispose();
-    mainDiv.hidden = true;
-    alerted("Connection to server has been lost! Please refresh this page", true);
-  }
-
-  socket.onmessage = function (e) {
-     var data = JSON.parse(e.data);
-      if (data.type == "identity") {
-        setIdentity(data.nick, data.ident, data.token);
-      }
-      if (data.type == "invalid") {
-        alerted(data.content);
-      } else {
-        if (debug) debugEvent(data);
-      }
-     game.ports.downstream.send(e.data);
   }
 }
 /*}}}*/
@@ -101,7 +103,7 @@ function debugEvent(data) {
 }
 
 availableEvents = 
-  {"tsumo":{"events":[{"event":"end","results":{"payers":[[2,16000],[3,16000],[4,16000]],"winners":[[1,48000,{"tiles":[{"type":"ManTile","number":1,"aka":false},{"type":"ManTile","number":1,"aka":false},{"type":"ManTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"ident":"Shaa","type":"HonorTile"},{"ident":"Shaa","type":"HonorTile"},{"ident":"Shaa","type":"HonorTile"},{"ident":"Hatsu","type":"HonorTile"},{"ident":"Hatsu","type":"HonorTile"}],"value":{"value":48000,"han":12,"named":"Yakuman","fu":0,"yaku":[{"name":"Toitoi","han":2}]},"mentsu":[]}]],"type":"dealtsumo"}}],"type":"game-event"},"draw":{"events":[{"event":"end","results":{"nooten":[[2,1000],[3,1000],[4,1000]],"tenpais":[[1,3000]],"type":"dealdraw"}}],"type":"game-event"}}
+  {"tsumo":{"events":[{"event":"end","results":{"payers":[[2,16000],[3,16000],[4,16000]],"winners":[[1,48000,{"tiles":[{"type":"ManTile","number":1,"aka":false},{"type":"ManTile","number":1,"aka":false},{"type":"ManTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"PinTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"type":"SouTile","number":1,"aka":false},{"ident":"Shaa","type":"HonorTile"},{"ident":"Shaa","type":"HonorTile"},{"ident":"Shaa","type":"HonorTile"},{"ident":"Hatsu","type":"HonorTile"},{"ident":"Hatsu","type":"HonorTile"}],"value":{"value":48000,"han":12,"named":"Yakuman","fu":0,"yaku":[{"name":"Toitoi","han":2}]},"mentsu":[]}]],"type":"dealtsumo"}}],"type":"game-event"},"invalid":{"content":"You are furiten","type":"invalid"},"draw":{"events":[{"event":"end","results":{"nooten":[[2,1000],[3,1000],[4,1000]],"tenpais":[[1,3000]],"type":"dealdraw"}}],"type":"game-event"}}
 
 /* }}} */
 

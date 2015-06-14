@@ -253,9 +253,10 @@ isPair (GroupWait Koutsu _ _)              = True
 isPair (GroupComplete (Mentsu Jantou _ _)) = True
 isPair                      _              = False
 
-notPairable (GroupComplete _)       = True
-notPairable (GroupWait Shuntsu _ _) = True
-notPairable                       _ = False
+notPairable (GroupComplete  (Mentsu Jantou _ _)) = False
+notPairable (GroupComplete _)                    = True
+notPairable (GroupWait Shuntsu _ _)              = True
+notPairable                       _              = False
 
 -- | Leftover tiles in the hand.
 leftovers :: Grouping -> [Tile]
