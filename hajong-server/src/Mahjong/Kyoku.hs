@@ -88,7 +88,7 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
 
 step (WaitingShouts winning shouts) (InpShout pk shout) -- TODO Precedences not implemented
             | Just (_,_,_,xs) <- L.find (\(_,pk',_,_) -> pk' == pk) shouts
-            , shout `elem` xs               = processShout pk shout >> return (WaitingDiscard pk)
+            , shout `elem` xs               = processShout pk shout
             | otherwise                     = throwError "No such call is possible"
 step (WaitingShouts Nothing shouts) InpAuto = return CheckEndConditionsAfterDiscard
 
@@ -105,6 +105,76 @@ step (Ended results) InpAuto
             | otherwise                     = error "Kyoku.step: Oh noes! we needz IOs for new tiles."
 
 step st inp                                 = throwError $ "Invalid input in state " <> tshow st <> ": " <> tshow inp
+
+dealGameEvent :: GameEvent -> Kyoku -> Kyoku
+dealGameEvent ev = appEndo . mconcat $ case ev of
+
+    DealTurnBegins p ->
+        [ Endo $ pTurn .~ p
+        , Endo $ sWaiting .~ Nothing ]
+
+    DealTurnAction p ta ->
+        [ dealTurnAction p ta ]
+
+    DealTurnShouted p _shout ->
+        [ Endo $ pTurn .~ p ]
+
+    -- TODO get rid these in favor of finer control?
+    DealPublicHandChanged pk hp -> [ ]
+    --     [ Endo $ sHands.ix pk.handPublic .~ hp ]
+
+    DealPrivateHandChanged _ pk h ->
+        [ Endo $ sHands.ix pk .~ h ]
+
+    DealEnded how ->
+        [ Endo $ pResults .~ Just how ]
+
+    DealNick p _ nick ->
+        [ Endo $ pPlayers.ix p._3 .~ nick ]
+
+    -- player-private
+    DealStarts _ _ new -> [ ]
+        -- | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
+        -- | otherwise           -> [ Endo $ const new ]
+
+    DealWaitForShout ws ->
+        [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
+
+    DealWaitForTurnAction wt ->
+        [ Endo $ sWaiting .~ Just (Left wt) ]
+
+    DealRiichi pk ->
+        [ Endo $ pRiichi +~ 1000 ]
+
+    DealFlipDora td mtw ->
+        [ Endo $ pDora %~ (|> td)
+        , Endo $ maybe id (over sWanpai . flip snoc) mtw ]
+
+    GamePoints pk ps ->
+        [ Endo $ pPlayers.ix pk._2 +~ ps ]
+
+dealTurnAction :: Kaze -> TurnAction -> Endo Kyoku
+dealTurnAction p ta = mconcat $ case ta of 
+
+    TurnTileDiscard dc ->
+        [ Endo $ sHands.ix p.handDiscards %~ (|> dc) ]
+
+    TurnTileDraw w mt ->
+        [ Endo $ pWallTilesLeft -~ 1
+        , Endo $ sWall %~ if' w initEx tailEx
+        , Endo $ sWanpai %~ if' w tailEx id ]
+
+    TurnAnkan tile ->
+        [ ]
+        -- [ Endo $ sHands.ix p.handCalled %~ (|> kantsu tile) ]
+
+    TurnShouminkan t ->
+        [ ]
+        -- let isShoum m = mentsuKind m == Koutsu && mentsuTile m == t
+        -- in [ Endo $ sHands.ix p.handPublic.handCalled.each . filtered isShoum %~ promoteToKantsu ]
+
+    TurnTsumo ->
+        [] -- XXX: should something happen?
 
 -- | Results are returned if west or higher round has just ended and
 -- someone is winning (over 30000 points).
@@ -178,7 +248,9 @@ waitForDraw = do
     return $ WaitingDraw pk False
 
 draw :: InKyoku m => Kaze -> Bool -> m ()
-draw pk wanpai = do updateHand pk =<< (if wanpai then drawDeadWall else drawWall) =<< handOf' pk
+draw pk wanpai = do
+    tellEvent $ DealTurnAction pk $ TurnTileDraw wanpai Nothing
+    updateHand pk =<< (if wanpai then drawDeadWall else drawWall) =<< handOf' pk
 
 drawWall :: InKyoku m => HandA -> m HandA
 drawWall hand = preview (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
@@ -432,86 +504,7 @@ handOf' p = view (handOf p) >>= maybe (throwError "handOf': Player not found") r
 
 ----------------------------------------------------------------------------------------
 
--- * Kyoku ends
-
 -- * Apply events
-
-dealGameEvent :: GameEvent -> Kyoku -> Kyoku
-dealGameEvent ev = appEndo . mconcat $ case ev of
-
-    DealTurnBegins p ->
-        [ Endo $ pTurn .~ p
-        , Endo $ sWaiting .~ Nothing ]
-
-    DealTurnAction p ta ->
-        [ dealTurnAction p ta ]
-
-    DealTurnShouted p _shout ->
-        [ Endo $ pTurn .~ p
-         {-, Endo $ sHands.ix p %~
-               ( handPublic.handCalled %~ (|> fromShout shout)
-               . handConcealed %~ (L.\\ shoutTo shout)
-               . if' (shoutKind shout == Kan) (handPublic.handDrawWanpai .~ True) id
-               )
-        , Endo $ sHands.ix (shoutFrom shout)
-               . handPublic.handDiscards._last.dcTo .~ Just p -}
-        ]
-
-    -- TODO get rid these in favor of finer control
-    DealPublicHandChanged pk hp -> [ ]
-    --     [ Endo $ sHands.ix pk.handPublic .~ hp ]
-
-    DealPrivateHandChanged _ pk h ->
-        [ Endo $ sHands.ix pk .~ h ]
-
-    DealEnded how ->
-        [ Endo $ pResults .~ Just how ]
-
-    DealNick p _ nick ->
-        [ Endo $ pPlayers.ix p._3 .~ nick ]
-
-    -- player-private
-    DealStarts _ _ new -> [ ]
-        -- | null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
-        -- | otherwise           -> [ Endo $ const new ]
-
-    DealWaitForShout ws ->
-        [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
-
-    DealWaitForTurnAction wt ->
-        [ Endo $ sWaiting .~ Just (Left wt) ]
-
-    DealRiichi pk ->
-        [ Endo $ pRiichi +~ 1000 ]
-
-    DealFlipDora td mtw ->
-        [ Endo $ pDora %~ (|> td)
-        , Endo $ maybe id (over sWanpai . flip snoc) mtw ]
-
-    GamePoints pk ps ->
-        [ Endo $ pPlayers.ix pk._2 +~ ps ]
-
-dealTurnAction :: Kaze -> TurnAction -> Endo Kyoku
-dealTurnAction p ta = mconcat $ case ta of 
-
-    TurnTileDiscard dc ->
-        [ Endo $ sHands.ix p.handDiscards %~ (|> dc) ]
-
-    TurnTileDraw w mt ->
-        [ Endo $ pWallTilesLeft -~ 1
-        , Endo $ sWall %~ if' w initEx tailEx ]
-
-    TurnAnkan tile ->
-        [ ]
-        -- [ Endo $ sHands.ix p.handCalled %~ (|> kantsu tile) ]
-
-    TurnShouminkan t ->
-        [ ]
-        -- let isShoum m = mentsuKind m == Koutsu && mentsuTile m == t
-        -- in [ Endo $ sHands.ix p.handPublic.handCalled.each . filtered isShoum %~ promoteToKantsu ]
-
-    TurnTsumo ->
-        [] -- XXX: should something happen?
 
 -- * Waiting
 

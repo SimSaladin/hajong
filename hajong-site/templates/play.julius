@@ -46,6 +46,15 @@ function setIdentity(nick, ident, token) {
   localStorage.setItem("token", token);
 }
 
+function debugEvent(data) {
+  if (data.type == "game-event") {
+    for (ev in data.events) {
+      console.log(ev);
+    }
+  } else {
+    console.log("UNKNOWN", data);
+}
+
 function startGame(doJoin) {
   socket = new WebSocket(#{String websocketURI});
 
@@ -76,7 +85,7 @@ function startGame(doJoin) {
       if (data.type == "invalid") {
         alerted(data.content);
       } else {
-        if (debug) console.log(data);
+        if (debug) debugEvent(data);
       }
      game.ports.downstream.send(e.data);
   }

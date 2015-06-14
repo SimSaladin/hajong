@@ -54,7 +54,7 @@ xs .<-- ys = conjoin $ isElem <$> ys
 
 -- * Arbitrary instancees
 
-instance Arbitrary Hand where
+instance Arbitrary (Hand Identity) where
     arbitrary = initHand <$> vector 13
 
 instance Arbitrary Tile where
@@ -121,9 +121,6 @@ instance Arbitrary Event where
         , InGameEvents <$> arbitrary -}
          InGameAction <$> arbitrary
         ]
-
-instance Arbitrary HandPublic where
-    arbitrary = HandPublic <$> arbitrary <*> pure [] <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary TileGroup where
     arbitrary = oneof

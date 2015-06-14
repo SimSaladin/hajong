@@ -165,10 +165,10 @@ fourPlayers :: [Player]
 fourPlayers = Player <$> [0 .. 3]
 
 -- | A new round with given player names.
-newRound :: [Player] -- ^ Players, from Ton to Shaa
+newKyoku :: [Player] -- ^ Players, from Ton to Shaa
          -> [Text]   -- ^ Names
          -> IO Kyoku
-newRound players names = do
+newKyoku players names = do
     oja <- (players L.!!) <$> randomRIO (0, 3)
     dealTiles $ Kyoku
         { _pDeal          = 1
@@ -190,6 +190,9 @@ newRound players names = do
         , _sWanpai        = mempty
         , _sWaiting       = Nothing
         }
+
+{-# DEPRECATED newKyoku "use newKyoku" #-}
+newRound = newKyoku
 
 dealTiles :: Kyoku -> IO Kyoku
 dealTiles deal = go <$> shuffleM riichiTiles

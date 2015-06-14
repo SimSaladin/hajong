@@ -87,9 +87,10 @@ runWCont st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
     where logger loc src level = pushLogStr (st^.wLogger) . defaultLogStr loc src level
 
 roundM :: RoundM a -> Worker (Either Text (a, Worker ()))
-roundM ma = liftM (fmap tores . runRoundM ma) $ rview wGame
-    where tores (res, secret, events) =
-            (res, updateState secret events >> sendGameEvents events)
+roundM ma = do
+        gs <- rview wGame
+        return $ do (res, kyoku, events) <- runRoundM ma gs
+                    return (res, rmodify wGame (gameDeal .~ Just kyoku) >> sendGameEvents events)
 
 unsafeRoundM :: RoundM a -> Worker a
 unsafeRoundM = roundM >=> either failed go
@@ -104,11 +105,6 @@ unsafeRoundM = roundM >=> either failed go
 multicast :: Event -> Worker ()
 multicast ev = do gs <- rview wGame
                   mapM_ (`unicast` ev) (gs^.gamePlayers^..each)
-
--- | The game state has changed.
-updateState :: Kyoku -> [GameEvent] -> Worker ()
-updateState deal events = rmodify wGame $
-    gameDeal._Just .~ foldl' (flip dealGameEvent) deal events
 
 -- | Hide sensitive info per player
 sendGameEvents :: [GameEvent] -> Worker ()
@@ -170,6 +166,8 @@ processMachine NotBegun                       = unsafeStep InpAuto    >>= proces
 processMachine CheckEndConditionsAfterDiscard = unsafeStep InpAuto    >>= processMachine
 processMachine (WaitingDraw _ _)              = unsafeStep InpAuto    >>= processMachine -- auto draw
 processMachine (WaitingDiscard _)             = stepByClientOrTimeout >>= processMachine
+processMachine (WaitingShouts _ _)            = stepByClientOrTimeout >>= processMachine
+processMachine (Ended res)                    = return undefined -- TODO do something
 
 stepByClientOrTimeout :: Worker Machine
 stepByClientOrTimeout = do

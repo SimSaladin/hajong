@@ -63,8 +63,13 @@ type RoundM = RWST Kyoku [GameEvent] Kyoku (Either Text)
 -- so **it is important you apply the changes implied by the events on the
 -- state!** Haskell clients may use "@applyRoundEvents@".
 runRoundM :: RoundM r -> GameState p -> Either Text (r, Kyoku, [GameEvent])
-runRoundM m = maybe (Left "No active round!") run . _gameDeal
-    where run rs = runRWST m rs rs
+runRoundM m gs = maybe (Left "No active round!") (flip runKyoku m) (_gameDeal gs)
+
+-- | Run action and apply gameveents.
+runKyoku :: Kyoku -> RoundM a -> Either Text (a, Kyoku, [GameEvent])
+runKyoku k m = do
+        (a, k', xs) <- runRWST m k k
+        return $ (a, foldl' (flip dealGameEvent) k' xs, xs)
 
 ------------------------------------------------------------------------------
 
