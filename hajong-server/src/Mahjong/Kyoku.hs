@@ -64,7 +64,7 @@ data Machine = NotBegun
              | CheckEndConditionsAfterDiscard
              | WaitingDraw Kaze Bool
              | WaitingDiscard Kaze
-             | WaitingShouts (Maybe (Player, Shout)) [WaitShout]
+             | WaitingShouts (Maybe (Player, Shout)) [WaitShout] Bool -- ^ flag if chankan, to continue with discard
              | KyokuEnded KyokuResults
              deriving (Show, Read)
 
@@ -88,15 +88,16 @@ step (WaitingDiscard pk) InpAuto            = autoDiscard pk
 step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | pk /= pk'                     = throwError "Not your turn"
             | TurnTileDiscard d <- ta       = processDiscard pk d
-            | TurnAnkan t <- ta             = handOf' pk >>= ankanOn t >>= updateHand pk >> return (WaitingDiscard pk)
+            | TurnAnkan t <- ta             = processAnkan pk t
             | TurnTsumo <- ta               = tsumo pk <&> KyokuEnded
             | TurnShouminkan t <- ta        = handOf' pk >>= shouminkanOn t >>= updateHand pk >> return (WaitingDraw pk True) -- TODO Wait shout robbing
 
-step (WaitingShouts winning shouts) (InpShout pk shout) -- TODO Precedences not implemented
+step (WaitingShouts winning shouts _) (InpShout pk shout) -- TODO Precedences not implemented
             | Just (_,_,_,xs) <- L.find (\(_,pk',_,_) -> pk' == pk) shouts
             , shout `elem` xs               = processShout pk shout
             | otherwise                     = throwError "No such call is possible"
-step (WaitingShouts Nothing shouts) InpAuto = return CheckEndConditionsAfterDiscard
+step (WaitingShouts Nothing shouts False) InpAuto = return CheckEndConditionsAfterDiscard
+step (WaitingShouts Nothing shouts True)  InpAuto = use pTurn >>= return . WaitingDiscard
 
 step CheckEndConditionsAfterDiscard InpAuto = do
             tilesLeft <- use pWallTilesLeft
@@ -252,10 +253,20 @@ nagashiOrDraw = do
                 return $ Just (winner, payers)
 
         else return Nothing
-
     let winners = map fst $ catMaybes $ map snd $ mapToList wins :: [Winner]
         payers  = map (\xs@((p,_):_) -> (p, sumOf (traversed._2) xs)) $ groupBy ((==) `on` fst) $ (concatMap snd $ catMaybes $ map snd $ mapToList wins) :: [Payer]
     if null wins then KyokuEnded <$> endDraw else return $ KyokuEnded $ DealTsumo winners payers
+
+processAnkan :: InKyoku m => Kaze -> Tile -> m Machine
+processAnkan pk t = do
+    handOf' pk >>= ankanOn t >>= updateHand pk
+    chankans <- waitingShouts t <&> map (_4 %~ map toChankan . filter ((== Ron) . shoutKind))
+                                <&> filter (^._4.to (not . null))
+    if null chankans then return (WaitingDiscard pk)
+                     else do tellEvents $ map DealWaitForShout chankans
+                             return (WaitingShouts Nothing chankans True)
+  where
+    toChankan s = s { shoutKind = Chankan } -- XXX: because waitingShouts doesn't support chankans directly
 
 -- ** Beginning
 
@@ -304,7 +315,7 @@ processDiscard pk d' = do
     tellEvents $ map DealWaitForShout waits
     return $ if null waits
                  then CheckEndConditionsAfterDiscard
-                 else WaitingShouts Nothing waits
+                 else WaitingShouts Nothing waits False
 
 doRiichi :: InKyoku m => Kaze -> m ()
 doRiichi pk = do
@@ -344,15 +355,17 @@ processShout sk shout = do
     tk <- use pTurn
     tp <- kazeToPlayer tk
     th <- handOf' tk
-    (m, th') <- shoutFromHand sk shout th
-    sh' <- meldTo shout m sh
-    updateHand sk sh' >> updateHand tk th'
-    tellEvent $ DealTurnShouted sk shout
-
-    if shoutKind shout == Ron
-        then endRon sp tp <&> KyokuEnded
-        else do tellEvent $ DealTurnBegins sk
-                return (WaitingDiscard sk)
+    preuse (sWaiting._Just._Right) >>= \case
+        Nothing -> throwError "Not waiting on anything"
+        Just waiting -> do
+            (m, th') <- shoutFromHand waiting sk shout th
+            sh' <- meldTo shout m sh
+            updateHand sk sh' >> updateHand tk th'
+            tellEvent $ DealTurnShouted sk shout
+            if shoutKind shout `elem` [Ron, Chankan]
+                then endRon sp tp <&> KyokuEnded
+                else do tellEvent $ DealTurnBegins sk
+                        return (WaitingDiscard sk)
 
 -- ** Ending
 

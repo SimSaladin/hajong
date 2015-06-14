@@ -150,7 +150,7 @@ data Value = Value
 data Yaku = Yaku
     { _yHan    :: Int
     , _yName   :: Text
-    } deriving (Show, Read)
+    } deriving (Show, Read, Eq)
 
 -- | Required info to calculate the value from a hand.
 data ValueInfo = ValueInfo

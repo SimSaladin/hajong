@@ -175,9 +175,9 @@ beginDeal gs = do
 processMachine :: Machine -> WCont
 processMachine NotBegun                       = unsafeStep InpAuto    >>= processMachine -- start
 processMachine CheckEndConditionsAfterDiscard = unsafeStep InpAuto    >>= processMachine
-processMachine (WaitingDraw _ _)              = unsafeStep InpAuto    >>= processMachine -- auto draw
-processMachine (WaitingDiscard _)             = stepByClientOrTimeout >>= processMachine
-processMachine (WaitingShouts _ _)            = stepByClientOrTimeout >>= processMachine
+processMachine WaitingDraw{}                  = unsafeStep InpAuto    >>= processMachine -- auto draw
+processMachine WaitingDiscard{}               = stepByClientOrTimeout >>= processMachine
+processMachine WaitingShouts{}                = stepByClientOrTimeout >>= processMachine
 processMachine (KyokuEnded res)               = processKyokuEnded res
 
 processKyokuEnded :: KyokuResults -> WCont

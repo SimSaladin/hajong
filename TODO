@@ -1,8 +1,6 @@
 x = done, / = half done, ! = needs testing
 
 # mechanics
-[ ] (elm) 'you are furiten' results in Game error
-[ ] (game) nagashi mangan check
 [/] (game) chankan
 [ ] (game) ryanhan-shibari
 [ ] (game) tenhou
@@ -76,3 +74,4 @@ x = done, / = half done, ! = needs testing
 [x] (elm) limit log lengths
 [x] (game) furiten
 [x] (site) nick set
+[x] (game) nagashi mangan check

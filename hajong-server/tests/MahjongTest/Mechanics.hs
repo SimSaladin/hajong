@@ -102,9 +102,27 @@ tests = testGroup "Game mechanics"
       case res of
           Right (_, (KyokuEnded (DealTsumo{}),_)) -> return ()
           x -> error $ show x
+
+  , testCase "Chankan is possible" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sHands . ix Ton . handConcealed._Wrapped .~ ["P5", "P5", "P5", "P5", "S1"]
+      let res = runKyokuState kyoku $ do
+            stepped_ InpAuto
+            stepped_ InpAuto
+            stepped_ $ InpTurnAction Ton $ TurnAnkan "P5"
+            stepped $ InpShout Nan $ Shout Chankan Ton "P5" ["P5"]
+      requireRight res $ \case
+          (_, (KyokuEnded (DealRon [win] _), _)) -> win^._3.vhValue.vaYaku @=? [Yaku 1 "Chankan"]
+          x -> assertFailure (show x)
+
+--   , testCase "Only the player in turn can draw"             undefined
+--   , testCase "Discarding a tile in riichi results in error" undefined
+--   , testCase "Chiitoitsu tenpai"                            undefined
+
   ]
 
 -- agari to pair
+handThatWinsWithP5 :: [Tile]
 handThatWinsWithP5 = ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
 
 testKyoku = newKyoku fourPlayers (map tshow [1..4])
@@ -119,8 +137,3 @@ stepped s = do (m, k) <- get
                put (m, k)
                return xs
 stepped_ s = stepped s >> return ()
-
---   , testCase "Only the player in turn can draw" undefined
---   , testCase "Discarding a tile in riichi results in error" undefined
---   , testCase "Typical mentsu tenpai"    undefined
---   , testCase "Chiitoitsu tenpai"                            undefined

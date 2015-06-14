@@ -150,7 +150,7 @@ pickedTile = "type" := string `andThen` \t -> case t of
    "from-wanpai"   -> object1 FromWanpai   (maybe ("tile" := tile))
    "agari-tsumo"   -> object1 AgariTsumo   ("tile" := tile)
    "agari-call"    -> object2 AgariCall    ("tile" := tile) ("from-kaze" := kaze)
-   "agari-rinshan" -> object2 AgariRinshan ("tile" := tile) ("from-kaze" := kaze)
+   "agari-chankan" -> object2 AgariChankan ("tile" := tile) ("from-kaze" := kaze)
 
 furitenState : Decoder FuritenState
 furitenState = string |> map (\x -> case x of

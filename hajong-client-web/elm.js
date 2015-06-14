@@ -3066,9 +3066,9 @@ Elm.GameTypes.make = function (_elm) {
    var TempFuriten = {ctor: "TempFuriten"};
    var Furiten = {ctor: "Furiten"};
    var NotFuriten = {ctor: "NotFuriten"};
-   var AgariRinshan = F2(function (a,
+   var AgariChankan = F2(function (a,
    b) {
-      return {ctor: "AgariRinshan"
+      return {ctor: "AgariChankan"
              ,_0: a
              ,_1: b};
    });
@@ -3645,7 +3645,7 @@ Elm.GameTypes.make = function (_elm) {
                            ,FromWanpai: FromWanpai
                            ,AgariTsumo: AgariTsumo
                            ,AgariCall: AgariCall
-                           ,AgariRinshan: AgariRinshan
+                           ,AgariChankan: AgariChankan
                            ,NotFuriten: NotFuriten
                            ,Furiten: Furiten
                            ,TempFuriten: TempFuriten
@@ -5189,9 +5189,9 @@ Elm.JSON.make = function (_elm) {
               A2($Json$Decode._op[":="],
               "from-kaze",
               kaze));
-            case "agari-rinshan":
+            case "agari-chankan":
             return A3($Json$Decode.object2,
-              $GameTypes.AgariRinshan,
+              $GameTypes.AgariChankan,
               A2($Json$Decode._op[":="],
               "tile",
               tile),
@@ -14986,7 +14986,7 @@ Elm.Util.make = function (_elm) {
       return function () {
          switch (pt.ctor)
          {case "AgariCall": return pt._0;
-            case "AgariRinshan":
+            case "AgariChankan":
             return pt._0;
             case "AgariTsumo": return pt._0;
             case "FromWall":

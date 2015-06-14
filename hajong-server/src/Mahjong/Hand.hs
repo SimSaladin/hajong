@@ -60,7 +60,7 @@ maskPublicHand hand =
         maskPickedTile (FromWanpai _)     = FromWanpai Nothing
         maskPickedTile (AgariTsumo t)     = AgariTsumo t
         maskPickedTile (AgariCall t k)    = AgariCall t k
-        maskPickedTile (AgariRinshan t k) = AgariRinshan t k
+        maskPickedTile (AgariChankan t k) = AgariChankan t k
 
 convertHand :: HandA -> HandP
 convertHand hand = hand { _handPicks = map convertPickedTile (_handPicks hand)
@@ -72,7 +72,7 @@ convertHand hand = hand { _handPicks = map convertPickedTile (_handPicks hand)
         convertPickedTile (FromWanpai t)     = FromWanpai (Just $ runIdentity t)
         convertPickedTile (AgariTsumo t)     = AgariTsumo t
         convertPickedTile (AgariCall t k)    = AgariCall t k
-        convertPickedTile (AgariRinshan t k) = AgariRinshan t k
+        convertPickedTile (AgariChankan t k) = AgariChankan t k
 
 -- * Draw
 
@@ -169,7 +169,7 @@ shouminkanOn tile hand = do
 meldTo :: CanError m => Shout -> Mentsu -> HandA -> m HandA
 meldTo shout mentsu hand
     | hand^.handConcealed._Wrapped.to (\xs -> length ih + length (xs L.\\ ih) == length xs)
-    = if' (shoutKind shout == Ron) (handWin $ Just shout) return
+    = if' (shoutKind shout `elem` [Ron, Chankan]) (handWin $ Just shout) return
     $ if' (shoutKind shout == Kan) (handState .~ DrawFromWanpai) id
     $ handCalled %~ (|> mentsu)
     $ handConcealed._Wrapped %~ (L.\\ ih)
@@ -178,14 +178,14 @@ meldTo shout mentsu hand
   where ih = shoutTo shout
 
 -- | Transfer the discard from the hand to a mentsu specified by the shout.
-shoutFromHand :: CanError m => Kaze -> Shout -> HandA -> m (Mentsu, HandA)
-shoutFromHand sk shout hand =
-    case hand ^? handDiscards._last of
-        Nothing          -> throwError "Player hasn't discarded anything"
-        Just Discard{..} -> do
-            isJust _dcTo `when` throwError "The discard has already been claimed"
-            (shoutTile shout /= _dcTile) `when` throwError "The discard is not the shouted tile"
-            return (fromShout shout, hand & handDiscards._last.dcTo .~ Just sk)
+shoutFromHand :: CanError m => [WaitShout] -> Kaze -> Shout -> HandA -> m (Mentsu, HandA)
+shoutFromHand waiting sk shout hand
+    | Just (_, _, _, shouts) <- find (^._2.to (== sk)) waiting
+    , shout `elem` shouts = case hand ^? handDiscards._last of
+        Just Discard{..}                     -> return (fromShout shout, hand & handDiscards._last.dcTo .~ Just sk)
+        Nothing | shoutKind shout == Chankan -> return (fromShout shout, hand)
+                | otherwise                  -> throwError "The impossible happened: waiting an a shout that is not on a discarded tile nor chankan"
+    | otherwise = throwError "Such shout is not possible"
 
 -- * Valued hand
 
@@ -259,7 +259,8 @@ isShuntsuWait _                       = False
 -- | Set PickedTile from a agari call
 setAgari :: Maybe Shout -> HandA -> HandA
 setAgari ms h = h & handPicks .~ agari
-    where agari | Just sh <- ms = [AgariCall (shoutTile sh) (shoutFrom sh)]
+    where agari | Just sh <- ms, shoutKind sh == Ron = [AgariCall (shoutTile sh) (shoutFrom sh)]
+                | Just sh <- ms, shoutKind sh == Chankan = [AgariChankan (shoutTile sh) (shoutFrom sh)]
                 | otherwise     = h^.handPicks & _last %~ AgariTsumo . pickedTile
 
 -- | Take the tile from hand if possible

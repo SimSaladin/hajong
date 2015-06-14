@@ -51,5 +51,5 @@ pickedTile pt = case pt of
    FromWanpai (Just t) -> t
    AgariTsumo t -> t
    AgariCall t _ -> t
-   AgariRinshan t _ -> t
+   AgariChankan t _ -> t
 

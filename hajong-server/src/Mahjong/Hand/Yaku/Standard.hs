@@ -198,15 +198,15 @@ rinshanKaihou :: YakuCheck Yaku
 rinshanKaihou = do
     info <- yakuState
     case info^?vHand.handPicks._last of
-        Just (FromWanpai _) -> return (Yaku 1 "Rinshan Kaihou")
-        _                   -> yakuFail
+        Just FromWanpai{} -> return (Yaku 1 "Rinshan Kaihou")
+        _                 -> yakuFail
 
 chankan :: YakuCheck Yaku
 chankan = do
     info <- yakuState
     case info^?vHand.handPicks._last of
-        Just (AgariRinshan _ _) -> return (Yaku 1 "Rinshan Kaihou")
-        _                       -> yakuFail
+        Just AgariChankan{} -> return (Yaku 1 "Chankan")
+        _                   -> yakuFail
 
 nagashiMangan :: YakuCheck Yaku
 nagashiMangan = yakuFail -- TODO Implement

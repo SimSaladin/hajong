@@ -105,11 +105,11 @@ fromShout s@Shout{..} = setShout $ case shoutKind of
     Pon     -> koutsu shoutTile
     Kan     -> kantsu shoutTile
     Chi     -> shuntsu (minimumEx $ shoutTile : shoutTo)
-    Ron | [_]    <- shoutTo                           -> jantou shoutTile
-        | [x, y] <- shoutTo, x == y                   -> koutsu shoutTile
-        | Just m <- shuntsuWith (shoutTile : shoutTo) -> m
-        | otherwise                                   -> error "fromShout: malformed shout"
-    Chankan -> kantsu shoutTile
+    -- Ron and Chankan:
+    _ | [_]    <- shoutTo                           -> jantou shoutTile
+      | [x, y] <- shoutTo, x == y                   -> koutsu shoutTile
+      | Just m <- shuntsuWith (shoutTile : shoutTo) -> m
+      | otherwise                                   -> error "fromShout: malformed shout"
     where
         setShout (Mentsu k t _) = Mentsu k t (Just s)
 

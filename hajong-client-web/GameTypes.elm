@@ -216,7 +216,7 @@ type PickedTile = FromWall (Maybe Tile)
                 | FromWanpai (Maybe Tile)
                 | AgariTsumo Tile
                 | AgariCall Tile Kaze
-                | AgariRinshan Tile Kaze
+                | AgariChankan Tile Kaze
 
 type FuritenState = NotFuriten | Furiten | TempFuriten
 
