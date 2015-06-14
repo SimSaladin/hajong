@@ -87,7 +87,21 @@ tests = testGroup "Game mechanics"
           Left err -> err @=? "You are furiten"
           x -> assertFailure $ show x
 
-
+  , testCase "Nagashi mangan is yielded" $ do
+      kyoku <- testKyoku <&> pWallTilesLeft .~ 1
+                         <&> sWall %~ ("W " <|)
+                         <&> sHands . ix Nan . handDiscards .~ [Mahjong.Discard "P5" Nothing False]
+                         <&> sHands . ix Shaa . handDiscards .~ [Mahjong.Discard "P5" Nothing False]
+                         <&> sHands . ix Pei . handDiscards .~ [Mahjong.Discard "P5" Nothing False]
+      let res = runKyokuState kyoku $ do
+            stepped_ InpAuto
+            stepped_ InpAuto -- draw
+            stepped_ InpAuto -- discard
+            xs <- stepped InpAuto -- continue
+            when (not $ null xs) $ stepped_ InpAuto -- if there were shouts, go forward
+      case res of
+          Right (_, (KyokuEnded (DealTsumo{}),_)) -> return ()
+          x -> error $ show x
   ]
 
 -- agari to pair

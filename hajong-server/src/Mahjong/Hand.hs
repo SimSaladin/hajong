@@ -236,6 +236,12 @@ furiten :: HandA -> Bool
 furiten h = any (`elem` (h^..handDiscards.each.dcTile)) . concatMap getAgari
           . filter tenpai $ getGroupings h
 
+handInNagashi :: HandA -> Bool
+handInNagashi h = all id [ h^.handCalled == []
+                         , h^..handDiscards.traversed.filtered (not . terminal . _dcTile) == []
+                         , h^..handDiscards.traversed.filtered (isJust . _dcTo) == [] ]
+    
+
 -- | If there is a shuntsu wait, that is the only possible agari. If there
 -- is a single leftover tile that is the agari. otherwise any of the koutsu
 -- waits can be completed (thus agari).

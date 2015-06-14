@@ -103,7 +103,7 @@ step CheckEndConditionsAfterDiscard InpAuto = do
             dora      <- use pDora
             case () of
                 _ | length dora == 5 -> return $ KyokuEnded $ DealAbort SuukanSanra -- TODO check that someone is not waiting for the yakuman
-                  | tilesLeft == 0   -> endDraw <&> KyokuEnded
+                  | tilesLeft == 0   -> nagashiOrDraw
                   | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
 
 step (KyokuEnded results) _ = throwError "This kyoku has ended!"
@@ -232,6 +232,30 @@ nextDeal deal = do tiles <- shuffleTiles
                         [] -> [(k, 1)]
                         xs@((k',n):_) | k == k'   -> (k, n + 1) : xs
                                       | otherwise -> (k, n) : xs
+
+nagashiOrDraw :: InKyoku m => m Machine
+nagashiOrDraw = do
+    oja   <- use pOja
+    hands <- use sHands
+
+    wins  <- iforM hands $ \k h -> if handInNagashi h
+        then do p <- kazeToPlayer k
+                let points = floor $ if' (p == oja) 1.5 1 * 8000
+                    -- TODO perhaps this could be placed in YakuCheck too
+                    value  = Value [Yaku 5 "Nagashi Mangan"] 0 5 0 (Just "Mangan")
+                    winner = (p, points, ValuedHand (h^.handCalled) (h^.handConcealed._Wrapped) value)
+
+                payers <- forM (L.delete k [Ton .. Pei]) $ \l -> do
+                    q <- kazeToPlayer l
+                    return (q, if' (q == oja) 2 1 * 2000)
+
+                return $ Just (winner, payers)
+
+        else return Nothing
+
+    let winners = map fst $ catMaybes $ map snd $ mapToList wins :: [Winner]
+        payers  = map (\xs@((p,_):_) -> (p, sumOf (traversed._2) xs)) $ groupBy ((==) `on` fst) $ (concatMap snd $ catMaybes $ map snd $ mapToList wins) :: [Payer]
+    if null wins then KyokuEnded <$> endDraw else return $ KyokuEnded $ DealTsumo winners payers
 
 -- ** Beginning
 
