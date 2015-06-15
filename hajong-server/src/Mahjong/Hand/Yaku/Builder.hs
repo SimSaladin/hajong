@@ -172,7 +172,7 @@ suited    = TileSuited
 anyTile   = PropAny
 concealed = TileConcealed
 
-sameTile, sameNumber, sameSuit :: Tile -> MentsuProp
+sameTile, containsTile, sameNumber, sameSuit :: Tile -> MentsuProp
 sameTile = TileSameAs
 containsTile = TileContained
 sameNumber = TileSameNumber
@@ -198,7 +198,7 @@ findMatch mp (x:xs)
 -- | Match a property on a TileGroup
 matchProp :: MentsuProp -> TileGroup -> Bool
 matchProp MentsuJantou       tg                     = isPair tg
-matchProp MentsuOrJantou     tg                     = True
+matchProp MentsuOrJantou     _                      = True
 matchProp MentsuShuntsu      (GroupComplete mentsu) = isShuntsu mentsu
 matchProp MentsuKoutsu       (GroupComplete mentsu) = isKoutsu mentsu
 matchProp MentsuKantsu       (GroupComplete mentsu) = isKantsu mentsu

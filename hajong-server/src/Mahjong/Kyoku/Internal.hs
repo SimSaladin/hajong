@@ -9,7 +9,6 @@
 ------------------------------------------------------------------------------
 module Mahjong.Kyoku.Internal where
 
-------------------------------------------------------------------------------
 import           Import
 import           Mahjong.Tiles
 import           Mahjong.Configuration
@@ -23,6 +22,7 @@ import qualified Data.List                      as L
 import           System.Random.Shuffle          (shuffleM)
 import           System.Random                  (randomRIO)
 import qualified Text.PrettyPrint.ANSI.Leijen   as P
+------------------------------------------------------------------------------
 
 -- * Types
 
@@ -194,9 +194,6 @@ newKyoku players names = do
         , _sWanpai        = mempty
         , _sWaiting       = Nothing
         }
-
-{-# DEPRECATED newKyoku "use newKyoku" #-}
-newRound = newKyoku
 
 dealTiles :: [Tile] -> Kyoku -> Kyoku
 dealTiles tiles deal = deal

@@ -147,18 +147,20 @@ instance (SafeCopy (m Bool), SafeCopy (m [Tile]), SafeCopy (m FuritenState), Saf
 
 instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
     version = 0
-    putCopy (FromWall t)       = contain $ do safePut (0 :: Word8); safePut t
-    putCopy (FromWanpai t)     = contain $ do safePut (1 :: Word8); safePut t
-    putCopy (AgariTsumo t)     = contain $ do safePut (2 :: Word8); safePut t
-    putCopy (AgariCall t k)    = contain $ do safePut (3 :: Word8); safePut t; safePut k
+    putCopy (FromWall t) = contain $ do safePut (0 :: Word8); safePut t
+    putCopy (FromWanpai t) = contain $ do safePut (1 :: Word8); safePut t
+    putCopy (AgariTsumo t) = contain $ do safePut (2 :: Word8); safePut t
+    putCopy (AgariCall t k) = contain $ do safePut (3 :: Word8); safePut t; safePut k
     putCopy (AgariChankan t k) = contain $ do safePut (4 :: Word8); safePut t; safePut k
+    putCopy (AgariTsumoWanpai t) = contain $ do safePut (5 :: Word8); safePut t
     getCopy = contain $ do tag <- safeGet
                            case tag :: Word8 of
-                               0 -> FromWall     <$> safeGet
-                               1 -> FromWanpai   <$> safeGet
-                               2 -> AgariTsumo   <$> safeGet
-                               3 -> AgariCall    <$> safeGet <*> safeGet
+                               0 -> FromWall <$> safeGet
+                               1 -> FromWanpai <$> safeGet
+                               2 -> AgariTsumo <$> safeGet
+                               3 -> AgariCall <$> safeGet <*> safeGet
                                4 -> AgariChankan <$> safeGet <*> safeGet
+                               5 -> AgariTsumoWanpai <$> safeGet
                                _ -> fail $ "Couldn't identify tag " ++ show tag
 
 instance SafeCopy a => SafeCopy (Identity a) where
@@ -202,7 +204,7 @@ connectClient time ident token = do
     case reserved of
         Nothing                     -> return $ Left $ "Unknown identity: " <> tshow ident
         Just c | token == c^.cToken -> do let c' = c&cStatus.~Right time
-                                          seReserved.at ident <.= Just c'
+                                          _ <- seReserved.at ident <.= Just c' -- TODO EventResult: should it be checked?
                                           return (Right (ident, c'))
                | otherwise          -> return $ Left $ "Auth tokens didn't match (got " <> token <> ")"
 
@@ -431,7 +433,7 @@ workerDied gid res = do
     case res of
         Left err -> $logError $ "Game " ++ tshow gid ++ " errored! " ++ tshow err
         Right x  -> $logInfo  $ "Game " ++ tshow gid ++ " finished. " ++ tshow x
-    update' $ DestroyGame gid
+    _ <- update' $ DestroyGame gid -- TODO EventResult: should it be checked?
 
     ss <- ask
     clients <- atomically $ do
@@ -540,7 +542,7 @@ cleanupClient :: Text -> Server ()
 cleanupClient reason = do
     c <- view seClient
     time <- liftIO getCurrentTime
-    update' $ PartClient time (c&getIdent)
+    _ <- update' $ PartClient time (c&getIdent) -- TODO EventResult: should this be checked?
     putLounge $ Message "" (getNick c <> " has left the server [" <> reason <> "]")
 
 handleEventOf :: Client -> Event -> Server ()
@@ -602,7 +604,7 @@ createGame settings = do
 -- * Internal
 
 internalConnect :: Text -> Server ()
-internalConnect secret = do
+internalConnect _secret = do
     -- TODO Check secret
     c <- view seClient
     forever $ receive c >>= \case

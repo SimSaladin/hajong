@@ -1,6 +1,11 @@
 x = done, / = half done, ! = needs testing
 
 # mechanics
+[ ] (game) configuration options: active yaku
+[ ] (game) scoring tests: honba, riichi sticks
+[ ] (game) riichi points transfer on own win
+[ ] (game) riichi points leaved on table on draw
+[ ] (game) riichi points transferred to winner
 [ ] (game) ryanhan-shibari
 [/] (game) tenhou, chiihou and renhou: tests done, implementations missing
 [ ] (game) ankan in riichi
@@ -27,6 +32,7 @@ x = done, / = half done, ! = needs testing
 [ ] (worker) pause
 
 # site
+[ ] (site) game configuration
 [ ] (site) saving game results to relational database
 [/] (site) games/worker status query
 [ ] (site) reconnect automatically to server socket
@@ -66,7 +72,6 @@ x = done, / = half done, ! = needs testing
 [x] (game) nagashi mangan check
 [x] (game) chankan
 [!] (game) final scoring and possible next rounds
-[!] (game) honba in scoring
 [!] (game) shout only ron on last tile from wall
 [!] (game) no wait-shout other than ron if riichi
 [!] (game) BUG: riichi even if hand open

@@ -89,7 +89,7 @@ maybeBeginGame gs = do
     guard . (== 4) . length $ gs^.gamePlayers
     guard . null            $ gs^.gamePlayers^..each.filtered (not . playerReady)
     return $ do
-        rs <- newRound fourPlayers (gs^.gamePlayers^..each.to playerNick)
+        rs <- newKyoku fourPlayers (gs^.gamePlayers^..each.to playerNick)
         return $ gameDeal .~ Just rs $ gs
 
 -- * Modify

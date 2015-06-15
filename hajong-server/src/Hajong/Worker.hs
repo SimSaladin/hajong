@@ -34,7 +34,6 @@ import           Control.Monad.Logger
 import           Control.Concurrent.Async
 import           Data.Maybe (fromJust)
 import           System.Log.FastLogger
-import qualified Data.List as L
 ------------------------------------------------------------------------------
 default (Text)
 
@@ -253,9 +252,9 @@ safeStep inp = do
 -- Use with care, it may crash the worker on a logic bug!
 unsafeStep :: MachineInput -> Worker Machine
 unsafeStep inp = do
-    m <- rview wMachine
+    m  <- rview wMachine
     m' <- unsafeRoundM (step m inp)
-    rswap wMachine m'
+    _  <- rswap wMachine m'
     return m'
 
 -- | Wait until someone inputs a valid action to the kyoku machine

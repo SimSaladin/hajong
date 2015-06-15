@@ -56,11 +56,12 @@ maskPublicHand hand =
          , _handFuriten = Nothing
          , _handCanTsumo = Nothing }
     where
-        maskPickedTile (FromWall _)       = FromWall Nothing
-        maskPickedTile (FromWanpai _)     = FromWanpai Nothing
-        maskPickedTile (AgariTsumo t)     = AgariTsumo t
-        maskPickedTile (AgariCall t k)    = AgariCall t k
-        maskPickedTile (AgariChankan t k) = AgariChankan t k
+        maskPickedTile (FromWall _)         = FromWall Nothing
+        maskPickedTile (FromWanpai _)       = FromWanpai Nothing
+        maskPickedTile (AgariTsumo t)       = AgariTsumo t
+        maskPickedTile (AgariCall t k)      = AgariCall t k
+        maskPickedTile (AgariChankan t k)   = AgariChankan t k
+        maskPickedTile (AgariTsumoWanpai t) = AgariTsumoWanpai t
 
 convertHand :: HandA -> HandP
 convertHand hand = hand { _handPicks = map convertPickedTile (_handPicks hand)
@@ -68,11 +69,12 @@ convertHand hand = hand { _handPicks = map convertPickedTile (_handPicks hand)
                         , _handFuriten = Just . runIdentity $ _handFuriten hand
                         , _handCanTsumo = Just . runIdentity $ _handCanTsumo hand }
     where
-        convertPickedTile (FromWall t)       = FromWall (Just $ runIdentity t)
-        convertPickedTile (FromWanpai t)     = FromWanpai (Just $ runIdentity t)
-        convertPickedTile (AgariTsumo t)     = AgariTsumo t
-        convertPickedTile (AgariCall t k)    = AgariCall t k
-        convertPickedTile (AgariChankan t k) = AgariChankan t k
+        convertPickedTile (FromWall t)         = FromWall (Just $ runIdentity t)
+        convertPickedTile (FromWanpai t)       = FromWanpai (Just $ runIdentity t)
+        convertPickedTile (AgariTsumo t)       = AgariTsumo t
+        convertPickedTile (AgariCall t k)      = AgariCall t k
+        convertPickedTile (AgariChankan t k)   = AgariChankan t k
+        convertPickedTile (AgariTsumoWanpai t) = AgariTsumoWanpai t
 
 -- * Draw
 

@@ -92,12 +92,12 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | TurnTsumo <- ta               = tsumo pk <&> KyokuEnded
             | TurnShouminkan t <- ta        = handOf' pk >>= shouminkanOn t >>= updateHand pk >> return (WaitingDraw pk True) -- TODO Wait shout robbing
 
-step (WaitingShouts winning shouts _) (InpShout pk shout) -- TODO Precedences not implemented
+step (WaitingShouts _winning shouts _) (InpShout pk shout) -- TODO Precedences not implemented
             | Just (_,_,_,xs) <- L.find (\(_,pk',_,_) -> pk' == pk) shouts
             , shout `elem` xs               = processShout pk shout
             | otherwise                     = throwError "No such call is possible"
-step (WaitingShouts Nothing shouts False) InpAuto = return CheckEndConditionsAfterDiscard
-step (WaitingShouts Nothing shouts True)  InpAuto = use pTurn >>= return . WaitingDiscard
+step (WaitingShouts Nothing _ False) InpAuto = return CheckEndConditionsAfterDiscard
+step (WaitingShouts Nothing _ True)  InpAuto = use pTurn >>= return . WaitingDiscard
 
 step CheckEndConditionsAfterDiscard InpAuto = do
             tilesLeft <- use pWallTilesLeft
@@ -107,8 +107,8 @@ step CheckEndConditionsAfterDiscard InpAuto = do
                   | tilesLeft == 0   -> nagashiOrDraw
                   | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
 
-step (KyokuEnded results) _ = throwError "This kyoku has ended!"
-step st inp                 = throwError $ "Invalid input in state " <> tshow st <> ": " <> tshow inp
+step (KyokuEnded{}) _ = throwError "This kyoku has ended!"
+step st inp           = throwError $ "Invalid input in state " <> tshow st <> ": " <> tshow inp
 
 dealGameEvent :: GameEvent -> Kyoku -> Kyoku
 dealGameEvent ev = appEndo . mconcat $ case ev of
@@ -124,7 +124,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
         [ Endo $ pTurn .~ p ]
 
     -- TODO get rid these in favor of finer control?
-    DealPublicHandChanged pk hp -> [ ]
+    DealPublicHandChanged _pk _hp -> [ ]
     --     [ Endo $ sHands.ix pk.handPublic .~ hp ]
 
     DealPrivateHandChanged _ pk h ->
@@ -137,7 +137,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
         [ Endo $ pPlayers.ix p._3 .~ nick ]
 
     -- player-private
-    DealStarts _ _ new -> [ ]
+    DealStarts _ _ _ -> [ ]
         -- null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
         -- otherwise           -> [ Endo $ const new ]
 
@@ -147,7 +147,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
     DealWaitForTurnAction wt ->
         [ Endo $ sWaiting .~ Just (Left wt) ]
 
-    DealRiichi pk ->
+    DealRiichi _pk -> -- TODO modify state
         [ Endo $ pRiichi +~ 1000 ]
 
     DealFlipDora td mtw ->
@@ -163,16 +163,16 @@ dealTurnAction p ta = mconcat $ case ta of
     TurnTileDiscard dc ->
         [ Endo $ sHands.ix p.handDiscards %~ (|> dc) ]
 
-    TurnTileDraw w mt ->
+    TurnTileDraw w _ ->
         [ Endo $ pWallTilesLeft -~ 1
         , Endo $ sWall %~ if' w initEx tailEx
         , Endo $ sWanpai %~ if' w tailEx id ]
 
-    TurnAnkan tile ->
+    TurnAnkan _ ->
         [ ]
         -- [ Endo $ sHands.ix p.handCalled %~ (|> kantsu tile) ]
 
-    TurnShouminkan t ->
+    TurnShouminkan _ ->
         [ ]
         -- let isShoum m = mentsuKind m == Koutsu && mentsuTile m == t
         -- in [ Endo $ sHands.ix p.handPublic.handCalled.each . filtered isShoum %~ promoteToKantsu ]
@@ -203,15 +203,15 @@ nextDeal :: Kyoku -> IO Kyoku
 nextDeal deal = do tiles <- shuffleTiles
                    return $ go $ dealTiles tiles (logDeal deal)
   where
-    po      = deal^.pOja
-    around  = deal^.pResults & goesAround po
-    honba   = deal^.pResults & newHonba po
-    np      = deal^.pPlayers & (if around then each._1 %~ prevKaze else id)
+    oja_cur     = deal^.pOja
+    around      = deal^.pResults & goesAround oja_cur
+    honba       = deal^.pResults & newHonba oja_cur
+    players_new = deal^.pPlayers & if' around (each._1 %~ prevKaze) id
 
-    po_k                    = np^?!ix po._1
-    Just (oja, (oja_k,_,_)) = np & ifind (\_ (k,_,_) -> k == po_k)
+    po_k                    = players_new ^?! ix oja_cur . _1
+    Just (oja, (oja_k,_,_)) = players_new & ifind (\_ (k,_,_) -> k == po_k)
 
-    go = set pPlayers np
+    go = set pPlayers players_new
        . set pTurn Ton
        . set pResults Nothing
        . set pOja oja
@@ -311,11 +311,11 @@ processDiscard pk d' = do
     when (d^.dcRiichi) $ doRiichi pk
     updateHand pk =<< discard d =<< handOf' pk
 
-    waits <- waitingShouts (d^.dcTile)
-    tellEvents $ map DealWaitForShout waits
-    return $ if null waits
+    waiting <- waitingShouts (d^.dcTile)
+    tellEvents $ map DealWaitForShout waiting
+    return $ if null waiting
                  then CheckEndConditionsAfterDiscard
-                 else WaitingShouts Nothing waits False
+                 else WaitingShouts Nothing waiting False
 
 doRiichi :: InKyoku m => Kaze -> m ()
 doRiichi pk = do
@@ -520,13 +520,6 @@ tellEvent ev = do
 
 tellEvents :: InKyoku m => [GameEvent] -> m ()
 tellEvents = mapM_ tellEvent
-
--- | Turn a possibly sensitive TurnAction to a non-sensitive (fully public)
--- DealEvent.
-publishTurnAction :: InKyoku m => Kaze -> TurnAction -> m ()
-publishTurnAction pk ra = tellEvent $ case ra of
-    TurnTileDraw b _ -> DealTurnAction pk (TurnTileDraw b Nothing)
-    _                -> DealTurnAction pk ra
 
 ----------------------------------------------------------------------------------------
 

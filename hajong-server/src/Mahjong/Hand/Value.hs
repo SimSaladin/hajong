@@ -17,7 +17,6 @@ module Mahjong.Hand.Value where
 ------------------------------------------------------------------------------
 import            Import
 import            Mahjong.Kyoku.Internal
-import            Mahjong.Configuration
 import            Mahjong.Tiles
 ------------------------------------------------------------------------------
 import            Mahjong.Hand.Internal
@@ -26,14 +25,13 @@ import            Mahjong.Hand.Algo
 import            Mahjong.Hand.Mentsu
 ------------------------------------------------------------------------------
 
-calledMentsu    = vHand.handCalled
-
 -- ** Calculating
 
 -- |
+-- >>> import Mahjong.Configuration
 -- >>> let kyoku = Kyoku {_pRound = Ton, _pDeal = 1, _pTurn = Ton, _pOja = Player 3, _pFirstOja = Player 3, _pWallTilesLeft = 70, _pDora = ["P4"], _pPlayers = error "not used", _pHonba = 0, _pRiichi = 0, _pResults = Nothing, _pDeals = [], _sEvents = [], _sHands = error "not used", _sWall = [], _sWanpai = [], _sWaiting = Nothing}
 -- >>> getValue $ ValueInfo kyoku Ton $ Hand [] (map (\t -> Discard t Nothing False) ["N" ,"W" ,"G!","S7","P9","M6","S2","R!","S9","P1"]) Riichi False DrawNone [AgariTsumo "P2"] (return ["S5","P6","S6","P5","P4","S4","M5","S2","P3","P7","S7","S3","M5"]) (return NotFuriten) (return False)
--- Value {_vaYaku = [Yaku {_yHan = 1, _yName = "Menzen Tsumo"},Yaku {_yHan = 1, _yName = "Riichi"}], _vaFu = 20, _vaHan = 2, _vaValue = 320, _vaNamed = Nothing}
+-- Value {_vaYaku = [Yaku {_yHan = 1, _yName = "Menzen Tsumo"},Yaku {_yHan = 1, _yName = "Pinfu"},Yaku {_yHan = 1, _yName = "Riichi"}], _vaFu = 20, _vaHan = 3, _vaValue = 640, _vaNamed = Nothing}
 getValue :: ValueInfo -> Value
 getValue vi = Value yaku fu han val name
   where
@@ -56,7 +54,7 @@ hanSum = sum . map _yHan
 getFu :: [Yaku] -> ValueInfo -> Fu
 getFu ys | any (\y -> _yName y == "Chiitoitsu") ys = const 25
          | otherwise = rounded . sum . sequence
-             [ sum . map mentsuValue . view calledMentsu
+             [ sum . map mentsuValue . view (vHand.handCalled)
              , waitValue
              , baseFu ]
     where rounded = (* 10) . fst . (`divMod` 10)
@@ -66,7 +64,7 @@ baseFu vi | AgariCall _ _ <- vi^?!vHand.handPicks._last = 30
           | otherwise                                   = 20
 
 waitValue :: ValueInfo -> Fu
-waitValue = go <$> pickedTile . (^?! vHand.handPicks._last) <*> map mentsuTiles . filter (not . mentsuShouted) . view calledMentsu
+waitValue = go <$> pickedTile . (^?! vHand.handPicks._last) <*> map mentsuTiles . filter (not . mentsuShouted) . view (vHand.handCalled)
     where go tile = fromMaybe 0 . maximumMay . map (waitFu tile)
 
 waitFu :: Tile -> [Tile] -> Fu

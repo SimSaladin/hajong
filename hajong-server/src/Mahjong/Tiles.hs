@@ -7,14 +7,13 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 --
--- The tile type practically ripped from *hajong*.
+-- Mahjong tiles and relevant functions.
 ------------------------------------------------------------------------------
 module Mahjong.Tiles where
 
-------------------------------------------------------------------------------
 import Import hiding ((<>))
 ------------------------------------------------------------------------------
-import Text.PrettyPrint.ANSI.Leijen (string, (<>), displayS, renderCompact)
+import Text.PrettyPrint.ANSI.Leijen ((<>), displayS, renderCompact)
 ------------------------------------------------------------------------------
 
 -- * Types

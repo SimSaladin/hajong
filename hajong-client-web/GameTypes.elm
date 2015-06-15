@@ -215,6 +215,7 @@ type DrawState = DrawFromWanpai | DrawFromWall | DrawNone
 type PickedTile = FromWall (Maybe Tile)
                 | FromWanpai (Maybe Tile)
                 | AgariTsumo Tile
+                | AgariTsumoWanpai Tile
                 | AgariCall Tile Kaze
                 | AgariChankan Tile Kaze
 

@@ -199,11 +199,12 @@ instance (ToJSON (m Bool), ToJSON (m [Tile]), ToJSON (m Tile), ToJSON (m RiichiS
         ]
 
 instance ToJSON (m Tile) => ToJSON (PickedTile m) where
-    toJSON (FromWall t)       = atType "from-wall" [ "tile" .= t ]
-    toJSON (FromWanpai t)     = atType "from-wanpai" [ "tile" .= t ]
-    toJSON (AgariTsumo t)     = atType "agari-tsumo" [ "tile" .= t ]
-    toJSON (AgariCall t k)    = atType "agari-call" [ "tile" .= t, "from-kaze" .= k ]
+    toJSON (FromWall t) = atType "from-wall" [ "tile" .= t ]
+    toJSON (FromWanpai t) = atType "from-wanpai" [ "tile" .= t ]
+    toJSON (AgariTsumo t)= atType "agari-tsumo" [ "tile" .= t ]
+    toJSON (AgariCall t k) = atType "agari-call" [ "tile" .= t, "from-kaze" .= k ]
     toJSON (AgariChankan t k) = atType "agari-chankan" [ "tile" .= t, "from-kaze" .= k ]
+    toJSON (AgariTsumoWanpai t) = atType "agari-tsumo-wanpai" [ "tile" .= t ]
 
 -- derived
 

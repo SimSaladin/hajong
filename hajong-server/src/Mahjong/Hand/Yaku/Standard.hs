@@ -36,9 +36,10 @@ pinfu = do
             AgariTsumo t -> t
             AgariCall t _ -> t
             AgariChankan t _ -> t
+            AgariTsumoWanpai t -> t
 
     -- wait two-sided
-    [a, b, c] <- anyShuntsu' (suited &. containsTile agari) <&> tileGroupTiles
+    [a, _, c] <- anyShuntsu' (suited &. containsTile agari) <&> tileGroupTiles
     if (tileNumber a == Just Ii && agari == c) || (tileNumber c == Just Chuu && agari == a)
         then yakuFail
         else do
@@ -120,6 +121,7 @@ yakuhai tile desc = do
     anyKoutsuKantsu (sameTile tile)
     return $ Yaku 1 desc
 
+yakuhaiRoundWind, yakuhaiSeatWind :: YakuCheck Yaku
 yakuhaiRoundWind = do
     info <- yakuState
     let roundTile = kaze $ info^.vKyoku.pRound
@@ -130,6 +132,7 @@ yakuhaiSeatWind = do
     let playerKaze = kaze $ info^.vPlayer
     yakuhai playerKaze "Seat Wind"
 
+yakuhaiRed, yakuhaiGreen, yakuhaiWhite :: YakuCheck Yaku
 yakuhaiRed = yakuhai "R!" "Red"
 yakuhaiGreen = yakuhai "G!" "Green"
 yakuhaiWhite = yakuhai "W!" "White"
