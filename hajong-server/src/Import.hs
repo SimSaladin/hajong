@@ -11,7 +11,7 @@
 module Import (module Import, module X) where
 
 ------------------------------------------------------------------------------
-import           ClassyPrelude                as X hiding (Index, (<.>), uncons, unsnoc, cons, snoc)
+import           ClassyPrelude                as X hiding (Index, index, (<.>), uncons, unsnoc, cons, snoc)
 import           Control.Applicative          as X
 import           Control.Lens                 as X
 import           Control.Monad.Error.Class    as X

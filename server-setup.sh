@@ -5,6 +5,8 @@
 # Author:        Samuli Thomasson <samuli.thomasson@paivola.fi>
 # License:       See the LICENSE file
 #-----------------------------------------------------------------------------
+#
+# Running on an EC2 instance
 
 sudo mkdir /opt/hajong
 cd /opt/hajong

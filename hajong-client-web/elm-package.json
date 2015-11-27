@@ -1,11 +1,9 @@
 {
     "version": "1.0.0",
-    "summary": "helpful summary of your project, less than 80 characters",
-    "repository": "https://github.com/USER/PROJECT.git",
+    "summary": "Hajong web client",
+    "repository": "https://github.com/SimSaladin/hajong.git",
     "license": "BSD3",
-    "source-directories": [
-        "."
-    ],
+    "source-directories": [ "src" ],
     "exposed-modules": [],
     "dependencies": {
         "elm-lang/core": "2.0.1 <= v < 3.0.0"
