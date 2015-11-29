@@ -240,8 +240,8 @@ furiten h = any (`elem` (h^..handDiscards.each.dcTile)) . concatMap getAgari
 
 handInNagashi :: HandA -> Bool
 handInNagashi h = all id [ h^.handCalled == []
-                         , h^..handDiscards.traversed.filtered (not . terminal . _dcTile) == []
-                         , h^..handDiscards.traversed.filtered (isJust . _dcTo) == [] ]
+                         , h^..handDiscards.traversed.filtered (isJust . _dcTo) == []
+                         , h^..handDiscards.traversed.filtered (isSuited . _dcTile) == [] ]
     
 
 -- | If there is a shuntsu wait, that is the only possible agari. If there

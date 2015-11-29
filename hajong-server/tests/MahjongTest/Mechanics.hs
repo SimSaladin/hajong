@@ -97,8 +97,7 @@ tests = testGroup "Game mechanics"
             stepped_ InpAuto
             stepped_ InpAuto -- draw
             stepped_ InpAuto -- discard
-            xs <- stepped InpAuto -- continue
-            when (not $ null xs) $ stepped_ InpAuto -- if there were shouts, go forward
+            stepped_ InpAuto -- continue
       case res of
           Right (_, (KyokuEnded (DealTsumo{}),_)) -> return ()
           x -> error $ show x

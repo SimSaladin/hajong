@@ -13,7 +13,7 @@
 ------------------------------------------------------------------------------
 module Prelude ( module Prelude, module X ) where
 
-import ClassyPrelude as X hiding (assert, Index, uncons, unsnoc)
+import ClassyPrelude as X hiding (assert, Index, index, uncons, unsnoc)
 import Data.Maybe                         as X (fromJust)
 import           Control.Lens             as X hiding (elements, snoc, cons, (<.>))
 import           Test.Tasty               as X

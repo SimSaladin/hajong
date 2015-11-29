@@ -135,7 +135,7 @@ tests = testGroup "Standard Yaku"
         snd (getYaku vi) @?= [Yaku 1 "Riichi"]
 
     , testCase "Ippatsu" $ do
-        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "P3"]
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["P2", "P2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "P3"]
                            & vHand.handPicks .~ [AgariCall "P3" Nan]
                            & vHand.handRiichi .~ Riichi
                            & vHand.handIppatsu .~ True
@@ -164,7 +164,7 @@ tests = testGroup "Standard Yaku"
     , testCase "Chankan" $ do
         error "test not implemented (here) (yet)"
 
-    , testCase "Nagashi Mangan" $ do
-        error "TODO special: handle somewhere else"
+    -- NOTE: implemented in Mechanics test, for now
+    -- , testCase "Nagashi Mangan" $ do
 
     ]

@@ -122,6 +122,8 @@ test-suite test
                      , ansi-wl-pprint
 
   default-extensions:  OverloadedStrings
+                     , FlexibleContexts
+                     , GADTs
   ghc-options:         -Wall -rtsopts
 
 executable hajong-server
