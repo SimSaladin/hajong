@@ -15,7 +15,7 @@ lookupGameInfo : GameState -> Int -> Maybe GameInfo
 lookupGameInfo game ident = List.head <| List.filter (\g -> g.ident == ident) game.lounge.games
 
 log : String -> GameState -> GameState
-log str gs = { gs | debuglog <- str :: gs.debuglog }
+log str gs = { gs | debuglog = str :: gs.debuglog }
 
 groupInto n xs = case xs of
    [] -> []
@@ -34,7 +34,9 @@ listFind k xs = case xs of
    [] -> Debug.crash <| "Key " ++ toString k ++ " not found in " ++ toString xs
 
 fromJust : Maybe a -> a
-fromJust (Just x) = x
+fromJust x = case x of
+   Nothing -> Debug.crash "fromJust: Nothing"
+   Just y -> y
 
 maybe : a -> (b -> a) -> Maybe b -> a
 maybe def f m = Maybe.withDefault def <| Maybe.map f m
@@ -44,12 +46,12 @@ isNothing x = case x of
    Nothing -> True
    Just _ -> False
 
--- TODO this is not complete
 pickedTile : PickedTile -> Tile
 pickedTile pt = case pt of
-   FromWall (Just t) -> t
-   FromWanpai (Just t) -> t
-   AgariTsumo t -> t
-   AgariCall t _ -> t
-   AgariChankan t _ -> t
+   FromWall t         -> fromJust t
+   FromWanpai t       -> fromJust t
+   AgariTsumo t       -> t
+   AgariCall t _      -> t
+   AgariChankan t _   -> t
+   AgariTsumoWanpai t -> t
 

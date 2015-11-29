@@ -3,10 +3,10 @@ module Game where
 import Util exposing (..)
 import GameTypes exposing (..)
 
-import List
 import List exposing (map)
 import Array
-import Signal exposing ((<~), dropRepeats, mergeMany, Mailbox, mailbox, message)
+import Signal
+import Signal exposing (dropRepeats, mergeMany, Mailbox, mailbox, message)
 import Graphics.Input exposing (..)
 import Graphics.Element exposing (..)
 import Graphics.Collage exposing (..)
@@ -26,7 +26,7 @@ type alias Controls =
    { hoveredTile : Maybe Tile }
 
 controls : Signal Controls
-controls = Controls <~ dropRepeats discardHover.signal
+controls = Signal.map Controls <| dropRepeats discardHover.signal
 
 -- Maybe a tile to discard from my hand
 discard : Mailbox (Maybe Discard)
@@ -56,13 +56,13 @@ shoutChooseTile = mailbox Nothing
 -- {{{ Upstream events ----------------------------------------------------
 events : Signal Event
 events = mergeMany
-   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard) <~ discard.signal
-   , maybe Noop (InGameAction << GameTurn << TurnTileDiscard) <~ riichi.signal
-   , maybe Noop (InGameAction << GameShout) <~ shout.signal
-   , maybe Noop (InGameAction << GameTurn << TurnAnkan) <~ ankan.signal
-   , maybe Noop (InGameAction << GameTurn << TurnShouminkan) <~ shouminkan.signal
-   , maybe Noop (\_ -> InGameAction <| GameTurn TurnTsumo) <~ tsumo.signal
-   , (\x -> if x then InGameAction GameDontCare else Noop) <~ nocare.signal
+   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard) `Signal.map` discard.signal
+   , maybe Noop (InGameAction << GameTurn << TurnTileDiscard) `Signal.map` riichi.signal
+   , maybe Noop (InGameAction << GameShout)                   `Signal.map` shout.signal
+   , maybe Noop (InGameAction << GameTurn << TurnAnkan)       `Signal.map` ankan.signal
+   , maybe Noop (InGameAction << GameTurn << TurnShouminkan)  `Signal.map` shouminkan.signal
+   , maybe Noop (\_ -> InGameAction <| GameTurn TurnTsumo)    `Signal.map` tsumo.signal
+   , (\x -> if x then InGameAction GameDontCare else Noop)    `Signal.map` nocare.signal
    ]
 
 getShout : Maybe ShoutKind -> Maybe Shout
@@ -114,14 +114,18 @@ dispCalled co gs rs = [Ton, Nan, Shaa, Pei]
       )
    |> group
 
+-- | `movRotateKaze off me him this` rotates a form 'this' of 'him' to correct direction
+-- when looked from 'me', and applies an offset of 'off' pixels in his direction.
+-- think: Discard pools, etc.
 moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
 moveRotateKaze off mypos pos =
    case (kazeNth pos - kazeNth mypos) % 4 of
       0 -> moveY (-off)
       1 -> moveX off    << rotate (degrees 90) 
       2 -> moveY off    << rotate (degrees 180)
-      3 -> moveX (-off) << rotate (degrees 270)
+      _ -> moveX (-off) << rotate (degrees 270)
 
+-- | Riichi stick, not rotated.
 playerRiichi : Form
 playerRiichi = toForm <| image 200 20 "/static/img/point1000.svg"
 
@@ -251,20 +255,29 @@ dispDiscard d = if d.riichi
 
 dispPublicMentsu co k h = flow right <| map (dispMentsu k) h.called
 
+-- | The first argument tells who we are. We need to know in order to rotate the
+-- correct tile in a shouted mentsu.
 dispMentsu : Kaze -> Mentsu -> Element
 dispMentsu k m = case m.from of
-   Nothing -> empty -- We display only shouted
-   Just s  ->
-         -- | TODO: this can be jantou from ron
-      let (a :: b :: xs) = map dispTile s.shoutTo
-          t            = rotate (degrees 90) <| toForm <| dispTile s.shoutTile
-          shoutTile    = case xs of
-             [] -> collage t_h t_w [t]
-             _  -> collage t_h (2*t_w) [moveY (t_w / 2) t, moveY (-t_w / 2) t]
-      in flow right <| case abs (kazeNth s.shoutFrom - kazeNth k) of
-         1 -> a :: b :: shoutTile :: []
-         2 -> a :: shoutTile :: b :: []
-         3 -> shoutTile :: a :: b :: []
+   Nothing -> dispMentsuConcealed m
+   Just s  -> dispShout k m s
+
+dispShout : Kaze -> Mentsu -> Shout -> Element
+dispShout k m s =
+   let myTiles  = map dispTile s.shoutTo
+       rotated  = rotate (degrees 90) <| toForm <| dispTile s.shoutTile
+       shoutPos =
+          if s.shoutKind == Pon && m.mentsuKind == Kantsu -- shouminkan?
+             then collage t_h (2*t_w) [moveY (t_w / 2) rotated, moveY (-t_w / 2) rotated]
+             else collage t_h t_w [rotated]
+
+   in flow right <| case abs (kazeNth s.shoutFrom - kazeNth k) of
+      1 -> List.take 2 myTiles ++ [shoutPos] ++ List.drop 2 myTiles
+      2 -> List.take 1 myTiles ++ [shoutPos] ++ List.drop 1 myTiles
+      _ -> shoutPos :: myTiles
+
+dispMentsuConcealed : Mentsu -> Element
+dispMentsuConcealed m = Debug.crash "TODO implement concealed mentsu display"
 -- }}}
 
 -- {{{ Tiles -----------------------------------------------------------------------
@@ -344,16 +357,16 @@ buttonElem' str col = collage 80 40
 processInGameEvent : GameEvent -> GameState -> GameState
 processInGameEvent event gs = case event of
    RoundPrivateStarts rs ->
-        { gs | status <- InGame
-             , gameWait <- Nothing
-             , roundState <- Just rs }
+        { gs | status = InGame
+             , gameWait = Nothing
+             , roundState = Just rs }
 
    RoundPrivateWaitForTurnAction {seconds, riichiWith} ->
-      { gs | waitTurnAction <- Just <| WaitRecord seconds gs.updated
-           , riichiWith     <- riichiWith
+      { gs | waitTurnAction = Just <| WaitRecord seconds gs.updated
+           , riichiWith     = riichiWith
         }
    RoundPrivateWaitForShout {seconds, shouts} ->
-      { gs | waitShout      <- Just <|
+      { gs | waitShout      = Just <|
          ( WaitRecord seconds gs.updated
          , maybe shouts (\x -> snd x ++ shouts) gs.waitShout)
       }
@@ -363,10 +376,10 @@ processInGameEvent event gs = case event of
    RoundTurnBegins {player_kaze} ->
       Util.log ("Turn of " ++ toString player_kaze) gs
       |> setTurnPlayer player_kaze
-      |> \gs -> { gs | turnBegan      <- gs.updated
-                     , waitTurnAction <- Nothing
-                     , waitShout      <- Nothing
-                     , riichiWith     <- []
+      |> \gs -> { gs | turnBegan      = gs.updated
+                     , waitTurnAction = Nothing
+                     , waitShout      = Nothing
+                     , riichiWith     = []
                 }
 
    RoundTurnAction {player_kaze, action} ->
@@ -386,36 +399,36 @@ processInGameEvent event gs = case event of
 
 -- {{{ Field modify boilerplate ----------------------------------------------
 setMyHand hand gs = case gs.roundState of
-   Just rs -> { gs | roundState <- Just { rs | myhand <- hand } }
+   Just rs -> { gs | roundState = Just { rs | myhand = hand } }
    Nothing -> gs
 
 setTurnPlayer player gs = case gs.roundState of
-   Just rs -> { gs | roundState <- Just { rs | turn <- player } }
+   Just rs -> { gs | roundState = Just { rs | turn = player } }
    Nothing -> gs
 
 setPlayerHand player hand gs = case gs.roundState of
-   Just rs -> { gs | roundState <- Just { rs | hands <- updateHand player hand rs.hands } }
+   Just rs -> { gs | roundState = Just { rs | hands = updateHand player hand rs.hands } }
    Nothing -> gs
 
 setNick pk nick gs = case gs.roundState of
-   Just rs -> { gs | roundState <- Just { rs | players <- Util.listModify pk (\(p, n, _) -> (p, n, nick)) rs.players } }
+   Just rs -> { gs | roundState = Just { rs | players = Util.listModify pk (\(p, n, _) -> (p, n, nick)) rs.players } }
    Nothing -> gs
 
 setResults res gs = case gs.roundState of
-   Just rs -> { gs | roundState <- Just { rs | results <- Just res } }
+   Just rs -> { gs | roundState = Just { rs | results = Just res } }
    Nothing -> gs
 
 flipDora tile gs = case gs.roundState of
-   Just rs -> { gs | roundState <- Just { rs | dora <- tile :: rs.dora
-                                        , tilesleft <- rs.tilesleft - 1 } }
+   Just rs -> { gs | roundState = Just { rs | dora = tile :: rs.dora
+                                        , tilesleft = rs.tilesleft - 1 } }
    Nothing -> gs
 
 setRiichi pk gs = case gs.roundState of -- TODO does not differentiate from doubleriichi
-   Just rs -> { gs | roundState <- Just { rs | hands <- Util.listModify pk (\h -> { h | riichiState <- Riichi }) rs.hands } }
+   Just rs -> { gs | roundState = Just { rs | hands = Util.listModify pk (\h -> { h | riichiState = Riichi }) rs.hands } }
    Nothing -> gs
 
 setPoints p n gs = case gs.roundState of
-   Just rs -> gs -- TODO { gs | roundState <- Just { rs | players <- Util.listModify p (\h -> { h | riichi <- True }) rs.hands } }
+   Just rs -> gs -- TODO { gs | roundState = Just { rs | players = Util.listModify p (\h -> { h | riichi = True }) rs.hands } }
    Nothing -> gs
 
 updateHand player hand = Util.listModify player (\_ -> hand)
@@ -425,21 +438,22 @@ updateHand player hand = Util.listModify player (\_ -> hand)
 processTurnAction : Kaze -> TurnAction -> GameState -> GameState
 processTurnAction player action gs =
    case gs.roundState of
+      Nothing -> gs
       Just rs -> case action of
          TurnTileDiscard discard ->
-            { gs | roundState <-
-                  Just { rs | hands  <- Util.listModify player
-                                          (\h -> { h | discards <- h.discards ++ [discard]
-                                                     , riichiState <- if discard.riichi then Riichi else h.riichiState
+            { gs | roundState =
+                  Just { rs | hands  = Util.listModify player
+                                          (\h -> { h | discards = h.discards ++ [discard]
+                                                     , riichiState = if discard.riichi then Riichi else h.riichiState
                                           }) rs.hands
                        }
             }
          TurnTileDraw _ _ ->
-            { gs | roundState <- Just { rs | tilesleft <- rs.tilesleft - 1 }
+            { gs | roundState = Just { rs | tilesleft = rs.tilesleft - 1 }
             }
          TurnAnkan tile  ->
-            { gs | roundState <- Just { rs | hands <- Util.listModify player
-               (\h -> { h | called <- h.called ++ [ kantsu tile ] }) rs.hands }
+            { gs | roundState = Just { rs | hands = Util.listModify player
+               (\h -> { h | called = h.called ++ [ kantsu tile ] }) rs.hands }
             }
          TurnShouminkan tile -> gs
          TurnTsumo           -> gs

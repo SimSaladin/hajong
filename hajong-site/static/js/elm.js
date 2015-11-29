@@ -1,1 +1,1 @@
-../../../hajong-client-web/elm.js
+../../../hajong-client-web/dist/elm.js

@@ -21,11 +21,7 @@ function soundHandler(x) { sounds[x] && sounds[x].play() }
 mainDiv.hidden = true;
 
 function initElm() {
-  if (debug) {
-    return Elm.debugFullscreen(Elm.Main, "Main.elm");
-  } else {
-    return Elm.embed(Elm.Main, mainDiv, { downstream : "" });
-  }
+  return Elm.embed(Elm.Main, mainDiv, { downstream : "" });
 }
 
 function startGame(doJoin) {

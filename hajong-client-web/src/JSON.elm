@@ -56,6 +56,7 @@ tileOfType tileType = case tileType of
     "SouTile"   -> object2 (Suited SouTile) ("number" := int) ("aka" := bool)
     "PinTile"   -> object2 (Suited PinTile) ("number" := int) ("aka" := bool)
     "HonorTile" -> object1 Honor honor
+    _           -> Debug.crash <| "Couldn't deserialize tile type `" ++ tileType ++ "'"
 
 honor : Decoder Honor
 honor = map honorFrom ("ident" := string)
@@ -68,12 +69,14 @@ honorFrom str = case str of
     "Haku"  -> Sangenpai Haku
     "Hatsu" -> Sangenpai Hatsu
     "Chun"  -> Sangenpai Chun
+    _       -> Debug.crash <| "Couldn't deserialize honor `" ++ str ++ "'"
 
 kaze = string |> map (\x -> case x of
    "Ton"   -> Ton
    "Nan"   -> Nan
    "Shaa"  -> Shaa
-   "Pei"   -> Pei)
+   "Pei"   -> Pei
+   _       -> Debug.crash <| "Couldn't deserialize kaze `" ++ x ++ "'")
 
 -- ** Lounge
 
@@ -102,6 +105,7 @@ gameEventOfType eventType = case eventType of
     "filpped-dora" -> object1 (\t      -> RoundFlippedDora              { tile = t                                 } ) ("tile" := tile)
     "end"          -> object1 RoundEnded                                                                               ("results" := results)
     "set-points"   -> object2 (\p po -> RoundGamePoints                 { player = p, points = po                  } ) player ("points" := int)
+    _              -> Debug.crash <| "Couldn't deserialize game event type `" ++ eventType ++ "'"
 
 -- ** Hand
 
@@ -114,11 +118,13 @@ hand = handPublic `andThen` (\hp -> object4 (toHand hp)
   )
 
 toHand hp con picks furit canTsumo =
-   let h0 = { hp | concealed = con }
-       h1 = { h0 | picks = picks }
-       h2 = { h1 | furiten = furit }
-       h3 = { h2 | canTsumo = canTsumo }
-   in h3
+   { called = hp.called, discards = hp.discards, riichiState = hp.riichiState,
+     ippatsu = hp.ippatsu, state = hp.state,
+   concealed = con,
+   picks = picks,
+   furiten = furit,
+   canTsumo = canTsumo }
+   
 
 handPublic : Decoder HandPublic
 handPublic = object5 toHandPublic
@@ -142,7 +148,8 @@ riichiState : Decoder RiichiState
 riichiState = string |> map (\x -> case x of
    "noriichi"     -> NoRiichi
    "riichi"       -> Riichi
-   "doubleriichi" -> DoubleRiichi)
+   "doubleriichi" -> DoubleRiichi
+   _              -> Debug.crash <| "Couldn't deserialize riichi type `" ++ x ++ "'")
 
 pickedTile : Decoder PickedTile
 pickedTile = "type" := string `andThen` \t -> case t of
@@ -152,18 +159,21 @@ pickedTile = "type" := string `andThen` \t -> case t of
    "agari-call"    -> object2 AgariCall    ("tile" := tile) ("from-kaze" := kaze)
    "agari-chankan" -> object2 AgariChankan ("tile" := tile) ("from-kaze" := kaze)
    "agari-tsumo-wanpai" -> object1 AgariTsumoWanpai ("tile" := tile)
+   _               -> Debug.crash <| "Couldn't deserialize tile kind `" ++ t ++ "'"
 
 furitenState : Decoder FuritenState
 furitenState = string |> map (\x -> case x of
    "notfuriten"  -> NotFuriten
    "furiten"     -> Furiten
-   "tempfuriten" -> TempFuriten)
+   "tempfuriten" -> TempFuriten
+   _             -> Debug.crash <| "Couldn't deserialize furiten type `" ++ x ++ "'")
 
 drawState : Decoder DrawState
 drawState = string |> map (\x -> case x of
    "drawfromwanpai" -> DrawFromWanpai
    "drawfromwall"   -> DrawFromWall
-   "drawnone"       -> DrawNone)
+   "drawnone"       -> DrawNone
+   _                -> Debug.crash <| "Couldn't deserialize draw state `" ++ x ++ "'")
 
 -- }}}
 
@@ -177,7 +187,7 @@ readMentsuKind s = case s of
    "koutsu"  -> Koutsu
    "kantsu"  -> Kantsu
    "jantou"  -> Jantou
-   -- TODO partial
+   _         -> Debug.crash <| "Couldn't deserialize mentsu kind `" ++ s ++ "'"
 -- }}}
 
 -- * {{{ Shout -------------------------------------------------------
@@ -194,6 +204,7 @@ readShoutKind s = case s of
    "kan" -> Kan
    "chi" -> Chi
    "ron" -> Ron
+   _     -> Debug.crash <| "Couldn't deserialize shout kind `" ++ s ++ "'"
 -- }}}
 
 -- * {{{ RoundState -------------------------------------------------------
@@ -235,6 +246,7 @@ resultsOfType t = case t of
    "dealtsumo" -> object2 (\w p -> DealTsumo { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
    "dealron"   -> object2 (\w p -> DealRon   { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
    "dealdraw"  -> object2 (\w p -> DealDraw  { tenpai  = w, nooten = p }) ("tenpais" := list payer)  ("nooten" := list payer)
+   _           -> Debug.crash <| "Couldn't deserialize results type `" ++ t ++ "'"
 
 winner : Decoder Winner
 winner = tuple3 (\p points h -> Winner p points h) int int valuedHand
@@ -266,6 +278,7 @@ turnActionOfType taType = case taType of
     "ankan"      -> object1 TurnAnkan       ("tile" := tile)
     "shouminkan" -> object1 TurnShouminkan  ("tile" := tile)
     "tsumo"      -> succeed TurnTsumo
+    _            -> Debug.crash <| "Couldn't deserialize turn action type `" ++ taType ++ "'"
 -- }}}
 
 -- {{{ ToJSON ----------------------------------------------------------------------
@@ -283,6 +296,7 @@ toJSON_Event ev = case ev of
     ForceStart {ident}    -> atType "game-fstart" [("ident", Encode.int ident)]
     InGameAction action   -> atType "game-action" <| toJSON_GameAction action
     Noop                  -> atType "noop" []
+    _                     -> Debug.crash <| "Couldn't serialize event type, not all are yet implemented!"
 
 toJSON_GameAction : GameAction -> List (String, Value)
 toJSON_GameAction a = case a of

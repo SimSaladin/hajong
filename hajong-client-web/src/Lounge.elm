@@ -21,7 +21,7 @@ type ButtonState = Submit | Clear
 type alias Controls = { chosen : Maybe GameInfo }
 
 controls : Signal Controls
-controls = Controls <~ chosenGame.signal
+controls = map Controls chosenGame.signal
 -- }}}
 
 -- {{{ Events ------------------------------------------
@@ -33,7 +33,7 @@ events = mergeMany
 
 -- {{{ Display -----------------------------------------
 display : Controls -> GameState -> Element
-display v gs = doDraw { v | game = gs }
+display v gs = doDraw { chosen = v.chosen, game = gs }
 
 doDraw o = flow down
     [ Maybe.withDefault
@@ -110,10 +110,10 @@ joined = sampleOn (isSubmit joinGame.signal) chosenGame.signal
 
 -- {{{ Helpers -----------------------------------------
 isSubmit : Signal ButtonState -> Signal Bool
-isSubmit s = (\x -> x == Submit) <~ s
+isSubmit s = map (\x -> x == Submit) s
 
 maybeEvent : (a -> Event) -> Signal (Maybe a) -> Signal Event
-maybeEvent f s = (Maybe.withDefault Noop << Maybe.map f) <~ s
+maybeEvent f s = map (Maybe.withDefault Noop << Maybe.map f) s
 
 blockElement : Int -> Int -> Element -> Element
 blockElement w h e = size w h (color gray e)

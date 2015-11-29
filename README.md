@@ -2,6 +2,11 @@
 
 See http://funktionaali.com/2014-05-04-Riichi.html
 
+## Installation
+
+> npm install elm
+> export PATH=./node_modules/.bin/:$PATH
+
 # hajong-client-web Web Client
 
 Requires elm 0.15

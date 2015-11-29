@@ -4,6 +4,7 @@ import Time exposing (Time)
 import Dict
 import Set exposing (Set)
 import Set
+import Debug
 
 -- {{{ GameState -------------------------------------------------------------
 type alias GameState =
@@ -149,6 +150,7 @@ readKaze x = case x of
     "Nan"  -> Nan
     "Shaa" -> Shaa
     "Pei"  -> Pei
+    _      -> Debug.crash <| "Couldn't deserialize string `" ++ x ++ "' to a kaze"
 
 tileOrder : Tile -> Tile -> Order
 tileOrder a b = case (a, b) of

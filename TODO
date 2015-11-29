@@ -17,6 +17,8 @@ x = done, / = half done, ! = needs testing
 [/] (game) Test all standard yaku; make them work
 
 # elm
+[ ] (elm) displaying concealed mentsu is not implemented
+[ ] (elm) try out elm-bridge for generating json parsers
 [ ] (elm) chat/dialog
 [ ] (elm) point sticks (1000 done)
 [ ] (elm) auto wait-for-shouts status after discard; indicator color?

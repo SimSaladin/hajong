@@ -54,11 +54,11 @@ eventView ev = case ev of
 port downstream : Signal String
 
 eventInput : Signal Event
-eventInput = decodeEvent <~ downstream
+eventInput = decodeEvent `map` downstream
 
 -- upstream signal (further handled from JS)
 port upstream : Signal String
-port upstream = encodeEvent <~ mergeMany
+port upstream = encodeEvent `map` mergeMany
     [ Lounge.events
     , Game.events
     ]
@@ -92,15 +92,15 @@ type Input = AnEvent Event
 
 input : Signal Input
 input = mergeMany
-   [ AnEvent <~ eventInput
-   , GameInput <~ Game.controls
-   , LoungeInput <~ Lounge.controls
-   , TimeDelta <~ Time.every Time.second ]
+   [ AnEvent `map` eventInput
+   , GameInput `map` Game.controls
+   , LoungeInput `map` Lounge.controls
+   , TimeDelta `map` Time.every Time.second ]
 -- }}}
 
 -- {{{ Sounds -------------------------------------------------
 port sounds : Signal String
-port sounds = soundFromInput <~ input
+port sounds = soundFromInput `map` input
 
 soundFromInput : Input -> String
 soundFromInput inp = case inp of
@@ -121,25 +121,25 @@ gameState = foldp stepGame newState input
 
 stepGame : Input -> GameState -> GameState
 stepGame x gs = case x of
-   AnEvent event -> stepEvent event <| { gs | eventlog <- event :: gs.eventlog }
-   TimeDelta time -> { gs | updated <- time
-                     , turnBegan <- if gs.turnBegan == 0 then time else gs.turnBegan
+   AnEvent event -> stepEvent event <| { gs | eventlog = event :: gs.eventlog }
+   TimeDelta time -> { gs | updated = time
+                     , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
                      }
    _             -> gs
 
 -- | Apply an Event to the GameState.
 stepEvent : Event -> GameState -> GameState
 stepEvent event gameState = case event of
-   Identity   {nick}   -> { gameState | mynick <- nick }
-   JoinServer {nick}   -> { gameState | lounge <- addIdle nick gameState.lounge }
-   PartServer {nick}   -> { gameState | lounge <- deleteNick nick gameState.lounge }
+   Identity   {nick}   -> { gameState | mynick = nick }
+   JoinServer {nick}   -> { gameState | lounge = addIdle nick gameState.lounge }
+   PartServer {nick}   -> { gameState | lounge = deleteNick nick gameState.lounge }
    Message {from,content} -> gameState -- TODO
    Invalid {content} -> gameState -- TODO
-   LoungeInfo {lounge} -> { gameState | lounge <- lounge }
-   GameCreated {game}  -> { gameState | lounge <- addGame game gameState.lounge }
+   LoungeInfo {lounge} -> { gameState | lounge = lounge }
+   GameCreated {game}  -> { gameState | lounge = addGame game gameState.lounge }
    JoinGame {nick, ident} ->
-       { gameState | lounge   <- addJoinedGame ident nick gameState.lounge
-                   , gameWait <-
+       { gameState | lounge   = addJoinedGame ident nick gameState.lounge
+                   , gameWait =
                        if gameState.mynick == nick
                            then Just ident
                            else gameState.gameWait
@@ -149,17 +149,17 @@ stepEvent event gameState = case event of
 -- }}}
 
 -- {{{ Nick and game fiddling ---------------------------------
-addGame g l = { l | games <- l.games ++ [g] }
-addIdle n l = { l | idle  <- Set.insert n l.idle }
+addGame g l = { l | games = l.games ++ [g] }
+addIdle n l = { l | idle  = Set.insert n l.idle }
 
 addJoinedGame i n l =
-    { l | games <- List.map (\g -> if g.ident == i then { g | players <- Set.insert n g.players } else g) l.games
-        , idle  <- Set.remove n l.idle }
+    { l | games = List.map (\g -> if g.ident == i then { g | players = Set.insert n g.players } else g) l.games
+        , idle  = Set.remove n l.idle }
 
 deleteNick : String -> LoungeData -> LoungeData
 deleteNick n l =
-   { l | idle  <- Set.remove n l.idle
-       , games <- List.map (\g -> { g | players <- Set.remove n g.players }) l.games }
+   { l | idle  = Set.remove n l.idle
+       , games = List.map (\g -> { g | players = Set.remove n g.players }) l.games }
 -- }}}
 
 -- {{{ Display ------------------------------------------------

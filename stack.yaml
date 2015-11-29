@@ -1,7 +1,7 @@
 flags: {}
 packages:
-- hajong-server/
-- hajong-site/
+   - hajong-server/
+   - hajong-site/
 extra-deps: 
    - utility-ht-0.0.10
    - yesod-auth-account-1.4.1
