@@ -2,6 +2,8 @@
 
 See http://funktionaali.com/2014-05-04-Riichi.html
 
+> for i in ../../../hajong-client-web/dist/images/*; do ln -s $i .; done
+
 ## Installation
 
 > npm install elm
@@ -16,6 +18,7 @@ compile with
 ```
 hajong/hajong-client-web $ elm make Main.elm
 ```
+
 
 # Technical notes
 

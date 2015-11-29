@@ -2,6 +2,7 @@ x = done, / = half done, ! = needs testing
 
 # mechanics
 [ ] (game) configuration options: active yaku
+[ ] Invalid input in state WaitingShouts Nothing [(Player 0,Ton,15,[Shout {shoutKind = Chi, shoutFrom = Pei, shoutTile = M9, shoutTo = [M8,M7]}])] False: InpPass Ton
 [ ] (game) scoring tests: honba, riichi sticks
 [ ] (game) riichi points transfer on own win
 [ ] (game) riichi points leaved on table on draw

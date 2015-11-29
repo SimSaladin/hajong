@@ -138,13 +138,20 @@ dispInfoBlock co gs rs =
    <| color white <| size 230 230
    <| collage 230 230
    <| [ turnIndicator gs |> moveRotateKaze 90 rs.mypos rs.turn
-      , toForm <| (centered <| T.bold <| T.fromString <| toString rs.round) `beside` show (" " ++ toString rs.deal)
-      , move (-60, 60) <| scale 0.6 <| toForm <| dispWanpai co rs
-      , if rs.honba > 0 then move (-60,-60) <| toForm <| centered <| T.fromString <| toString (rs.honba * 100) ++ "H"
-                        else toForm empty
+      , dealAndRoundIndicator rs
+      , toForm (dispWanpai co rs) |> scale 0.6 |> move (-60, 60)
+      , honbaIndicator rs.honba
       , moveY (-30) <| toForm <| centered <| T.fromString <| toString rs.tilesleft
       ]
       ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 95 rs.mypos k) [Ton, Nan, Shaa, Pei]
+
+dealAndRoundIndicator rs = toForm <| kazeImage rs.round `beside` centered (T.fromString (toString rs.deal))
+
+kazeImage kaze = fittedImage 28 38 <| case kaze of
+   Ton  -> "/static/img/Ton.jpg"
+   Nan  -> "/static/img/Nan.jpg"
+   Shaa -> "/static/img/Shaa.jpg"
+   Pei  -> "/static/img/Pei.jpg"
 
 turnIndicator : GameState -> Form
 turnIndicator gs =
@@ -158,10 +165,15 @@ turnIndicator gs =
                Just wr -> toFloat wr.seconds - (inSeconds (gs.updated - wr.added))
    ]
 
+honbaIndicator h = if h > 0 then move (-60,-60) <| toForm <| centered <| T.fromString <| toString (h * 100) ++ "H"
+                            else toForm empty
+
+dispPlayerInfo : RoundState -> Kaze -> Form
 dispPlayerInfo rs k =
    let (p, points, name) = Util.listFind k rs.players
-   in show p `beside` ((if name == "" then T.fromString "(bot)" else T.fromString name |> T.bold) |> centered)
-      `above` flow right [ spacer 5 5, show k, spacer 5 5, show points ] |> toForm
+       playerName        = if name == "" then T.fromString "(bot)" else T.fromString name |> T.bold
+   in
+      toForm <| kazeImage k `beside` spacer 5 5 `beside` (centered playerName `above` show points)
 -- }}}
 
 -- {{{ Results

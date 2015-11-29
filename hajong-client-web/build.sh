@@ -9,6 +9,7 @@
 set -e
 
 cd $(dirname $0)
-mkdir -p dist
+mkdir -p dist/images
 elm-make src/Main.elm --output dist/elm.js
+cp images/* dist/images
 

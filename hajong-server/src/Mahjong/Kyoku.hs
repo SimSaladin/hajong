@@ -39,7 +39,7 @@ import           Mahjong.Kyoku.Internal
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
 import           Data.Monoid (Endo(..))
-import qualified Data.List as L (delete, find)
+import qualified Data.List as L (delete, find, filter)
 
 -- | Context of game and deal flow.
 --
@@ -92,12 +92,14 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | TurnTsumo <- ta               = tsumo pk <&> KyokuEnded
             | TurnShouminkan t <- ta        = handOf' pk >>= shouminkanOn t >>= updateHand pk >> return (WaitingDraw pk True) -- TODO Wait shout robbing
 
-step (WaitingShouts _winning shouts _) (InpShout pk shout) -- TODO Precedences not implemented
+step (WaitingShouts Nothing _ False)      InpAuto        = return CheckEndConditionsAfterDiscard
+step (WaitingShouts Nothing _ True)       InpAuto        = use pTurn >>= return . WaitingDiscard
+step (WaitingShouts winning shouts chank) (InpPass kaze) = return $ WaitingShouts winning (L.filter (\(_,k,_,_) -> k /= kaze) shouts) chank
+step (WaitingShouts _winning shouts _)    (InpShout pk shout)
+            -- TODO Precedences not implemented
             | Just (_,_,_,xs) <- L.find (\(_,pk',_,_) -> pk' == pk) shouts
             , shout `elem` xs               = processShout pk shout
             | otherwise                     = throwError "No such call is possible"
-step (WaitingShouts Nothing _ False) InpAuto = return CheckEndConditionsAfterDiscard
-step (WaitingShouts Nothing _ True)  InpAuto = use pTurn >>= return . WaitingDiscard
 
 step CheckEndConditionsAfterDiscard InpAuto = do
             tilesLeft <- use pWallTilesLeft
@@ -108,7 +110,7 @@ step CheckEndConditionsAfterDiscard InpAuto = do
                   | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
 
 step (KyokuEnded{}) _ = throwError "This kyoku has ended!"
-step st inp           = throwError $ "Invalid input in state " <> tshow st <> ": " <> tshow inp
+step st inp           = throwError $ "Kyoku.step: Invalid input in state " <> tshow st <> ": " <> tshow inp
 
 dealGameEvent :: GameEvent -> Kyoku -> Kyoku
 dealGameEvent ev = appEndo . mconcat $ case ev of
