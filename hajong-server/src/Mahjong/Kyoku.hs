@@ -257,7 +257,7 @@ nagashiOrDraw = do
         else return Nothing
     let winners = map fst $ catMaybes $ map snd $ mapToList wins :: [Winner]
         payers  = map (\xs@((p,_):_) -> (p, sumOf (traversed._2) xs)) $ groupBy ((==) `on` fst) $ (concatMap snd $ catMaybes $ map snd $ mapToList wins) :: [Payer]
-    if null wins then KyokuEnded <$> endDraw else return $ KyokuEnded $ DealTsumo winners payers
+    if null winners then KyokuEnded <$> endDraw else return $ KyokuEnded $ DealTsumo winners payers
 
 processAnkan :: InKyoku m => Kaze -> Tile -> m Machine
 processAnkan pk t = do

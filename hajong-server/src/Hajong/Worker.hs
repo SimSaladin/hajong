@@ -182,6 +182,7 @@ processMachine (KyokuEnded res)               = processKyokuEnded res
 processKyokuEnded :: KyokuResults -> WCont
 processKyokuEnded results = do
     $logInfo $ "Kyoku ended: " <> tshow results
+    rmodify wGame (gameDeal._Just.pResults.~Just results)
     Just k <- rview wGame <&> _gameDeal
     liftIO (maybeNextDeal k) >>= either return go -- returns finalpoints or starts next kyoku
   where

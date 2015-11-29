@@ -1,8 +1,8 @@
 x = done, / = half done, ! = needs testing
 
 # mechanics
-[ ] (game) configuration options: active yaku
-[ ] Invalid input in state WaitingShouts Nothing [(Player 0,Ton,15,[Shout {shoutKind = Chi, shoutFrom = Pei, shoutTile = M9, shoutTo = [M8,M7]}])] False: InpPass Ton
+[ ] when a call is passed, update callable info to client
+[/] (game) Test all standard yaku; make them work
 [ ] (game) scoring tests: honba, riichi sticks
 [ ] (game) riichi points transfer on own win
 [ ] (game) riichi points leaved on table on draw
@@ -15,7 +15,7 @@ x = done, / = half done, ! = needs testing
 [ ] (game) tochuu ryuukoku
    [ ] ask for new round when enough non-related tiles
    [ ] other
-[/] (game) Test all standard yaku; make them work
+[ ] (game) configuration options: active yaku
 
 # elm
 [ ] (elm) displaying concealed mentsu is not implemented
