@@ -15,6 +15,11 @@ Default: &defaults
   copyright: "2014 Samuli Thomasson"
   #analytics: UA-YOURCODE
 
+  fb:
+   name: ""
+   id: ""
+   secret: ""
+
 Development:
   <<: *defaults
 

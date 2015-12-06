@@ -1,11 +1,13 @@
 User
     username Text
-    UniqueUsername username
     password ByteString
     emailAddress Text
+    fbUserId Text Maybe
     verified Bool
     verifyKey Text
     resetPasswordKey Text
+    UniqueUsername username
+    UniqueUserEmail emailAddress
     deriving Show Typeable
 
 PastGame

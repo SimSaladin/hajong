@@ -52,7 +52,7 @@ postNewGameR = do
     -- uuid <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
     ((FormSuccess settings,_), _) <- runFormPost newGameForm
     G.InternalGameCreated gid <- goGame $ G.InternalNewGame settings
-    redirect $ GameR gid
+    redirect $ PlayR gid
 
 newGameForm :: Form G.GameSettings
 newGameForm = renderDivs $ G.GameSettings

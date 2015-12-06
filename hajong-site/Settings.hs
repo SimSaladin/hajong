@@ -17,6 +17,7 @@ import Control.Applicative
 import Settings.Development
 import Data.Default (def)
 import Text.Hamlet
+import qualified Facebook as FB
 
 -- | Which Persistent backend this site is using.
 type PersistConf = SqliteConf
@@ -72,6 +73,7 @@ data Extra = Extra
     , extraServerBinary :: FilePath
     , extraServerArgs :: [String]
     , extraServerLog :: FilePath
+    , extraFbCredentials :: FB.Credentials
     } deriving Show
 
 parseExtra :: DefaultEnv -> Object -> Parser Extra
@@ -82,3 +84,10 @@ parseExtra _ o = Extra
     <*> o .: "server_binary"
     <*> o .: "server_args"
     <*> o .: "server_log"
+    <*> (parseFbCredentials =<< o .: "fb")
+
+parseFbCredentials :: Object -> Parser FB.Credentials
+parseFbCredentials o = FB.Credentials
+    <$> o .: "name"
+    <*> o .: "id"
+    <*> o .: "secret"

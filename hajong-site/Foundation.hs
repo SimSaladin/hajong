@@ -6,7 +6,10 @@ import Prelude
 import Yesod
 import Yesod.Static
 import Yesod.Auth
-import Yesod.Auth.Account
+import qualified Yesod.Auth.Account as Acc
+import Yesod.Auth.Facebook.ServerSide
+import qualified Facebook as FB
+import qualified Yesod.Facebook as YF
 import Yesod.Default.Config
 import Yesod.Default.Util (addStaticContentExternal)
 import Network.HTTP.Client.Conduit (Manager, HasHttpManager (getHttpManager))
@@ -76,6 +79,7 @@ instance Yesod App where
         master <- getYesod
         mmsg <- getMessage
         route <- getCurrentRoute
+        muser <- maybeAuthId
 
         pc <- widgetToPageContent $ do
             addStylesheet $ StaticR css_normalize_css
@@ -95,8 +99,8 @@ instance Yesod App where
     isAuthorized (AuthR _) _ = return Authorized
     isAuthorized FaviconR _ = return Authorized
     isAuthorized RobotsR _ = return Authorized
-    -- Default to Authorized for now.
-    isAuthorized _ _ = return Authorized
+    isAuthorized HomeR _ = return Authorized
+    isAuthorized _ _ = requireAuthId >> return Authorized
 
     addStaticContent =
         addStaticContentExternal (if development then Right else minifym) genFileName Settings.staticDir (StaticR . flip StaticRoute [])
@@ -120,19 +124,45 @@ instance YesodPersistRunner App where
     getDBRunner = defaultGetDBRunner connPool
 
 instance YesodAuth App where
-    type AuthId App = Username
-    getAuthId = return . Just . credsIdent
+    type AuthId App = Acc.Username -- :: Text
+    getAuthId (Creds "account" username _) = return (Just username)
+    getAuthId (Creds "fb" _ _) = lookupSession "username"
     loginDest _ = HomeR
     logoutDest _ = HomeR
-    authPlugins _ = [accountPlugin]
+    authPlugins _ = [authFacebook ["email"], Acc.accountPlugin]
     authHttpManager _ = error "No manager needed"
-    onLogin = return ()
+    onLogin = do
+        -- setMessageI NowLoggedIn
+
+        -- If via fb: create the User persist entry if it doesn't exist.
+        -- If it exists, update fbUserId <-- TODO
+        -- Set session key "username"
+        token <- getUserAccessToken
+        case token of
+            Nothing -> return ()
+            Just token -> do
+                fbUser <- YF.runYesodFbT $ FB.getUser "me" [] (Just token)
+                let Just userEmail = FB.userEmail fbUser
+                    uid = FB.idCode $ FB.userId fbUser
+
+                mUserInDB <- runDB $ getBy $ UniqueUserEmail userEmail
+                userInDB <- case mUserInDB of
+                    Nothing -> let newUser = User uid "" userEmail (Just uid) True "" ""
+                                   in runDB (insert newUser) >> return newUser
+                    Just (Entity _ v) -> return v
+                setSession "username" (userUsername userInDB)
+
+        return ()
     maybeAuthId = lookupSession credsKey
 
-instance YesodAuthAccount (AccountPersistDB App User) App where
-    runAccountDB = runAccountPersistDB
+instance Acc.YesodAuthAccount (Acc.AccountPersistDB App User) App where
+    runAccountDB = Acc.runAccountPersistDB
 
-instance AccountSendEmail App
+instance Acc.AccountSendEmail App
+
+instance YF.YesodFacebook App where
+    fbCredentials = extraFbCredentials . appExtra . settings
+    fbHttpManager = httpManager
 
 -- This instance is required to use forms. You can modify renderMessage to
 -- achieve customized and internationalized form validation messages.

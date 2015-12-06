@@ -25,4 +25,4 @@ instance PersistUserCredentials User where
     userResetPwdKeyF = UserResetPasswordKey
     uniqueUsername = UniqueUsername
 
-    userCreate name email key pwd = User name pwd email False key ""
+    userCreate name email key pwd = User name pwd email Nothing False key ""

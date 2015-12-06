@@ -3,7 +3,7 @@ module Main where
 import Lounge
 import Game
 import Events
-import Util
+import Util exposing (..)
 import GameTypes exposing (..)
 import JSON exposing (decodeEvent, encodeEvent)
 
@@ -16,11 +16,12 @@ import Graphics.Input.Field as Field
 import Graphics.Element exposing (..)
 import Color exposing (..)
 import Signal exposing (..)
+import Debug
 
 -- {{{ Log view ---------------------------------------------------
 logView : GameState -> Element
-logView game = container 500 200 topLeft
-      <| titled "Log"
+logView game = above (spacer 5 5) <| blockElement 500 200
+      <| above (renderTitle "Log")
       <| flow down
       <| List.map (eventView >> leftAligned)
       <| List.take 6
@@ -29,9 +30,6 @@ logView game = container 500 200 topLeft
 isNotInGame x = case x of
    InGameEvents _ -> False
    _              -> True
-
-titled : String -> Element -> Element
-titled str = above (leftAligned <| Text.color charcoal <| Text.fromString str)
 
 eventView : Event -> Text.Text
 eventView ev = case ev of
@@ -84,7 +82,7 @@ newState = { status     = InLounge
            }
 -- }}}
 
--- {{{ Input --------------------------------------------------
+-- {{{ Game loop input ----------------------------------------
 type Input = AnEvent Event
            | GameInput Game.Controls
            | LoungeInput Lounge.Controls
@@ -100,18 +98,25 @@ input = mergeMany
 
 -- {{{ Sounds -------------------------------------------------
 port sounds : Signal String
-port sounds = soundFromInput `map` input
+port sounds = filterMap soundFromInput "" input
 
-soundFromInput : Input -> String
+soundFromInput : Input -> Maybe String
 soundFromInput inp = case inp of
-   AnEvent (InGameEvents (RoundTurnAction {action} :: _)) -> soundFromTurnAction action
-   _ -> ""
+   AnEvent (InGameEvents events) -> soundFromGameEvents events
 
-soundFromTurnAction : TurnAction -> String
+   _ -> Nothing
+
+soundFromGameEvents : List GameEvent -> Maybe String
+soundFromGameEvents events = case events of
+   RoundTurnAction {action} :: _   -> soundFromTurnAction action
+   _                        :: evs -> soundFromGameEvents evs
+   []                              -> Nothing
+
+soundFromTurnAction : TurnAction -> Maybe String
 soundFromTurnAction ta = case ta of
-   TurnTileDiscard _ -> "pop"
-   TurnTileDraw _ _  -> "pop"
-   _                 -> "none"
+   TurnTileDiscard _ -> Just "pop"
+   TurnTileDraw _ _  -> Just "pop"
+   _                 -> Nothing
 
 -- }}}
 

@@ -124,7 +124,6 @@ toHand hp con picks furit canTsumo =
    picks = picks,
    furiten = furit,
    canTsumo = canTsumo }
-   
 
 handPublic : Decoder HandPublic
 handPublic = object5 toHandPublic

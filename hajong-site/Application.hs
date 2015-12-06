@@ -79,10 +79,12 @@ makeFoundation conf = do
     loggerSet' <- newStdoutLoggerSet defaultBufSize
     (getter, _) <- clockDateCacher
 
+    -- hajong-server: game states via ACID
     putStrLn "Opening hajong connection..."
     st <- G.openServerDB (UnixSocket "/tmp/hajong.socket") 
     putStrLn "Hajong socket opened"
 
+    -- site communicates with hajong-server via this local websocket.
     lock <- new
     inv  <- newEmptyMVar
     outv <- newEmptyMVar

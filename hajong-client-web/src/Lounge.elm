@@ -2,7 +2,7 @@ module Lounge where
 
 import GameTypes exposing (..)
 import Events
-import Util
+import Util exposing (..)
 
 import Set
 import Text
@@ -14,6 +14,9 @@ import Graphics.Element exposing (..)
 import Color exposing (..)
 import Graphics.Input exposing (..)
 import Graphics.Input.Field as Field
+
+import Html
+import Html.Attributes as Html
 
 type ButtonState = Submit | Clear
 
@@ -36,12 +39,8 @@ display : Controls -> GameState -> Element
 display v gs = doDraw { chosen = v.chosen, game = gs }
 
 doDraw o = flow down
-    [ Maybe.withDefault
-         (spacer 10 10 |> color red)
-         <| Maybe.map waitView (o.game.gameWait `Maybe.andThen` Util.lookupGameInfo o.game)
-
-    , Text.fromString "Lounge" |> bold |> centered
-    , blockElement 250 400 (gameListView o)
+    [ Maybe.withDefault empty <| Maybe.map waitView (o.game.gameWait `Maybe.andThen` Util.lookupGameInfo o.game)
+    , blockElement 450 400 (gameListView o) `beside` spacer 5 5 `beside` blockElement 250 400 (idlePlayersView o)
     ]
 
 waitView gameinfo = color lightOrange <| flow right
@@ -51,12 +50,20 @@ waitView gameinfo = color lightOrange <| flow right
     ]
 
 gameListView o = flow down
-    [ Text.fromString "Available games" |> bold |> centered
-    , flow down   <| buildGameList o.chosen o.game.lounge.games
-    , joinGameButton
-    , leftAligned <| Text.fromString "Idle players: " `Text.append`
-                     Text.fromString (String.join ", " <| Set.toList o.game.lounge.idle)
+    [ renderTitle "Public games"
+    , spacer 10 10 `beside` (flow down <| buildGameList o.chosen o.game.lounge.games)
+
+    , beside (joinGameButton) <|
+      Html.toElement 200 40 <|
+         Html.button [ Html.attribute "onclick" "location.replace(\"/new-game\")"
+                     , Html.attribute "style" "padding: 0px; margin: 0px; display: block; pointer-events: auto; width: 200px; height: 40px;" ]
+                     [ Html.text "Create a new game..." ]
     ]
+
+idlePlayersView o = flow down
+   [ renderTitle "Idle players"
+   , leftAligned <| Text.fromString (String.join ", " <| Set.toList o.game.lounge.idle)
+   ]
 -- }}}
 
 -- {{{ Game info --------------------------------------
@@ -96,15 +103,16 @@ chosenGame : Mailbox (Maybe GameInfo)
 chosenGame = mailbox Nothing
 chooseGame game = message chosenGame.address (Just game)
 
-joinGame : Mailbox ButtonState
-joinGame = mailbox Clear
-
-joinGameButton : Element
-joinGameButton = button (message joinGame.address Submit) "Join"
+joinGame         = mailbox Clear
+joinGameButton   = button (message joinGame.address Submit) "Join"
 
 -- | When joined a game
 joined : Signal (Maybe GameInfo)
 joined = sampleOn (isSubmit joinGame.signal) chosenGame.signal
+
+-- TODO: game creation inside the elm thing?
+-- newGame       = mailbox Clear
+-- newGameButton = button (message newGame.address Submit) "New game..."
 
 -- }}}
 
@@ -114,7 +122,4 @@ isSubmit s = map (\x -> x == Submit) s
 
 maybeEvent : (a -> Event) -> Signal (Maybe a) -> Signal Event
 maybeEvent f s = map (Maybe.withDefault Noop << Maybe.map f) s
-
-blockElement : Int -> Int -> Element -> Element
-blockElement w h e = size w h (color gray e)
 -- }}}

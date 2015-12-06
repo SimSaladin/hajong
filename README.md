@@ -13,18 +13,20 @@ See http://funktionaali.com/2014-05-04-Riichi.html
 
 Requires elm 0.15
 
-compile with
-
-```
-hajong/hajong-client-web $ elm make Main.elm
-```
+compile with `hajong-client-web/build.sh`
 
 
 # Technical notes
 
 ## Authentication scheme
 
-??
+Authentication happens first in to the yesod application either via
+account/password or facebook. When loading the play screen we fetch game server
+ident+token to localstorage indirectly from the game server (via the yesod app).
+On the play screen we identify ourselves with the ident+token combo direct to
+the game server via websockets.  We clear the token when a page load is made
+where we are not logged in to the yesod application.
+
 
 ## About lens naming
 

@@ -25,6 +25,7 @@ x = done, / = half done, ! = needs testing
 
 # site
 [ ] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
+      [ ] test facebook authentication
 [ ] Save game results to relational database
 [ ] List on-going games.
 [ ] The yesod binary doesn't reconnect to hajong-server automatically. Make it shut down on disconnect.

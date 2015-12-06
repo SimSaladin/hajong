@@ -3,7 +3,10 @@ module Util where
 import GameTypes exposing (..)
 import Maybe
 
+import Text
 import Debug
+import Graphics.Element exposing (..)
+import Color exposing (..)
 
 atLounge : GameState -> Bool
 atLounge = (\s -> s.status == InLounge)
@@ -54,4 +57,9 @@ pickedTile pt = case pt of
    AgariCall t _      -> t
    AgariChankan t _   -> t
    AgariTsumoWanpai t -> t
+
+blockElement : Int -> Int -> Element -> Element
+blockElement w h e = size w h (color gray e)
+
+renderTitle title = Text.fromString title |> Text.bold |> centered
 
