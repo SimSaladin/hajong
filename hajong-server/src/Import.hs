@@ -22,7 +22,7 @@ import           Control.Monad.Trans.Either   as X
 import           Data.Aeson.TH
 ------------------------------------------------------------------------------
 import qualified Text.PrettyPrint.ANSI.Leijen as P
-import           Text.PrettyPrint.ANSI.Leijen as X (Pretty(..), (<+>), string)
+import           Text.PrettyPrint.ANSI.Leijen as X (Pretty(..), (<+>), string, list)
 ------------------------------------------------------------------------------
 
 type CanError m = (MonadError Text m, Functor m)

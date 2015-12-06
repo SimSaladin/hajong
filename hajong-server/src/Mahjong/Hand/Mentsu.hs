@@ -47,10 +47,10 @@ data MentsuKind = Shuntsu -- ^ 3 Tile straight
 -- Instances
 
 instance Pretty Mentsu where
-    pretty = intercalate "-" . map pretty . mentsuTiles
+    pretty = list . intersperse "-" . map pretty . mentsuTiles
 
 instance Pretty [Mentsu] where
-    pretty = intercalate "\n" . map pretty
+    pretty = list . intersperse "\n" . map pretty
 
 -- | A mentsu can result from a shout; and a shout always produces
 -- a mentsu.
