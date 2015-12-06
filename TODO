@@ -1,59 +1,56 @@
 x = done, / = half done, ! = needs testing
 
+[ ] Rework lobby
+
 # mechanics
-[ ] when a call is passed, update callable info to client
-[/] (game) Test all standard yaku; make them work
-[ ] (game) scoring tests: honba, riichi sticks
-[ ] (game) riichi points transfer on own win
-[ ] (game) riichi points leaved on table on draw
-[ ] (game) riichi points transferred to winner
-[ ] (game) ryanhan-shibari
-[/] (game) tenhou, chiihou and renhou: tests done, implementations missing
-[ ] (game) ankan in riichi
-[ ] (game) dora, ura dora count in hans
-[ ] (worker/game) available shouts when refreshing game
-[ ] (game) tochuu ryuukoku
-   [ ] ask for new round when enough non-related tiles
-   [ ] other
-[ ] (game) configuration options: active yaku
+[ ] add test: riichi score is transferred on ron
+[ ] add test: honba are added to payments
+[ ] add test: riichi points on table are transferred on win
+[/] yakumans tenhou, chiihou and renhou: tests done, implementations missing
+[ ] add test: ankan in riichi
+[ ] add test: dora and ura-dora counted on win
+[ ] add test: suufonrenda: four consecutive wind discards
+[ ] add test: kuushuu kyuuhai: 9 different honors or terminals on initial draw
+[ ] add test: suucha riichi: four players riichi. last discard may be called ron on
+[ ] add test: suukaikan: four kantsu called, all not by one player.
+[ ] Implement the suukantsu yaku. Add tests. When one player calls the fourth, game must not end.
 
-# elm
-[ ] (elm) displaying concealed mentsu is not implemented
-[ ] (elm) try out elm-bridge for generating json parsers
-[ ] (elm) chat/dialog
-[ ] (elm) point sticks (1000 done)
-[ ] (elm) auto wait-for-shouts status after discard; indicator color?
-[ ] (elm) ankan mentsu view
-[ ] (elm) error prompts (furiten)
-[/] (elm) real tiles
-[?] (web) BUG game ended and back in lobby -> cannot join games
-[!] (elm) show honba
-[ ] (elm) undisplay riichi when clicked
-[ ] (elm) highlight corresponding tiles on shout hovers
-
-# worker
-[ ] (worker) pause
+# client
+[ ] Display concealed hands of other players
+[ ] Display winning hand
+[ ] Display error prompts when receiving errors in elm
+[ ] Undisplay riichi when clicked
+[ ] Highlight corresponding tiles on shout hovers
+[ ] when a call is passed, update callable info to client. client should not show it
 
 # site
-[ ] (site) game configuration
-[ ] (site) saving game results to relational database
-[/] (site) games/worker status query
-[ ] (site) reconnect automatically to server socket
-[/] (server) worker logging in file
-[ ] (site) gravatar support
-[ ] (site) Optional mic communication via webrtc
-[ ] (site, elm) player last.fm integration
+[ ] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
+[ ] Save game results to relational database
+[ ] List on-going games.
+[ ] The yesod binary doesn't reconnect to hajong-server automatically. Make it shut down on disconnect.
+[ ] Set up logging from workers to a file.
+[ ] Clearly show UUID's of past games. Allow commenting on them. This helps bug reporting
 
-# other
-[ ] (docs) write json channel spec
-[/] (connections) revisit json instances - possibly derive?
-[ ] game conf
+
+# someday/maybe
+[ ] (graphics) point sticks (1000 done)
+[ ] (graphics) more esthetic tiles
+[ ] (elm) chat/dialog
+[ ] (elm) try out elm-bridge for generating json parsers
+[ ] (docs) write json API Spec
+[ ] (site, elm) player last.fm integration
+[ ] (site) Optional mic communication via webrtc
+[ ] Game configuration options
    [ ] (opt) start and goal scores
    [ ] (opt) wareme
    [ ] (opt) chombo
    [ ] (opt) aotenjou
    [ ] (opt) basengo
    [ ] (opt) chombo
+[ ] Pause a worker.
+[ ] ryanhan-shibari
+[ ] (worker/game) available shouts when refreshing game
+[ ] sanchahou: disallow triple ron
 
 # done
 [x] (game, elm) riichi
