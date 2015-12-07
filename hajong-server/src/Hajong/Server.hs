@@ -23,6 +23,7 @@ import           Hajong.Client
 import           Hajong.Worker
 import           Mahjong
 ------------------------------------------------------------------------------
+import           Prelude (read)
 import           Control.Monad.Logger
 import           Control.Concurrent
 import           Data.Acid
@@ -619,21 +620,35 @@ internalConnect _secret = do
 --      d   dump server state
 --      c   dump connected clients
 --      g   dump ongoing games
+--      l <id> <file> load game state from a file
+--      s <id> <file> save game state to a file
 serverDebugger :: Server ()
 serverDebugger = forever $ do
-    i <- getLine
-    putStrLn ""
-    case asText i of
+    inp <- getLine <&> asText
+    case inp of
         ""  -> return ()
         "d" -> print =<< query' DumpDB
         "c" -> do print' "connections: " =<< rview seConnections
                   print' "lounge:      " =<< rview seLounge
         "g" -> mapM_ debugGameShow . itoList =<< rview seWorkers
-        _   -> putStrLn "Unknown command"
+
+        _ | ["l", gid', filename] <- words inp, Just gid <- readMay gid' -> do
+                machine' : kyoku' <- readFile (unpack filename) <&> lines
+                let Just machine = readMay machine'
+                    kyoku        = read $ unpack (unlines kyoku' :: Text) -- TODO: readMay fails here, why?
+                withRunningGame gid $ flip putWorker (WorkerReplaceKyoku machine kyoku)
+
+          | ["s", gid', filename] <- words inp, Just gid <- readMay gid' -> withRunningGame gid $ \rg -> do
+                let wd = _gWorker rg
+                output <- liftIO $ (\m k -> show m ++ "\n" ++ show (_gameDeal k)) <$> readTVarIO (_wMachine wd) <*> readTVarIO (_wGame wd)
+                writeFile (unpack filename) output
+          | otherwise -> putStrLn "Unknown command"
     putStrLn ""
   where
+
     print' :: Show a => Text -> a -> Server ()
     print' t x = putStrLn (t ++ tshow x)
+
     debugGameShow (n, g) = liftIO $ do
         putStrLn $ "Game: " ++ tshow n
         readTVarIO (g^.gWorker.wGame) >>= putDoc . pretty . fmap (unpack . getNick)

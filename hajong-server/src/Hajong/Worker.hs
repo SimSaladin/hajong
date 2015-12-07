@@ -56,6 +56,7 @@ data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
                  | WorkerPartPlayer Client (GameState Client -> IO ())
                  | WorkerGameAction Client GameAction
                  | WorkerForceStart
+                 | WorkerReplaceKyoku Machine (Maybe Kyoku) -- ^ For debugging only.
 
 newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerData IO) a }
                    deriving ( Functor, Applicative, Monad, MonadIO, MonadLogger, MonadReader WorkerData)
@@ -129,7 +130,6 @@ takeInput = liftIO . atomically . takeTMVar =<< view wInput
 processInput :: WorkerInput -> Worker (Maybe (Machine, Worker ()))
 processInput (WorkerAddPlayer client callback)  = addPlayer client callback >> return Nothing
 processInput (WorkerPartPlayer client callback) = partPlayer client callback >> return Nothing
-processInput WorkerForceStart                   = rmodify wGame (over (gamePlayers.each) (\c -> c { isReady = True })) >> return Nothing
 processInput (WorkerGameAction c ga)            = do
         gs <- rview wGame
         case clientToPlayer c gs of
@@ -148,6 +148,11 @@ processInput (WorkerGameAction c ga)            = do
                     -- otherwise yield (m,a)
                     Right (m, a) | GameDontCare <- ga -> a >> rswap wMachine m >> return Nothing -- XXX: This transaction, a >> rswap,  is possibly racy
                                  | otherwise          -> return $ Just (m, a)
+processInput WorkerForceStart                   = rmodify wGame (over (gamePlayers.each) (\c -> c { isReady = True })) >> return Nothing
+processInput (WorkerReplaceKyoku machine kyoku) = do _ <- rmodify wGame (gameDeal .~ kyoku)
+                                                     rswap wMachine machine
+                                                     $logInfo "Game state was replaced successfully"
+                                                     return Nothing
 
 -- * Game play
 

@@ -11,6 +11,7 @@
 ------------------------------------------------------------------------------
 module Mahjong.Tiles where
 
+import Prelude (Read(..), lex)
 import Import hiding ((<>))
 ------------------------------------------------------------------------------
 import Text.PrettyPrint.ANSI.Leijen ((<>), displayS, renderCompact)
@@ -21,7 +22,7 @@ import Text.PrettyPrint.ANSI.Leijen ((<>), displayS, renderCompact)
 -- | A (japanese) mahjong tile.
 data Tile = Suited TileKind Number Aka
           | Honor Honor
-          deriving (Read, Eq, Ord)
+          deriving (Eq, Ord)
 
 data TileKind = ManTile | PinTile | SouTile | HonorTile
               deriving (Show, Read, Eq, Ord)
@@ -31,7 +32,7 @@ type Aka = Bool
 
 -- | The number of man, pin and sou tiles.
 data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
-            deriving (Read, Eq, Ord, Enum, Bounded)
+            deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 data Honor = Sangenpai Sangen
            | Kazehai Kaze
@@ -78,10 +79,14 @@ instance Pretty Tile where
                          Shaa    -> "W "
                          Pei     -> "N "
 instance Show Tile where showsPrec _ = displayS . renderCompact . pretty
+instance Read Tile where
+    readsPrec _ = \s -> case lex s of
+        ([t],'!':s') : [] -> [(fromString [t,'!'], s')]
+        (t,s') : [] -> [(fromString t, s')]
+        _ -> []
 
 -- Number
 instance Pretty Number where pretty = string . show . (+ 1) . fromEnum
-instance Show Number where showsPrec _ = displayS . renderCompact . pretty
 instance IsString Number where
     fromString = toEnum . (\i -> i - 1 :: Int) .
         fromMaybe (error "Number: no read") . readMay

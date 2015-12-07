@@ -89,6 +89,11 @@ tests = testGroup "Standard Yaku"
                            & vHand.handPicks .~ [AgariCall "M1" Nan]
         snd (getYaku vi) @?= [Yaku 2 "Chanta"]
 
+    , testCase "not chanta" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1","M2","M3","M1","M2","M3","S1","S2","S3","P5","P6","P7", "S"]
+                           & vHand.handPicks .~ [AgariCall "S" Nan]
+        snd (getYaku vi) @?= []
+
     , testCase "Kuitan" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M2", "S5", "S6", "S7", "S2", "S3", "S4", "S8", "S8"]
                            & vHand.handCalled .~ [Mentsu Shuntsu "P2" (Just undefined)]
