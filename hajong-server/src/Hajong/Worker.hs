@@ -167,33 +167,37 @@ waitPlayersAndBegin :: WCont
 waitPlayersAndBegin = $logInfo "Waiting for players" >> go
   where
     go = rview wGame >>= maybe (takeInput >>= processInput >> go)
-                               (liftIO >=> beginDeal) . maybeBeginGame
+                               (liftIO >=> beginGame) . maybeBeginGame
 
-beginDeal :: GameState Client -> WCont
-beginDeal gs = do
+-- | Called when beginning the first kyoku.
+beginGame :: GameState Client -> WCont
+beginGame gs = do
+    $logInfo "Game begins now"
     void $ rswap wGame gs
-    $logInfo "Kyoku starts"
-    processMachine =<< rview wMachine
+    unsafeStep InpAuto >>= processMachine
 
 -- | Monitor the kyoku machine and perhaps do something in there.
 processMachine :: Machine -> WCont
-processMachine NotBegun                       = unsafeStep InpAuto    >>= processMachine -- start
+processMachine (NotBegun s)                   = workerWait s >> processKyokuStarts
 processMachine CheckEndConditionsAfterDiscard = unsafeStep InpAuto    >>= processMachine
 processMachine WaitingDraw{}                  = unsafeStep InpAuto    >>= processMachine -- auto draw
 processMachine WaitingDiscard{}               = stepByClientOrTimeout >>= processMachine
 processMachine WaitingShouts{}                = stepByClientOrTimeout >>= processMachine
 processMachine (KyokuEnded res)               = processKyokuEnded res
 
+processKyokuStarts :: WCont
+processKyokuStarts = do
+    Just k <- rview wGame <&> _gameDeal
+    liftIO (maybeNextDeal k) >>= either return go -- returns finalpoints or starts next kyoku
+  where
+    go k = rmodify wGame (gameDeal.~Just k) >> unsafeStep InpAuto >>= processMachine
+
 processKyokuEnded :: KyokuResults -> WCont
 processKyokuEnded results = do
     $logInfo $ "Kyoku ended: " <> tshow results
     rmodify wGame (gameDeal._Just.pResults.~Just results)
-    Just k <- rview wGame <&> _gameDeal
-    liftIO (maybeNextDeal k) >>= either return go -- returns finalpoints or starts next kyoku
-  where
-    go k = do rmodify wGame (gameDeal.~Just k)
-              rmodify wMachine (const NotBegun)
-              processMachine NotBegun
+    rswap wMachine (NotBegun 15)
+    processMachine =<< rview wMachine
 
 -- * Managing connected players 
 
@@ -245,6 +249,9 @@ workerRace secs ma b = do
     s   <- view id
     res <- liftIO $ runWCont s ma `race` threadDelay (secs * 1000000)
     either return (\_ -> return b) res
+
+workerWait :: Int -> Worker ()
+workerWait n = liftIO $ threadDelay (n * 1000000)
 
 -- | Safe kyoku step. Checks whether the step is valid, but does not do
 -- any relevant modifications to the worker state. The modifications can be

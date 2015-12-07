@@ -355,7 +355,7 @@ startGame gid game = do
 createWorker :: Game -> Server WorkerData
 createWorker game = WorkerData (game^.gaSettings)
     <$> (liftIO . newTVarIO =<< attachClients (game^.gaState))
-    <*> (liftIO $ newTVarIO NotBegun)
+    <*> (liftIO $ newTVarIO $ NotBegun 5)
     <*> liftIO newEmptyTMVarIO
     <*> view seLoggerSet
 

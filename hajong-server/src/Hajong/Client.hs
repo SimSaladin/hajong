@@ -22,8 +22,8 @@ data Client = Client
             , getIdent :: Int -- ^ 0 if none set
             , isReal   :: Bool
             , isReady  :: Bool
-            , unicast  :: (WS.WebSocketsData e, MonadIO m) => e -> m ()
-            , receive  :: (WS.WebSocketsData e, MonadIO m) => m e
+            , unicast  :: forall e m. (WS.WebSocketsData e, MonadIO m) => e -> m ()
+            , receive  :: forall e m. (WS.WebSocketsData e, MonadIO m) => m e
             }
 
 -- | Client equality is decided by getNick exclusively

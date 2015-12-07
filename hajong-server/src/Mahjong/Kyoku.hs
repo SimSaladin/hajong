@@ -60,7 +60,7 @@ handOf pk = sHands.at pk
 -- * Logic
 
 -- | Game automata
-data Machine = NotBegun
+data Machine = NotBegun Int -- Seconds to wait before continuing. Waiting is not done in this module, so do it somewhere else.
              | CheckEndConditionsAfterDiscard
              | WaitingDraw Kaze Bool
              | WaitingDiscard Kaze
@@ -76,7 +76,7 @@ data MachineInput = InpAuto
 
 -- | Remember to publish the turn action when successful
 step :: InKyoku m => Machine -> MachineInput -> m Machine
-step NotBegun InpAuto                       = sendDealStarts >> waitForDraw -- startDeal
+step (NotBegun _) InpAuto                   = sendDealStarts >> waitForDraw -- startDeal
 
 step (WaitingDraw pk wanpai) InpAuto        = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded
 step (WaitingDraw pk wanpai) (InpTurnAction pk' (TurnTileDraw wanpai' _))
@@ -149,7 +149,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
     DealWaitForTurnAction wt ->
         [ Endo $ sWaiting .~ Just (Left wt) ]
 
-    DealRiichi _pk -> -- TODO modify state
+    DealRiichi _pk ->
         [ Endo $ pRiichi +~ 1000 ]
 
     DealFlipDora td mtw ->
@@ -322,9 +322,9 @@ processDiscard pk d' = do
 doRiichi :: InKyoku m => Kaze -> m ()
 doRiichi pk = do
     p <- kazeToPlayer pk
-    np <- use $ pPlayers.at p.singular _Just._2.to (\a -> a - 1000)
-    when (np < 0) $ throwError "Cannot riichi: not enough points"
-    tellEvents [DealRiichi pk, GamePoints p np]
+    pointsAfterRiichi <- use $ pPlayers.at p.singular _Just._2.to (\a -> a - 1000)
+    when (pointsAfterRiichi < 0) $ throwError "Cannot riichi: not enough points"
+    tellEvents [DealRiichi pk, GamePoints p (-1000)]
 
 autoDiscard :: InKyoku m => Kaze -> m Machine
 autoDiscard tk = processDiscard tk =<< handAutoDiscard =<< handOf' tk
@@ -390,8 +390,9 @@ endDraw = do
                | otherwise          = x & both %~ div 3000 . fromIntegral . length
     tp' <- mapM kazeToPlayer tp
     np' <- mapM kazeToPlayer np
-    dealEnds $ DealDraw (map (,r) tp') (map (,p) np')
+    dealEnds $ DealDraw (map (,r) tp') (map (,-p) np')
 
+-- TODO: refactor to a similar pure function like @tsumoPayers@.
 endRon :: InKyoku m => Player -> Player -> m KyokuResults
 endRon sp tp = do
     h   <- use pHonba
@@ -411,11 +412,9 @@ dealEnds results = do
 payPoints :: KyokuResults -> [GameEvent]
 payPoints res = case res of
     DealAbort{}  -> []
-    DealDraw{..} -> map g' dTenpais ++ map g dNooten
-    _            -> map f (dWinners res) ++ map g (dPayers res)
+    DealDraw{..} -> map (uncurry GamePoints) $ dTenpais ++ dNooten
+    _            -> map f (dWinners res) ++ map (uncurry GamePoints) (dPayers res)
   where f (p, v, _) = GamePoints p v
-        g (p, v)    = GamePoints p (- v)
-        g' (p, v)   = GamePoints p v
 
 -- |
 -- >>> roundKyokuPoints 150
