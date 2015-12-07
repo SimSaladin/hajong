@@ -141,6 +141,7 @@ dispInfoBlock co gs rs =
       , dealAndRoundIndicator rs
       , toForm (dispWanpai co rs) |> scale 0.6 |> move (-60, 60)
       , honbaIndicator rs.honba
+      , riichiInTableIndicator rs.inTable
       , moveY (-30) <| toForm <| centered <| T.fromString <| toString rs.tilesleft
       ]
       ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 95 rs.mypos k) [Ton, Nan, Shaa, Pei]
@@ -165,8 +166,11 @@ turnIndicator gs =
                Just wr -> toFloat wr.seconds - (inSeconds (gs.updated - wr.added))
    ]
 
-honbaIndicator h = if h > 0 then move (-60,-60) <| toForm <| centered <| T.fromString <| toString (h * 100) ++ "H"
+honbaIndicator h = if h > 0 then move (-60,-60) <| toForm <| centered <| T.fromString <| toString h ++ "H"
                             else toForm empty
+
+riichiInTableIndicator n = if n > 0 then move (-30, -60) <| toForm <| centered <| T.color red <| T.fromString <| toString (n / 1000) ++ "R"
+                                    else toForm empty
 
 dispPlayerInfo : RoundState -> Kaze -> Form
 dispPlayerInfo rs k =
