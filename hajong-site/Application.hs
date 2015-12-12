@@ -79,21 +79,19 @@ makeFoundation conf = do
     loggerSet' <- newStdoutLoggerSet defaultBufSize
     (getter, _) <- clockDateCacher
 
+    lock <- new
+
     -- hajong-server: game states via ACID
-    putStrLn "Opening hajong connection..."
+    putStrLn "Opening hajong-server ACID connection..."
     st <- G.openServerDB (UnixSocket "/tmp/hajong.socket") 
-    putStrLn "Hajong socket opened"
+    putStrLn "ACID connection established."
 
     -- site communicates with hajong-server via this local websocket.
-    lock <- new
     inv  <- newEmptyMVar
     outv <- newEmptyMVar
-    forkIO $ (`finally` putStrLn "Internal control has died.") $
-        WS.runClient "localhost" 8001 "/" $ \conn -> do
-            WS.sendTextData conn (G.InternalControl "")
-            forever $ do
-                takeMVar inv >>= WS.sendTextData conn
-                WS.receiveData conn >>= putMVar outv
+    forkIO $ runHajongInternalControl inv outv `finally` (do putStrLn "Internal hajong-server WS control channel lost. Reconnecting in 1s..."
+                                                             threadDelay 1000000
+                                                             runHajongInternalControl inv outv)
 
     let logger = Yesod.Core.Types.Logger loggerSet' getter
         mkFoundation p = App
@@ -120,6 +118,14 @@ makeFoundation conf = do
         (Database.Persist.runPool dbconf (runMigration migrateAll) p)
 
     return foundation
+
+runHajongInternalControl inv outv = do
+    WS.runClient "localhost" 8001 "/" $ \conn -> do
+        putStrLn "Internal hajong-server WS control channel opened."
+        WS.sendTextData conn (G.InternalControl "")
+        forever $ do
+            takeMVar inv >>= WS.sendTextData conn
+            WS.receiveData conn >>= putMVar outv
 
 -- for yesod devel
 getApplicationDev :: IO (Int, Application)

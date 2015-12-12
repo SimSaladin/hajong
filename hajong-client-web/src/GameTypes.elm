@@ -52,7 +52,7 @@ type alias RoundState =
    , results   : Maybe RoundResult
    , deal      : Int
    , honba     : Int
-   , inTable   : Int
+   , inTable   : Int -- Number of riichi sticks in table
    , prevDeals : List (Kaze, Int)
    }
 
