@@ -34,7 +34,7 @@ import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
 import           Data.Time.Clock (secondsToDiffTime)
 import           Network
-import           System.Log.FastLogger (LoggerSet, pushLogStr, toLogStr)
+import           System.Log.FastLogger (LoggerSet, pushLogStr)
 import           System.Directory (removeFile)
 import           System.Random
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
@@ -141,6 +141,8 @@ $(deriveSafeCopy 0 'base ''RiichiState)
 $(deriveSafeCopy 0 'base ''DrawState)
 $(deriveSafeCopy 0 'base ''FuritenState)
 
+-- SafeCopy instances for indexed types
+
 instance (SafeCopy (m Bool), SafeCopy (m [Tile]), SafeCopy (m FuritenState), SafeCopy (PickedTile m)) => SafeCopy (Hand m) where
     version          = 0
     putCopy Hand{..} = contain $ do safePut _handCalled; safePut _handDiscards; safePut _handRiichi; safePut _handIppatsu; safePut _handState; safePut _handPicks; safePut _handConcealed; safePut _handFuriten; safePut _handCanTsumo;
@@ -170,8 +172,8 @@ instance SafeCopy a => SafeCopy (Identity a) where
 
 instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
     version = 0
-    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pDeal; safePut _pTurn; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _pDeals; safePut _sEvents; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
-    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet 
+    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pTurn; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _pDeals; safePut _sEvents; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
+    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet 
 
 instance SafeCopy (GameState Int) where
     putCopy (GameState a b c) = contain $ do safePut a; safePut b; safePut c
@@ -461,6 +463,8 @@ uni ev = view seClient >>= (`unicast` ev)
 uniError :: Text -> Server ()
 uniError txt = view seClient >>= (`unicastError` txt)
 
+-- Writing typesigs for these helpers would require types from the
+-- acid-state package that are not exposed in the API.
 update' ev = view db >>= \d -> liftIO (update d ev)
 query'  ev = view db >>= \d -> liftIO (query d ev)
 

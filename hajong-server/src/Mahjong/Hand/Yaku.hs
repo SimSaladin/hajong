@@ -8,20 +8,57 @@
 -- Portability    : non-portable
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Yaku
-    ( runYakuCheck, allStandard) where
+    ( checkYaku, runYakuCheck, allStandard) where
 
 ------------------------------------------------------------------------------
-import Mahjong.Hand.Yaku.Builder
-import Mahjong.Hand.Yaku.Standard
+import            Import
+import            Control.Monad (msum)
 ------------------------------------------------------------------------------
-import Mahjong.Kyoku.Internal
+import            Mahjong.Hand.Algo (Grouping)
+import            Mahjong.Hand.Yaku.Builder
+import            Mahjong.Hand.Yaku.Standard
+------------------------------------------------------------------------------
+import            Mahjong.Kyoku.Internal
 ------------------------------------------------------------------------------
 
-allStandard :: [YakuCheck Yaku]
+-- | All standard Yaku. Internal list consists of mutually exclusive yaku.
+--
+-- We try to specify as much as possible in the YakuCheck code so that
+-- mutual exclusivity is necessary at this level only for some exceptions,
+-- i.e. yaku that wholly include some other yaku (iipeikou and ryanpeikou).
+allStandard :: [[YakuCheck Yaku]]
 allStandard = 
-    [ chankan, chanta, chiitoitsu, chinitsu
-    , yakuhaiRoundWind, yakuhaiSeatWind, yakuhaiRed, yakuhaiGreen, yakuhaiWhite
-    , honitsu, honroutou, haiteiRaoyui, houteiRaoyui, iipeikou, ippatsu, ittsuu
-    , junchan, kuitan, menzenTsumo, pinfu, riichi, rinshanKaihou
-    , ryanpeikou, sanAnkou, sanKantsu, sanshokuDoujin, sanshokuDoukou
-    , shouSangen, tanyao, toitoi, nagashiMangan ]
+    [ [ chankan ]
+    , [ chanta ]
+    , [ chinitsu ]
+    , [ yakuhaiRoundWind ]
+    , [ yakuhaiSeatWind ]
+    , [ yakuhaiRed ]
+    , [ yakuhaiGreen ]
+    , [ yakuhaiWhite ]
+    , [ honitsu ]
+    , [ honroutou ]
+    , [ haiteiRaoyui ]
+    , [ houteiRaoyui ]
+    , [ ryanpeikou, chiitoitsu, iipeikou ]
+    , [ ippatsu ]
+    , [ ittsuu ]
+    , [ junchan ]
+    , [ kuitan ]
+    , [ menzenTsumo ]
+    , [ pinfu ]
+    , [ riichi ]
+    , [ rinshanKaihou ]
+    , [ sanAnkou ]
+    , [ sanKantsu ]
+    , [ sanshokuDoujin ]
+    , [ sanshokuDoukou ]
+    , [ shouSangen ]
+    , [ tanyao ]
+    , [ toitoi ]
+    , [ nagashiMangan ]
+    ]
+
+checkYaku :: [[YakuCheck Yaku]] -> ValueInfo -> Grouping -> [Yaku]
+checkYaku yakus vi grp = mapMaybe (msum . map (runYakuCheck vi grp)) yakus
+

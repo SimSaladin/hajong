@@ -141,10 +141,10 @@ instance ToJSON GameEvent where
         DealPublicHandChanged pk hand            -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
         DealPrivateHandChanged _ _ hand          -> atEvent "my-hand"      ["hand"        .= hand]
         DealFlipDora dora _                      -> atEvent "flipped-dora" ["tile"        .= dora]
-        DealNick p pk nick                       -> atEvent "nick"         ["player"      .= p, "player-kaze" .= pk, "nick" .= nick]
+        DealNick pk p nick                       -> atEvent "nick"         ["player"      .= p, "player-kaze" .= pk, "nick" .= nick]
         DealRiichi pk                            -> atEvent "riichi"       ["player-kaze" .= pk]
         DealEnded results                        -> atEvent "end"          ["results"     .= results]
-        GamePoints p n                           -> atEvent "set-points"   ["player"      .= p, "points" .= n]
+        GamePoints pk n                          -> atEvent "points"       ["player-kaze" .= pk, "points" .= n]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard d) = atType "discard"    ["riichi" .= _dcRiichi d, "tile" .= _dcTile d, "to" .= _dcTo d]
@@ -184,7 +184,6 @@ instance ToJSON Honor where
 instance (ToJSON (m Bool), ToJSON (m [Tile]), ToJSON (m Tile), ToJSON (m RiichiState), ToJSON (m FuritenState), ToJSON (m DrawState)) => ToJSON (Kyoku' m) where
     toJSON x = object
         [ "round"      .= _pRound x
-        , "deal"       .= _pDeal x
         , "turn"       .= _pTurn x
         , "oja"        .= _pOja x
         , "first-oja"  .= _pFirstOja x

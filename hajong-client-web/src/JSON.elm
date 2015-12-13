@@ -104,7 +104,7 @@ gameEventOfType eventType = case eventType of
     "riichi"       -> object1 (\pk     -> RoundRiichi                   { player_kaze = pk                         } ) playerKaze
     "filpped-dora" -> object1 (\t      -> RoundFlippedDora              { tile = t                                 } ) ("tile" := tile)
     "end"          -> object1 RoundEnded                                                                               ("results" := results)
-    "set-points"   -> object2 (\p po -> RoundGamePoints                 { player = p, points = po                  } ) player ("points" := int)
+    "points"       -> object2 (\pk po  -> RoundGamePoints               { player_kaze = pk, points = po            } ) playerKaze ("points" := int)
     _              -> Debug.crash <| "Couldn't deserialize game event type `" ++ eventType ++ "'"
 
 -- ** Hand
@@ -211,7 +211,7 @@ readShoutKind s = case s of
 roundState : Decoder RoundState
 roundState = object8 RoundState
     ("mypos"      := kaze)
-    ("round"      := kaze)
+    ("round"      := tuple2 kaze int)
     ("turn"       := kaze)
     ("player"     := int)
     ("oja"        := int)
@@ -223,7 +223,6 @@ roundState = object8 RoundState
        ("players"    := list players)
        ("myhand"     := hand)
        ("results"    := maybe results)
-       ("deal"       := int)
        ("honba"      := int)
        ("in-table"   := int)
        (succeed []) -- ([] -- TODO : "prev-deals" .: game |> withArray
@@ -233,7 +232,7 @@ points : Decoder (Kaze, Int)
 points = tuple2 (,) kaze int
 
 players : Decoder (Kaze, (Player, Int, String))
-players = tuple2 (\p (k, ps, n) -> (k, (p, ps, n))) int (tuple3 (,,) kaze int string)
+players = tuple2 (\k (p, ps, n) -> (k, (p, ps, n))) kaze (tuple3 (,,) player int string)
 -- }}}
 
 -- * {{{ Results -------------------------------------------------------
@@ -248,10 +247,10 @@ resultsOfType t = case t of
    _           -> Debug.crash <| "Couldn't deserialize results type `" ++ t ++ "'"
 
 winner : Decoder Winner
-winner = tuple3 (\p points h -> Winner p points h) int int valuedHand
+winner = tuple3 (\p points h -> Winner p points h) kaze int valuedHand
 
 payer : Decoder Payer
-payer = tuple2 (\p v -> Payer p v) int int
+payer = tuple2 (\p v -> Payer p v) kaze int
 -- }}}
 
 -- {{{ * Value

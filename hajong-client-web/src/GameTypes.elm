@@ -39,7 +39,7 @@ type alias Player = Int
 -- This duplicates Hajong.Game.Round.GamePlayer
 type alias RoundState = 
    { mypos     : Kaze
-   , round     : Kaze
+   , round     : (Kaze, Int)
    , turn      : Kaze
    , player    : Player
    , oja       : Player
@@ -50,7 +50,6 @@ type alias RoundState =
    , players   : List (Kaze, (Player, Int, String))
    , myhand    : Hand
    , results   : Maybe RoundResult
-   , deal      : Int
    , honba     : Int
    , inTable   : Int -- Number of riichi sticks in table
    , prevDeals : List (Kaze, Int)
@@ -60,8 +59,8 @@ type RoundResult = DealTsumo { winners : List Winner, payers : List Payer }
                  | DealRon   { winners : List Winner, payers : List Payer }
                  | DealDraw  { tenpai  : List Payer,  nooten : List Payer }
 
-type alias Winner = { player : Player, points : Points, valuehand : Valued }
-type alias Payer  = { player : Player, points : Points }
+type alias Winner = { player_kaze : Kaze, points : Points, valuehand : Valued }
+type alias Payer  = { player_kaze : Kaze, points : Points }
 
 type alias Points = Int
 type alias Yaku = { han : Int, name : String }
@@ -110,7 +109,7 @@ type GameEvent = RoundPrivateStarts            RoundState
 
                | RoundFlippedDora              { tile : Tile }
                | RoundRiichi                   { player_kaze : Kaze }
-               | RoundGamePoints               { player : Player, points : Points }
+               | RoundGamePoints               { player_kaze : Kaze, points : Points }
 -- }}}
 
 -- {{{ Actions ---------------------------------------------------------------

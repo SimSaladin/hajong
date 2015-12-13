@@ -130,11 +130,11 @@ yakuState :: YakuCheck ValueInfo
 yakuState = liftF (YakuStateful id)
 
 -- | Simple yaku helper to require some same property from the four mentsu
--- and any pair.
+-- and the pair.
 allMentsuOfKind :: MentsuProp -> YakuCheck ()
 allMentsuOfKind tkind = do
-    replicateM_ 4 $ anyMentsu tkind
     anyJantou tkind
+    replicateM_ 4 $ anyMentsu tkind
 
 -- | Fail the hand
 yakuFail :: YakuCheck a
@@ -142,13 +142,13 @@ yakuFail = liftF YakuFailed -- (error "Not used"))
 
 -- | Require any mentsu with a property.
 anyKoutsu, anyKantsu, anyShuntsu, anyJantou, anyMentsu, anyKoutsuKantsu, anyMentsuJantou :: MentsuProp -> YakuCheck ()
-anyMentsu        tkind = liftF $ YakuMentsu tkind ()
-anyKoutsu        tkind = liftF $ YakuMentsu (MentsuKoutsu       &. tkind) ()
-anyShuntsu       tkind = liftF $ YakuMentsu (MentsuShuntsu      &. tkind) ()
-anyKantsu        tkind = liftF $ YakuMentsu (MentsuKantsu       &. tkind) ()
-anyJantou        tkind = liftF $ YakuMentsu (MentsuJantou       &. tkind) ()
-anyKoutsuKantsu  tkind = liftF $ YakuMentsu (MentsuKoutsuKantsu &. tkind) ()
-anyMentsuJantou  tkind = liftF $ YakuMentsu (MentsuOrJantou    &. tkind) ()
+anyMentsu        tkind = liftF $ YakuMentsu (propNot MentsuJantou &. tkind) ()
+anyKoutsu        tkind = liftF $ YakuMentsu (MentsuKoutsu         &. tkind) ()
+anyShuntsu       tkind = liftF $ YakuMentsu (MentsuShuntsu        &. tkind) ()
+anyKantsu        tkind = liftF $ YakuMentsu (MentsuKantsu         &. tkind) ()
+anyJantou        tkind = liftF $ YakuMentsu (MentsuJantou         &. tkind) ()
+anyKoutsuKantsu  tkind = liftF $ YakuMentsu (MentsuKoutsuKantsu   &. tkind) ()
+anyMentsuJantou  tkind = liftF $ YakuMentsu (MentsuOrJantou       &. tkind) ()
 
 -- | Require any mentsu with a property. Rest of the definition may depend
 -- on the matched tile.
@@ -156,7 +156,7 @@ anyShuntsu', anyKoutsuKantsu', anyMentsu', anyMentsuJantou' :: MentsuProp -> Yak
 anyMentsu'       tkind = liftF $ YakuMentsu' tkind id
 anyKoutsuKantsu' tkind = liftF $ YakuMentsu' (MentsuKoutsuKantsu &. tkind) id
 anyShuntsu'      tkind = liftF $ YakuMentsu' (MentsuShuntsu      &. tkind) id
-anyMentsuJantou' tkind = liftF $ YakuMentsu' (MentsuOrJantou    &. tkind) id
+anyMentsuJantou' tkind = liftF $ YakuMentsu' (MentsuOrJantou     &. tkind) id
 
 tileGroupHead :: TileGroup -> Tile
 tileGroupHead = headEx . tileGroupTiles
@@ -177,7 +177,6 @@ sameTile = TileSameAs
 containsTile = TileContained
 sameNumber = TileSameNumber
 sameSuit = TileSameSuit
-
 
 ofNumber :: Number -> MentsuProp
 ofNumber = TileNumber
@@ -204,7 +203,7 @@ matchProp MentsuKoutsu       (GroupComplete mentsu) = isKoutsu mentsu
 matchProp MentsuKantsu       (GroupComplete mentsu) = isKantsu mentsu
 matchProp MentsuKoutsuKantsu (GroupComplete mentsu) = isKantsu mentsu || isKoutsu mentsu
 matchProp tt tg
-    | TileTerminal        <- tt = T.terminal (headEx tiles) || T.terminal (lastEx tiles)
+    | TileTerminal        <- tt = any T.terminal tiles
     | TileSameAs tile     <- tt = headEx tiles == tile
     | TileContained tile  <- tt = tile `elem` tiles
     | TileSuited          <- tt = T.isSuited (headEx tiles)

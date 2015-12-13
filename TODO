@@ -3,18 +3,19 @@ x = done, / = half done, ! = needs testing
 [ ] Rework lobby
 
 # mechanics
-[ ] add test: riichi score is transferred on ron
+[x] add test: riichi score is transferred on ron
 [ ] add test: honba are added to payments
 [ ] add test: riichi points on table are transferred on win
-[/] yakumans tenhou, chiihou and renhou: tests done, implementations missing
+[ ] implement the yakumans tenhou, chiihou and renhou. tests are done
 [ ] add test: ankan in riichi
 [ ] add test: dora and ura-dora counted on win
 [ ] add test: suufonrenda: four consecutive wind discards
 [ ] add test: kuushuu kyuuhai: 9 different honors or terminals on initial draw
-[ ] add test: suucha riichi: four players riichi. last discard may be called ron on
+[x] add test: suucha riichi: four players riichi. last discard may be called ron on
 [ ] add test: suukaikan: four kantsu called, all not by one player.
 [ ] Implement the suukantsu yaku. Add tests. When one player calls the fourth, game must not end.
-
+[ ] clear TODO's from code
+[ ] test and implement chankan
 # client
 [ ] Display concealed hands of other players
 [ ] Display winning hand
@@ -22,7 +23,6 @@ x = done, / = half done, ! = needs testing
 [ ] Undisplay riichi when clicked
 [ ] Highlight corresponding tiles on shout hovers
 [ ] when a call is passed, update callable info to client. client should not show it
-
 # site
 [ ] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
       [ ] test facebook authentication
@@ -79,3 +79,12 @@ x = done, / = half done, ! = needs testing
 [!] (game, elm, server) tsumo
 [!] minshoukan
 [!] ankan
+
+
+# changes
+[x] in Kyoku-type: pPlayers changed to index with kaze, not player. change in client
+[x] flipped argument order in DealNick, change in JSON on  both sides
+[x] in gamePoints, player changed to Kaze
+[x] Kyoku._pRound : Kaze -> (Kaze, Int)
+[x] in KyokuResults, Players are now Kaze
+[x] Kyoku._pDeal removed

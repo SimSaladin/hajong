@@ -149,8 +149,8 @@ processInput (WorkerGameAction c ga)            = do
                     Right (m, a) | GameDontCare <- ga -> a >> rswap wMachine m >> return Nothing -- XXX: This transaction, a >> rswap,  is possibly racy
                                  | otherwise          -> return $ Just (m, a)
 processInput WorkerForceStart                   = rmodify wGame (over (gamePlayers.each) (\c -> c { isReady = True })) >> return Nothing
-processInput (WorkerReplaceKyoku machine kyoku) = do _ <- rmodify wGame (gameDeal .~ kyoku)
-                                                     rswap wMachine machine
+processInput (WorkerReplaceKyoku machine kyoku) = do rmodify wGame (gameDeal .~ kyoku)
+                                                     _ <- rswap wMachine machine
                                                      $logInfo "Game state was replaced successfully"
                                                      return Nothing
 
@@ -196,7 +196,7 @@ processKyokuEnded :: KyokuResults -> WCont
 processKyokuEnded results = do
     $logInfo $ "Kyoku ended: " <> tshow results
     rmodify wGame (gameDeal._Just.pResults.~Just results)
-    rswap wMachine (NotBegun 15)
+    _ <- rswap wMachine (NotBegun 15)
     processMachine =<< rview wMachine
 
 -- * Managing connected players 

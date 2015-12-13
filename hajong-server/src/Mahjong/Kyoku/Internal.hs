@@ -32,18 +32,17 @@ import qualified Text.PrettyPrint.ANSI.Leijen   as P
 -- only.
 data Kyoku' m = Kyoku
     -- always public
-    { _pRound         :: Kaze
-    , _pDeal          :: Int
+    { _pRound         :: Round
     , _pTurn          :: Kaze
-    , _pOja           :: Player
+    , _pOja           :: Player -- TODO is field this necessary?
     , _pFirstOja      :: Player
     , _pWallTilesLeft :: Int
     , _pDora          :: [Tile]
-    , _pPlayers       :: Map Player (Kaze, Points, Text)
+    , _pPlayers       :: Map Kaze (Player, Points, Text)
     , _pHonba         :: Int
     , _pRiichi        :: Int -- ^ Points in table for riichi
     , _pResults       :: Maybe KyokuResults
-    , _pDeals         :: [(Kaze, Int)] -- ^ Previous deals in decreasing order by time
+    , _pDeals         :: [Round] -- ^ Previous deals in decreasing order by time TODO: include renchan and previous kyoku uuid's
 
     -- secret
     , _sEvents        :: [GameEvent]
@@ -53,10 +52,13 @@ data Kyoku' m = Kyoku
     , _sWaiting       :: Maybe Waiting -- ^ Waiting turn action or shout(s)
     } deriving (Typeable)
 
-deriving instance Show       (Kyoku' Maybe)
-deriving instance Read       (Kyoku' Maybe)
-deriving instance Show       (Kyoku' Identity)
-deriving instance Read       (Kyoku' Identity)
+deriving instance Eq   (Kyoku' Maybe)
+deriving instance Show (Kyoku' Maybe)
+deriving instance Read (Kyoku' Maybe)
+
+deriving instance Eq   (Kyoku' Identity)
+deriving instance Show (Kyoku' Identity)
+deriving instance Read (Kyoku' Identity)
 
 type Kyoku = Kyoku' Identity
 
@@ -65,6 +67,9 @@ type AsPlayer = Kyoku' Maybe
 
 -- | Left for turn, right for shout(s)
 type Waiting = Either WaitTurnAction [WaitShout]
+
+-- | @E1 == (Ton, 1)@ etc.
+type Round = (Kaze, Int)
 
 -- | (shouting player, shouting kaze, seconds left, available shouts)
 type WaitShout = (Player, Kaze, Int, [Shout])
@@ -81,11 +86,11 @@ data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a rou
                | DealPublicHandChanged Kaze HandP
                | DealPrivateHandChanged Player Kaze HandA -- ^ Wholly private
                | DealFlipDora Tile (Maybe Tile) -- ^ New dora, tile from wall to wanpai
-               | DealNick Player Kaze Text
+               | DealNick Kaze Player Text -- Pos, player id, nick TODO: no nick but fetch the player info separetely
                | DealRiichi Kaze
                | DealEnded KyokuResults
-               | GamePoints Player Int -- ^ New points
-               deriving (Show, Read, Typeable)
+               | GamePoints Kaze Int -- ^ Point change
+               deriving (Eq, Show, Read, Typeable)
 
 -- | Actions you do on your turn.
 data TurnAction = TurnTileDiscard Discard
@@ -110,19 +115,19 @@ newtype FinalPoints = FinalPoints PointsStatus deriving (Show, Read)
 
 data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                   | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
-                  | DealDraw  { dTenpais :: [(Player, Points)], dNooten :: [Payer] }
+                  | DealDraw  { dTenpais :: [Payer], dNooten :: [Payer] }
                   | DealAbort { dReason :: AbortiveDraw }
-                  deriving (Show, Read, Typeable)
+                  deriving (Eq, Show, Read, Typeable)
 
 data AbortiveDraw = Unrelated9
                   | SuufontsuRenta -- ^ All four winds
                   | SuuchaRiichi   -- ^ All players riichi
                   | SuukanSanra    -- ^ Fourth kon declared (or fifth if one player declared all four)
                   | Sanchahou      -- ^ Three players ron
-                  deriving (Show, Read, Typeable)
+                  deriving (Eq, Show, Read, Typeable)
 
-type Winner = (Player, Points, ValuedHand)
-type Payer  = (Player, Points)
+type Winner = (Kaze, Points, ValuedHand)
+type Payer  = (Kaze, Points)
 
 -- ** Hand value
 
@@ -131,7 +136,7 @@ data ValuedHand = ValuedHand
     { _vhMentsu :: [Mentsu]
     , _vhTiles  :: [Tile] -- ^ Concealed tiles
     , _vhValue  :: Value
-    } deriving (Show, Read)
+    } deriving (Eq, Show, Read)
 
 type Fu = Int
 
@@ -146,19 +151,19 @@ data Value = Value
     , _vaHan   :: Han
     , _vaValue :: Points -- ^ Basic points (non-dealer and not rounded)
     , _vaNamed :: Maybe Text
-    } deriving (Show, Read)
+    } deriving (Eq, Show, Read)
 
 data Yaku = Yaku
     { _yHan    :: Int
     , _yName   :: Text
-    } deriving (Show, Read, Eq)
+    } deriving (Eq, Ord, Show, Read)
 
 -- | Required info to calculate the value from a hand.
 data ValueInfo = ValueInfo
     { _vKyoku  :: Kyoku
     , _vPlayer :: Kaze
     , _vHand   :: HandA
-    } deriving (Show, Read)
+    } deriving (Eq, Show, Read)
 
 instance HasGroupings ValueInfo where getGroupings = getGroupings . _vHand
 
@@ -175,16 +180,15 @@ newKyoku players names = do
     oja <- (players L.!!) <$> randomRIO (0, 3)
     tiles <- shuffleTiles
     return $ dealTiles tiles $ Kyoku
-        { _pDeal          = 1
-        , _pDeals         = []
+        { _pDeals         = []
         , _pDora          = []
         , _pFirstOja      = oja
         , _pHonba         = 0
         , _pRiichi        = 0
         , _pOja           = oja
-        , _pPlayers       = mapFromList $ zip players (zip3 [Ton .. Pei] (repeat 25000) names)
+        , _pPlayers       = mapFromList $ zip [Ton .. Pei] (zip3 players (repeat 25000) names)
         , _pResults       = Nothing
-        , _pRound         = Ton
+        , _pRound         = (Ton, 1)
         , _pTurn          = Ton
 
         , _pWallTilesLeft = 0

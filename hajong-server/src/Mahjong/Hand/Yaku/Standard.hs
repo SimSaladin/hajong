@@ -27,18 +27,10 @@ import           Mahjong.Hand.Internal
 pinfu :: YakuCheck Yaku
 pinfu = do
     concealedHand
-    anyJantou suited -- pair
+    anyJantou suited
 
-    [pick] <- yakuState <&> view (vHand.handPicks)
-    let agari = case pick of -- TODO agari used somewhere else perhaps too?
-            FromWall (Identity t) -> t
-            FromWanpai (Identity t) -> t
-            AgariTsumo t -> t
-            AgariCall t _ -> t
-            AgariChankan t _ -> t
-            AgariTsumoWanpai t -> t
-
-    -- wait two-sided
+    -- require: wait (at least) two-sided
+    agari <- yakuState <&> pickedTile . view (vHand.handPicks.to lastEx)
     [a, _, c] <- anyShuntsu' (suited &. containsTile agari) <&> tileGroupTiles
     if (tileNumber a == Just Ii && agari == c) || (tileNumber c == Just Chuu && agari == a)
         then yakuFail
@@ -114,8 +106,6 @@ shouSangen = do
 
 -- ** Tile kind based
 
-
-
 yakuhai :: Tile -> Text -> YakuCheck Yaku
 yakuhai tile desc = do
     anyKoutsuKantsu (sameTile tile)
@@ -124,7 +114,7 @@ yakuhai tile desc = do
 yakuhaiRoundWind, yakuhaiSeatWind :: YakuCheck Yaku
 yakuhaiRoundWind = do
     info <- yakuState
-    let roundTile = kaze $ info^.vKyoku.pRound
+    let roundTile = kaze $ info^.vKyoku.pRound._1
     yakuhai roundTile "Round Wind"
 
 yakuhaiSeatWind = do
@@ -151,8 +141,10 @@ kuitan = do
 
 chanta :: YakuCheck Yaku
 chanta = do
+    concealedHandDegrade
     anyShuntsu terminal
-    replicateM_ 4 $ anyMentsuJantou (terminal |. honor)
+    anyMentsuJantou honor
+    replicateM_ 3 $ anyMentsuJantou (terminal |. honor)
     return (Yaku 2 "Chanta")
 
 honitsu :: YakuCheck Yaku
@@ -166,7 +158,8 @@ honitsu = do
 junchan :: YakuCheck Yaku
 junchan = do
     concealedHandDegrade
-    allMentsuOfKind terminal
+    anyShuntsu terminal 
+    replicateM_ 4 $ anyMentsuJantou terminal
     return (Yaku 3 "Junchan")
 
 chinitsu :: YakuCheck Yaku
@@ -183,7 +176,7 @@ chiitoitsu :: YakuCheck Yaku
 chiitoitsu = do
     concealedHand
     info <- yakuState
-    if Just (-1) == shantenBy chiitoitsuShanten (info^.vHand.handConcealed._Wrapped :: [Tile])
+    if Just (-1) == shantenBy chiitoitsuShanten (info^.vHand.handConcealed._Wrapped ++ map pickedTile (info^.vHand.handPicks))
         then return (Yaku 2 "Chiitoitsu")
         else yakuFail
 

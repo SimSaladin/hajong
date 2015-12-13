@@ -14,7 +14,7 @@ import Mahjong
 import MahjongTest.Mechanics
 
 -- | Defaults for the tests
-kyoku = Kyoku {_pRound = Ton, _pDeal = 1, _pTurn = Ton, _pOja = Player 3, _pFirstOja = Player 3, _pWallTilesLeft = 70, _pDora = ["P4"], _pPlayers = error "not used", _pHonba = 0, _pRiichi = 0, _pResults = Nothing, _pDeals = [], _sEvents = [], _sHands = error "not used", _sWall = [], _sWanpai = [], _sWaiting = Nothing}
+kyoku = Kyoku {_pRound = (Ton, 1), _pTurn = Ton, _pOja = Player 3, _pFirstOja = Player 3, _pWallTilesLeft = 70, _pDora = ["P4"], _pPlayers = error "not used", _pHonba = 0, _pRiichi = 0, _pResults = Nothing, _pDeals = [], _sEvents = [], _sHands = error "not used", _sWall = [], _sWanpai = [], _sWaiting = Nothing}
 valueInfo = ValueInfo kyoku Ton $ Hand [] (map (\t -> Discard t Nothing False) ["N" ,"W" ,"G!","S7","P9","M6","S2","R!","S9","P1"]) NoRiichi False DrawNone [AgariTsumo "P2"] (return ["S5","P6","S6","P5","P4","S4","M5","S2","P3","P7","S7","S3","M5"]) (return NotFuriten) (return False)
 
 tests :: TestTree
@@ -23,6 +23,11 @@ tests = testGroup "Standard Yaku"
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M3", "P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
                            & vHand.handPicks .~ [AgariCall "M1" Nan]
         snd (getYaku vi) @?= [Yaku 1 "Pinfu"]
+
+    , testCase "Pinfu NOT on end wait " $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M2", "P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
+                           & vHand.handPicks .~ [AgariCall "M3" Nan]
+        snd (getYaku vi) @?= []
 
     , testCase "Iipeikou" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M2", "M1", "M2", "M3", "S7", "S8", "S9", "S1", "S2", "S3", "M5", "M5"]
@@ -85,9 +90,15 @@ tests = testGroup "Standard Yaku"
         snd (getYaku vi) @?= [Yaku 1 "Tanyao"]
 
     , testCase "Chanta" $ do
-        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M3", "P1", "P2", "P3", "S7", "S8", "S9", "M7", "M8", "M9", "W", "W"]
-                           & vHand.handPicks .~ [AgariCall "M1" Nan]
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M2", "P1", "P2", "P3", "S7", "S8", "S9", "M7", "M8", "M9", "W", "W"]
+                           & vHand.handPicks .~ [AgariCall "M3" Nan]
         snd (getYaku vi) @?= [Yaku 2 "Chanta"]
+
+    , testCase "Chanta (open)" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M3", "S7", "S8", "S9", "M7", "M8", "M9", "W", "W"]
+                           & vHand.handCalled .~ [Mentsu Shuntsu "P1" (Just undefined)]
+                           & vHand.handPicks .~ [AgariCall "M1" Nan]
+        snd (getYaku vi) @?= [Yaku 1 "Chanta"]
 
     , testCase "Kuitan" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M2", "S5", "S6", "S7", "S2", "S3", "S4", "S8", "S8"]
@@ -95,18 +106,18 @@ tests = testGroup "Standard Yaku"
                            & vHand.handPicks .~ [AgariCall "M2" Nan]
         snd (getYaku vi) @?= [Yaku 1 "Kuitan"]
 
-    , testCase "Honitsu (degraded)" $ do
+    , testCase "Honitsu (open)" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M2", "M5", "M6", "M7", "M2", "M3", "M4", "W", "W"]
                            & vHand.handCalled .~ [Mentsu Shuntsu "M4" (Just undefined)]
                            & vHand.handPicks .~ [AgariCall "M2" Nan]
         snd (getYaku vi) @?= [Yaku 2 "Honitsu"]
 
     , testCase "Junchan" $ do
-        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M3", "P1", "P2", "P3", "S7", "S8", "S9", "M7", "M8", "M9", "M9", "W9"]
-                           & vHand.handPicks .~ [AgariCall "M1" Nan]
-        snd (getYaku vi) @?= [Yaku 2 "Junchan"]
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M2", "P1", "P2", "P3", "S7", "S8", "S9", "M7", "M8", "M9", "M9", "M9"]
+                           & vHand.handPicks .~ [AgariCall "M3" Nan]
+        snd (getYaku vi) @?= [Yaku 3 "Junchan"]
 
-    , testCase "Chinitsu (degraded)" $ do
+    , testCase "Chinitsu (open)" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M2", "M5", "M6", "M7", "M2", "M3", "M4", "M9", "M9"]
                            & vHand.handCalled .~ [Mentsu Shuntsu "M4" (Just undefined)]
                            & vHand.handPicks .~ [AgariCall "M2" Nan]
@@ -123,23 +134,23 @@ tests = testGroup "Standard Yaku"
         snd (getYaku vi) @?= [Yaku 1 "Menzen Tsumo"]
 
     , testCase "Riichi" $ do
-        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "P3"]
-                           & vHand.handPicks .~ [AgariCall "P3" Nan]
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M2", "P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
+                           & vHand.handPicks .~ [AgariCall "M3" Nan]
                            & vHand.handRiichi .~ Riichi
         snd (getYaku vi) @?= [Yaku 1 "Riichi"]
 
     , testCase "Double Riichi" $ do
-        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "P3"]
-                           & vHand.handPicks .~ [AgariCall "P3" Nan]
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M2", "P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
+                           & vHand.handPicks .~ [AgariCall "M3" Nan]
                            & vHand.handRiichi .~ DoubleRiichi
-        snd (getYaku vi) @?= [Yaku 1 "Riichi"]
+        snd (getYaku vi) @?= [Yaku 2 "Double riichi"]
 
     , testCase "Ippatsu" $ do
-        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["P2", "P2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "P3"]
-                           & vHand.handPicks .~ [AgariCall "P3" Nan]
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M2", "P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
+                           & vHand.handPicks .~ [AgariCall "M3" Nan]
                            & vHand.handRiichi .~ Riichi
                            & vHand.handIppatsu .~ True
-        snd (getYaku vi) @?= [Yaku 1 "Riichi", Yaku 1 "Ippatsu"]
+        sort (snd (getYaku vi)) @?= sort [Yaku 1 "Riichi", Yaku 1 "Ippatsu"]
 
     , testCase "Houtei Raoyui" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M1", "S5", "S6", "S7", "S2", "S3", "S4", "S8", "S8"]
@@ -161,10 +172,8 @@ tests = testGroup "Standard Yaku"
                            & vHand.handCalled .~ [Mentsu Shuntsu "P2" (Just undefined)]
         snd (getYaku vi) @?= [Yaku 1 "Rinshan Kaihou"]
 
-    , testCase "Chankan" $ do
-        error "test not implemented (here) (yet)"
-
     -- NOTE: implemented in Mechanics test, for now
     -- , testCase "Nagashi Mangan" $ do
+    -- , testCase "Chankan" $ do error "test not implemented (here) (yet)"
 
     ]

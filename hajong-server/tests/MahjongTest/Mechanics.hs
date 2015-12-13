@@ -50,7 +50,7 @@ gameFlowTests = testGroup "Game flow"
         kyoku^.sWanpai.to length == 13 @? "Wanpai of 13 (+1 dora) tiles"
         kyoku^.sHands ^.. each.handConcealed._Wrapped.to length == [13, 13, 13, 13]  @? "Four hands of 13 tiles"
         kyoku^.pDora.to length == 1 @? "One dora tile"
-        kyoku^.pRound == Ton @? "First round was not Ton"
+        kyoku^.pRound == (Ton, 1) @? "First round was not Ton, 1"
 
   , testCase "Tsumo is an option in the DealPrivateHandChanged event" $ do
         kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5
@@ -82,7 +82,7 @@ furitenTests = testGroup "Furiten tests"
               stepped_ InpAuto -- discard P5
               stepped $ InpShout Nan $ Shout Ron Ton "P5" ["P5"] -- should error
       case res of
-          Left err -> err @=? "You are furiten"
+          Left err -> err @?= "You are furiten"
           x -> assertFailure $ show x
   ]
 
@@ -98,44 +98,58 @@ riichiTests = testGroup "Riichi tests"
                 check []                                      = assertFailure "No Dealprivatechanged in events"
                 in check evs
 
-  , testCase "Riichi points are transferred to table from player on riichi, not given on draw and given on win" $ do
+  , testCase "Riichi points are transferred to table from player(s) on riichi" $ do
       kyoku <- testKyoku <&> sHands . each . handConcealed._Wrapped .~ handThatWinsWithP5
                          <&> sWall %~ (["P2", "P2", "P3", "P4"] ++)
+
       let res = runKyokuState kyoku $ do
-              stepped_ InpAuto -- start
-              stepped_ InpAuto -- draw
-              stepped_ $ InpTurnAction Ton $ TurnTileDiscard $ Discard "P2" Nothing True
-              stepped_ InpAuto -- continue
-              stepped_ InpAuto -- draw
-              stepped_ $ InpTurnAction Nan $ TurnTileDiscard $ Discard "P2" Nothing True
+              autoAndDiscard Ton $ Discard "P2" Nothing True
+              autoAndDiscard Nan $ Discard "P2" Nothing True
+
       requireRight res $ \(_evs, (m, k)) -> do
-          k^.pRiichi @=? 2000
-          k^.pPlayers.ix Ton. _2 @=? 24000
-          k^.pPlayers.ix Nan. _2 @=? 24000
+          k ^. pRiichi                 @?= 2000
+          k ^?! pPlayers . ix Ton . _2 @?= 24000
+          k ^?! pPlayers . ix Nan . _2 @?= 24000
+
+ --  not given on draw and given on win
+
+  , testCase "Riichi points from table are transferred to winner on ron" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5
+                         <&> pRiichi .~ 2000
+                         <&> sWall %~ (["P2", "P5"] ++)
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "P2" Nothing False
+            autoAndDiscard Nan $ Discard "P5" Nothing False
+            stepped_ $ InpShout Ton $ Shout Ron Nan "P5" ["P5"]
+
+      requireRight res $ \(_evs, (m, k)) -> do
+          k' <- nextKyoku k
+          k' ^. pRiichi @?= 0
 
   , testCase "Hand restarts on four riichi" $ do
       kyoku <- testKyoku <&> sHands . each . handConcealed._Wrapped .~ handThatWinsWithP5
                          <&> sWall %~ (["P2", "P2", "P3", "P4"] ++)
+
       let res = runKyokuState kyoku $ do
-              let startDrawDiscard k t = do
-                    stepped_ InpAuto >> stepped_ InpAuto >> stepped_ (InpTurnAction k $ TurnTileDiscard t Nothing True)
-              startDrawDiscard Ton "P2"
-              startDrawDiscard Nan "P2"
-              startDrawDiscard Shaa "P3"
-              startDrawDiscard Pei "P4"
-              stepped_ InpAuto
-      requireRight res $ \(_evs, (r,k)) -> r @=? KyokuEnded (DealAbort SuuchaRiichi)
+              autoAndDiscard Ton  $ Discard "P2" Nothing True
+              autoAndDiscard Nan  $ Discard "P2" Nothing True
+              autoAndDiscard Shaa $ Discard "P3" Nothing True
+              autoAndDiscard Pei  $ Discard "P4" Nothing True
+              stepped_ InpAuto -- check end conditions
+
+      requireRight res $ \(_evs, (r,k)) -> r @?= KyokuEnded (DealAbort SuuchaRiichi)
 
   , testCase "Riichi not possible if under 1000 points" $ do
       kyoku <- testKyoku <&> sHands . each . handConcealed._Wrapped .~ handThatWinsWithP5
-                         <&> pPlayers.ix Ton._2 .~ 500
+                         <&> pPlayers . ix Ton . _2 .~ 500
                          <&> sWall %~ (["P2", "P2", "P3", "P4"] ++)
       let res = runKyokuState kyoku $ do
               stepped_ InpAuto -- start
               stepped_ InpAuto -- draw
               stepped_ $ InpTurnAction Ton $ TurnTileDiscard $ Discard "P2" Nothing True
       case res of
-          Left err -> err @=? "Can't riichi with under 1000 points"
+          Left err -> err @?= "Cannot riichi: not enough points"
           Right _  -> assertFailure "Should have errored"
   ]
 
@@ -158,12 +172,15 @@ weirdYaku = testGroup "Yaku dependant on the whole game state"
 
   , testCase "Chankan is possible" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
-                         <&> sHands . ix Ton . handConcealed._Wrapped .~ ["P5", "P5", "P5", "P5", "S1"]
+                         <&> sHands . ix Ton . handCalled .~ [Mentsu Koutsu "P5" (Just (Shout Pon Shaa "P5" ["P5", "P5"]))]
+                         <&> sWall %~ ("P5" <|)
+
       let res = runKyokuState kyoku $ do
             stepped_ InpAuto
-            stepped_ InpAuto
-            stepped_ $ InpTurnAction Ton $ TurnAnkan "P5"
+            stepped_ InpAuto -- draw
+            stepped_ $ InpTurnAction Ton $ TurnShouminkan "P5"
             stepped $ InpShout Nan $ Shout Chankan Ton "P5" ["P5"]
+
       requireRight res $ \case
           (_, (KyokuEnded (DealRon [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 1 "Chankan"]
           x -> assertFailure (show x)
@@ -219,6 +236,14 @@ runKyokuState k ma = runStateT ma (NotBegun 0, k)
 
 requireRight (Left err) go = assertFailure (unpack err)
 requireRight (Right res) go = go res
+
+autoAndDiscard k d = go where
+  go = do st <- steppedSt InpAuto
+          case st of
+            WaitingDiscard{} -> stepped_ (InpTurnAction k $ TurnTileDiscard d)
+            _                -> go
+
+steppedSt step = stepped_ step >> fmap fst get
 
 stepped s = do (m, k) <- get
                (m, k, xs) <- lift $ runKyoku k (step m s)
