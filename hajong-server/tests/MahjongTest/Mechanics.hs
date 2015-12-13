@@ -124,7 +124,7 @@ riichiTests = testGroup "Riichi tests"
             stepped_ $ InpShout Ton $ Shout Ron Nan "P5" ["P5"]
 
       requireRight res $ \(_evs, (m, k)) -> do
-          k' <- nextKyoku k
+          Right k' <- maybeNextDeal k
           k' ^. pRiichi @?= 0
 
   , testCase "Hand restarts on four riichi" $ do
