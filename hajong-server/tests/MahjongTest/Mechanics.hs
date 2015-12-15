@@ -19,7 +19,7 @@ import qualified Data.Map as M
 
 tests :: TestTree
 tests = testGroup "Game mechanics"
-  [ gameFlowTests, furitenTests, riichiTests, weirdYaku, yakumans ]
+  [ gameFlowTests, furitenTests, riichiTests, weirdYaku, yakumans, scoringTests ]
 
 gameFlowTests :: TestTree
 gameFlowTests = testGroup "Game flow" 
@@ -67,6 +67,9 @@ gameFlowTests = testGroup "Game flow"
       case runKyokuState kyoku (replicateM_ 250 $ stepped InpAuto) of
           Left "This kyoku has ended!" -> return ()
           Right _                      -> assertFailure "Kyoku didn't end withing 250 automatic advances"
+
+  , testCase "One han minimum to win a hand" $ do
+      undefined
   ]
 
 furitenTests :: TestTree
@@ -90,8 +93,10 @@ riichiTests :: TestTree
 riichiTests = testGroup "Riichi tests"
   [ testCase "Riichi tiles are calculated correctly in the DealWaitForTurnAction event" $ do
         kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "W "]
-                         <&> sWall %~ ("S4" <|)
+                           <&> sWall %~ ("S4" <|)
+
         let res = runKyokuState kyoku $ stepped InpAuto >> stepped InpAuto -- start and draw
+
         requireRight res $ \(evs, (m, k)) -> do
             let check (DealWaitForTurnAction (_,_,_,rs) : xs) = ["P5", "W "] == rs @? ("Riichi tiles didn't match (" <> show rs <> " vs [P5, W])")
                 check (_ : xs)                                = check xs
@@ -110,8 +115,6 @@ riichiTests = testGroup "Riichi tests"
           k ^. pRiichi                 @?= 2000
           k ^?! pPlayers . ix Ton . _2 @?= 24000
           k ^?! pPlayers . ix Nan . _2 @?= 24000
-
- --  not given on draw and given on win
 
   , testCase "Riichi points from table are transferred to winner on ron" $ do
       kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5
@@ -138,7 +141,9 @@ riichiTests = testGroup "Riichi tests"
               autoAndDiscard Pei  $ Discard "P4" Nothing True
               stepped_ InpAuto -- check end conditions
 
-      requireRight res $ \(_evs, (r,k)) -> r @?= KyokuEnded (DealAbort SuuchaRiichi)
+      requireRight res $ \(_evs, (r,k)) -> do
+          r @?= KyokuEnded (DealAbort SuuchaRiichi)
+          k ^. pRiichi @?= 4000
 
   , testCase "Riichi not possible if under 1000 points" $ do
       kyoku <- testKyoku <&> sHands . each . handConcealed._Wrapped .~ handThatWinsWithP5
@@ -191,10 +196,12 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
   [ testCase "Tenhou (dealer goes out on first draw)" $ do
       kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
                          <&> sWall %~ ("P5" <|)
+
       let res = runKyokuState kyoku $ do
             stepped_ InpAuto -- start
             stepped_ InpAuto -- draw
             stepped $ InpTurnAction Ton $ TurnTsumo
+
       requireRight res $ \case
           (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Tenhou"]
           x -> assertFailure (show x)
@@ -202,11 +209,13 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
   , testCase "Renhou (out on first round uninterrupted)" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
                          <&> sWall %~ ("P5" <|)
+
       let res = runKyokuState kyoku $ do
             stepped_ InpAuto -- start
             stepped_ InpAuto -- draw
             stepped_ InpAuto -- discard
             stepped $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
+
       requireRight res $ \case
           (_, (KyokuEnded (DealRon [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Renhou"]
           x -> assertFailure (show x)
@@ -214,6 +223,7 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
   , testCase "Chiihou (non-dealer goes out on first draw uninterrupted)" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
                          <&> sWall %~ ("P1" <|) . ("P5" <|)
+
       let res = runKyokuState kyoku $ do
             stepped_ InpAuto -- start
             stepped_ InpAuto -- draw Ton
@@ -221,14 +231,52 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
             stepped_ InpAuto -- ignore shout wait
             stepped_ InpAuto -- draw Nan
             stepped $ InpTurnAction Nan $ TurnTsumo
+
       requireRight res $ \case
           (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Chiihou"]
           x -> assertFailure (show x)
   ]
 
+scoringTests :: TestTree
+scoringTests = testGroup "Scoring"
+    [ testCase "Honba is deducted from payers and added to winner on tsumo" $ do
+        kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+                           <&> sWall %~ ("P5" <|)
+                           <&> pHonba .~ 1
+
+        let res = runKyokuState kyoku $ do
+                stepped_ InpAuto -- start
+                stepped_ InpAuto -- draw
+                stepped_ $ InpTurnAction Ton $ TurnTsumo
+
+        requireRight res $ \(_evs, (KyokuEnded r, _k)) -> do
+            headEx (dWinners r) ^. _2 @?= 1200 + 300
+            dPayers r ^..each._2 @?= [-400 - 100, -400 - 100, -400 - 100]
+
+    , testCase "Honba is deducted from payer and added to winner on ron" $ do
+        kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
+                           <&> sWall %~ ("P5" <|)
+                           <&> pHonba .~ 2
+
+        let res = runKyokuState kyoku $ do
+                stepped_ InpAuto -- start
+                stepped_ InpAuto -- draw
+                stepped_ InpAuto -- discard
+                stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P4", "P3"]
+
+        requireRight res $ \(_evs, (KyokuEnded r, _k)) -> do
+            headEx (dWinners r) ^. _2 @?= 1000 + 2 * 300
+            dPayers r ^..each._2 @?= [-1000 - 2 * 300]
+    ]
+    -- TODO: multi-ron
+
 -- agari to pair
 handThatWinsWithP5 :: [Tile]
-handThatWinsWithP5 = ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
+handThatWinsWithP5      = ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
+
+-- also P2
+handThatWinsWithP5Pinfu :: [Tile]
+handThatWinsWithP5Pinfu = ["M1", "M2", "M3", "P3", "P4", "P5", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
 
 testKyoku = newKyoku fourPlayers (map tshow [1..4])
 

@@ -203,7 +203,8 @@ nextRound Kyoku{..}
 maybeNextDeal :: Kyoku -> IO (Either FinalPoints Kyoku)
 maybeNextDeal deal = maybe (Right <$> nextDeal deal) (return . Left) $ maybeGameResults deal
 
--- | TODO move to Round.hs
+-- | TODO move to Round.hs. Everything but tile shuffling could be in
+-- events.
 nextDeal :: Kyoku -> IO Kyoku
 nextDeal kyoku = do tiles <- shuffleTiles
                     return $ go $ dealTiles tiles kyoku
@@ -213,6 +214,7 @@ nextDeal kyoku = do tiles <- shuffleTiles
        . if' rotate (pOja .~ nextOja) id
        . if' rotate (over pPlayers rotatePlayers) id
        . if' honbaResets (pHonba .~ 0) (pHonba +~ 1)
+       . if' riichiTransfers (pRiichi .~ 0) id
        . set pResults Nothing
        . over pDeals (cons $ _pRound kyoku)
 
@@ -222,6 +224,10 @@ nextDeal kyoku = do tiles <- shuffleTiles
                       Just DealTsumo{..} -> notElemOf (each._1) Ton dWinners
                       Just DealRon{..}   -> notElemOf (each._1) Ton dWinners
                       _                  -> False
+    riichiTransfers = case kyoku^?!pResults of
+                          Just DealAbort{} -> False
+                          Just DealDraw{} -> False
+                          _ -> True
     nextOja       = kyoku ^?! pPlayers.ix Nan . _1 :: Player
 
 rotatePlayers :: Map Kaze a -> Map Kaze a
@@ -376,14 +382,15 @@ processShout sk shout = do
 tsumo :: InKyoku m => Kaze -> m KyokuResults
 tsumo winner = do
     handOf' winner >>= handWin Nothing >>= updateHand winner -- FIXME this shouldn't exist, I think
-    vh       <- getValuedHand winner
-    vhPoints <- valuedHandPoints winner vh
-    honba    <- use pHonba
-    riichi   <- use pRiichi
-    players  <- use pPlayers <&> map fst . itoList
-    let totalPoints = vhPoints + honba * 300
-        fromTable   = riichi
-    dealEnds $ DealTsumo [(winner, totalPoints + fromTable, vh)] (tsumoPayers honba (vh^.vhValue.vaValue) $ L.delete winner players)
+
+    vh     <- getValuedHand winner
+    honba  <- use pHonba
+    riichi <- use pRiichi
+    payers <- use pPlayers <&> tsumoPayers honba (vh^.vhValue.vaValue) . L.delete winner . map fst . itoList
+
+    let win = (winner, - sumOf (each._2) payers + riichi, vh)
+
+    dealEnds $ DealTsumo [win] payers
 
 endDraw :: InKyoku m => m KyokuResults
 endDraw = do
@@ -393,18 +400,20 @@ endDraw = do
                | otherwise          = x & both %~ div 3000 . fromIntegral . length
     dealEnds $ DealDraw (map (,r) tp) (map (,-p) np)
 
--- TODO: refactor to a similar pure function like @tsumoPayers@.
--- TODO: support multi-ron.
--- TODO: on multi-ron, where riichi bets in table go?
+-- TODO: support multi-ron. where riichi bets in table go then?
 endRon :: InKyoku m => Kaze -> Kaze -> m KyokuResults
 endRon winner payer = do
     vh       <- getValuedHand winner
-    vhPoints <- valuedHandPoints winner vh
     honba    <- use pHonba
     riichi   <- use pRiichi
-    let totalPoints = vhPoints + honba * 300
-        fromTable   = riichi
-    dealEnds $ DealRon [(winner, totalPoints + fromTable, vh)] [(payer, negate totalPoints)]
+
+    let pointsFromPayer = valuedHandPointsForRon winner vh + honba * 300
+        win             = (winner, pointsFromPayer + riichi, vh)
+
+    dealEnds $ DealRon [win] [(payer, negate pointsFromPayer)]
+
+valuedHandPointsForRon :: Kaze -> ValuedHand -> Points
+valuedHandPointsForRon pk vh = roundKyokuPoints $ if' (pk == Ton) 6 4 * (vh^.vhValue.vaValue)
 
 -- | Apply KyokuResults and pay points.
 dealEnds :: InKyoku m => KyokuResults -> m KyokuResults
@@ -448,13 +457,6 @@ tsumoPayers :: Int -> Points -> [Kaze] -> [Payer]
 tsumoPayers honba basic payers
     | Ton `elem` payers = map (\p -> (p, negate $ roundKyokuPoints $ basic * if' (p == Ton) 2 1 + honba * 100)) payers
     | otherwise         = map (        , negate $ roundKyokuPoints $ basic * 2                  + honba * 100) payers
-
--- | Points for a winning hand.
-valuedHandPoints :: InKyoku m => Kaze -> ValuedHand -> m Points
-valuedHandPoints pk vh = do
-    player <- kazeToPlayer pk
-    oja    <- use pOja
-    return $ roundKyokuPoints $ if' (player == oja) 6 4 * (vh^.vhValue.vaValue)
 
 -- * Final scoring
 

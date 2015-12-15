@@ -73,13 +73,13 @@ runYakuCheck info grouping = fmap fst . (`runStateT` grouping) . iterM f
         f (YakuMentsu  mp s)            = get >>= lift . findMatch mp >>= putRes >>  s
         f (YakuMentsu' mp s)            = get >>= lift . findMatch mp >>= putRes >>= s
         f (YakuStateful s)              = s info
-        f (YakuHandConcealedDegrades s) = if isconc then s            else s <&> (yHan -~ 1)
-        f (YakuHandConcealed s)         = if isconc then s            else lift Nothing
-        f (YakuHandOpen s)              = if isconc then lift Nothing else s
+        f (YakuHandConcealedDegrades s) = if isConcealed then s            else s <&> (yHan -~ 1)
+        f (YakuHandConcealed s)         = if isConcealed then s            else lift Nothing
+        f (YakuHandOpen s)              = if isConcealed then lift Nothing else s
         f YakuFailed                    = lift Nothing
 
         putRes (tg, g) = put g >> return tg
-        isconc         = info^.vHand.handCalled.to null
+        isConcealed    = null $ info^..vHand.handCalled.each.filtered (maybe True ((/= Ron) . shoutKind) . mentsuShout)
 
 -- @MentsuProp@s
 
