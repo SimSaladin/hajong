@@ -13,6 +13,7 @@ module Mahjong.Hand.Yaku.Builder
 
     -- * Checkers
     , concealedHandDegrade, concealedHand, openHand, yakuState, allMentsuOfKind, yakuFail
+    , requireFlag
 
     -- * Matching mentsu
 
@@ -62,6 +63,7 @@ data Check next = YakuMentsu MentsuProp next
                 | YakuHandConcealedDegrades next
                 | YakuHandConcealed next
                 | YakuHandOpen next
+                | YakuRequireFlag Text next
                 | YakuFailed
                 deriving (Functor)
 
@@ -73,13 +75,15 @@ runYakuCheck info grouping = fmap fst . (`runStateT` grouping) . iterM f
         f (YakuMentsu  mp s)            = get >>= lift . findMatch mp >>= putRes >>  s
         f (YakuMentsu' mp s)            = get >>= lift . findMatch mp >>= putRes >>= s
         f (YakuStateful s)              = s info
-        f (YakuHandConcealedDegrades s) = if isConcealed then s            else s <&> (yHan -~ 1)
-        f (YakuHandConcealed s)         = if isConcealed then s            else lift Nothing
-        f (YakuHandOpen s)              = if isConcealed then lift Nothing else s
+        f (YakuHandConcealedDegrades s) = if isConcealed  then s            else s <&> (yHan -~ 1)
+        f (YakuHandConcealed s)         = if isConcealed  then s            else lift Nothing
+        f (YakuHandOpen s)              = if isConcealed  then lift Nothing else s
+        f (YakuRequireFlag flag s)      = if hasFlag flag then s           else lift Nothing
         f YakuFailed                    = lift Nothing
 
         putRes (tg, g) = put g >> return tg
         isConcealed    = null $ info^..vHand.handCalled.each.filtered (maybe True ((/= Ron) . shoutKind) . mentsuShout)
+        hasFlag flag   = elem flag $ info^.vKyoku.pFlags
 
 -- @MentsuProp@s
 
@@ -123,6 +127,9 @@ concealedHand = liftF $ YakuHandConcealed ()
 -- | Must be open
 openHand :: YakuCheck ()
 openHand = liftF $ YakuHandOpen ()
+
+requireFlag :: Flag -> YakuCheck ()
+requireFlag flag = liftF $ YakuRequireFlag ()
 
 -- | Yaku that depends on something else than the mentsu; see "ValueInfo"
 -- for available properties.

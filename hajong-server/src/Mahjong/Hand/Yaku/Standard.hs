@@ -243,3 +243,17 @@ chankan = do
 
 nagashiMangan :: YakuCheck Yaku
 nagashiMangan = yakuFail -- NOTE: this is implemented in @Mahjong.Kyoku@ currently.
+
+-- | Dealer (tenhou) or non-dealer (chiihou) tsumo on first draw.
+tenhouOrChiihou :: YakuCheck Yaku
+tenhou = do
+    requireFlag FirstRoundUninterrupted
+    _ <- menzenTsumo
+    info <- yakuState
+    return $ Yaku 13 $ if info^.vPlayer == Ton then "Tenhou" else "Chiihou"
+
+-- | Non-dealer ron on first uninterrupted round.
+renhou :: YakuCheck Yaku
+renhou = do
+    requireFlag FirstRoundUninterrupted
+    undefined -- TODO This is not implemented yet.

@@ -13,6 +13,7 @@ import           Import
 import           Mahjong.Tiles
 import           Mahjong.Configuration
 import           Mahjong.Hand.Mentsu
+import           Mahjong.Kyoku.Flags
 ------------------------------------------------------------------------------
 import           Mahjong.Hand.Internal
 import           Mahjong.Hand.Algo
@@ -43,6 +44,7 @@ data Kyoku' m = Kyoku
     , _pRiichi        :: Int -- ^ Points in table for riichi
     , _pResults       :: Maybe KyokuResults
     , _pDeals         :: [Round] -- ^ Previous deals in decreasing order by time TODO: include renchan and previous kyoku uuid's
+    , _pFlags         :: Set Flag -- ^ List of extendable flags active in the game.
 
     -- secret
     , _sEvents        :: [GameEvent]
@@ -190,6 +192,7 @@ newKyoku players names = do
         , _pResults       = Nothing
         , _pRound         = (Ton, 1)
         , _pTurn          = Ton
+        , _pFlags         = 
 
         , _pWallTilesLeft = 0
         , _sEvents        = mempty

@@ -66,6 +66,12 @@ tests = testGroup "Standard Yaku"
                            & vHand.handPicks .~ [AgariCall "S9" Nan]
         snd (getYaku vi) @?= [Yaku 2 "San ankou", Yaku 2 "Toitoi"]
 
+    , testCase "San ankou NOT when discard is part of the third set" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M1", "M1", "S1", "S1", "S1", "W", "W"]
+                           & vHand.handCalled .~ [Mentsu Shuntsu "S7" (Just $ Shout Chi Nan "S7" ["S8", "S9"]), Mentsu Koutsu "S2" (Just $ Shout Ron Nan "S2" ["S2", "S2"])]
+                           -- & vHand.handPicks .~ [AgariCall "S2" Nan]
+        snd (getYaku vi) @?= []
+
     , testCase "San kantsu (+ Toitoi)" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["S7", "S8", "W", "W"]
                            & vHand.handPicks .~ [AgariCall "S9" Nan]
