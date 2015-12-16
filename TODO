@@ -9,7 +9,7 @@ x = done, / = half done, ! = needs testing
 [x] add test: in sanankou, the third must not be completed by discard
 [x] test and implement chankan
 [x] implement the yakumans tenhou and renhou. tests are done
-[ ] add test: ankan in riichi
+[x] add test: ankan in riichi
 [ ] add test: dora and ura-dora counted on win
 [ ] add test: suufonrenda: four consecutive wind discards
 [ ] add test: kuushuu kyuuhai: 9 different honors or terminals on initial draw

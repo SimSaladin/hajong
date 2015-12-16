@@ -156,6 +156,27 @@ riichiTests = testGroup "Riichi tests"
       case res of
           Left err -> err @?= "Cannot riichi: not enough points"
           Right _  -> assertFailure "Should have errored"
+
+  , testCase "Ankan is possible in riichi when it doesn't change wait" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sWall %~ (["M1"] ++)
+
+      let res = runKyokuState kyoku $ do
+              drawAndTurnAction Ton $ TurnAnkan "M1"
+
+      requireRight res $ \(_evs, (_r,_k)) -> do
+          return ()
+
+  , testCase "Ankan is not possible in riichi when it would change waits" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ ["M1", "M1", "M2", "M3", "P1", "P2", "P3", "P7", "P8", "P9", "S2", "S3", "S4"]
+                         <&> sWall %~ (["M1"] ++)
+
+      let res = runKyokuState kyoku $ do
+              drawAndTurnAction Ton $ TurnAnkan "M1"
+
+      case res of
+          Left err -> return ()
+          Right _ -> assertFailure "Game should have errored"
   ]
 
 weirdYaku :: TestTree
@@ -276,7 +297,7 @@ scoringTests = testGroup "Scoring"
 
 -- agari to pair
 handThatWinsWithP5 :: [Tile]
-handThatWinsWithP5      = ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
+handThatWinsWithP5      = ["M1", "M1", "M1", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
 
 -- also P2
 handThatWinsWithP5Pinfu :: [Tile]
@@ -289,10 +310,12 @@ runKyokuState k ma = runStateT ma (NotBegun 0, k)
 requireRight (Left err) go = assertFailure (unpack err)
 requireRight (Right res) go = go res
 
-autoAndDiscard k d = go where
+autoAndDiscard k d = drawAndTurnAction k (TurnTileDiscard d)
+
+drawAndTurnAction k action = go where
   go = do st <- steppedSt InpAuto
           case st of
-            WaitingDiscard{} -> stepped_ (InpTurnAction k $ TurnTileDiscard d)
+            WaitingDiscard{} -> stepped_ (InpTurnAction k action)
             _                -> go
 
 steppedSt step = stepped_ step >> fmap fst get
