@@ -192,7 +192,7 @@ newKyoku players names = do
         , _pResults       = Nothing
         , _pRound         = (Ton, 1)
         , _pTurn          = Ton
-        , _pFlags         = 
+        , _pFlags         = setFromList [FirstRoundUninterrupted]
 
         , _pWallTilesLeft = 0
         , _sEvents        = mempty

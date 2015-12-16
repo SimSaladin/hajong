@@ -126,6 +126,7 @@ $(deriveSafeCopy 0 'base ''Sangen)
 $(deriveSafeCopy 0 'base ''TileKind)
 $(deriveSafeCopy 0 'base ''KyokuResults)
 $(deriveSafeCopy 0 'base ''AbortiveDraw)
+$(deriveSafeCopy 0 'base ''Flag)
 $(deriveSafeCopy 0 'base ''Value)
 $(deriveSafeCopy 0 'base ''Discard)
 $(deriveSafeCopy 0 'base ''TurnAction)
@@ -140,13 +141,14 @@ $(deriveSafeCopy 0 'base ''Game)
 $(deriveSafeCopy 0 'base ''RiichiState)
 $(deriveSafeCopy 0 'base ''DrawState)
 $(deriveSafeCopy 0 'base ''FuritenState)
+$(deriveSafeCopy 0 'base ''HandFlag)
 
 -- SafeCopy instances for indexed types
 
-instance (SafeCopy (m Bool), SafeCopy (m [Tile]), SafeCopy (m FuritenState), SafeCopy (PickedTile m)) => SafeCopy (Hand m) where
+instance (SafeCopy (m (Set HandFlag)), SafeCopy (m Bool), SafeCopy (m [Tile]), SafeCopy (m FuritenState), SafeCopy (PickedTile m)) => SafeCopy (Hand m) where
     version          = 0
-    putCopy Hand{..} = contain $ do safePut _handCalled; safePut _handDiscards; safePut _handRiichi; safePut _handIppatsu; safePut _handState; safePut _handPicks; safePut _handConcealed; safePut _handFuriten; safePut _handCanTsumo;
-    getCopy          = contain $ Hand <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet
+    putCopy Hand{..} = contain $ do safePut _handCalled; safePut _handDiscards; safePut _handRiichi; safePut _handIppatsu; safePut _handState; safePut _handPicks; safePut _handConcealed; safePut _handFuriten; safePut _handCanTsumo; safePut _handFlags
+    getCopy          = contain $ Hand <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet
 
 instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
     version = 0
@@ -172,8 +174,8 @@ instance SafeCopy a => SafeCopy (Identity a) where
 
 instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
     version = 0
-    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pTurn; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _pDeals; safePut _sEvents; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
-    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet 
+    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pTurn; safePut _pFlags; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _pDeals; safePut _sEvents; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
+    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet 
 
 instance SafeCopy (GameState Int) where
     putCopy (GameState a b c) = contain $ do safePut a; safePut b; safePut c

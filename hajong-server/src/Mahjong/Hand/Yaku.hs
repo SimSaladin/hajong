@@ -28,7 +28,8 @@ import            Mahjong.Kyoku.Internal
 -- i.e. yaku that wholly include some other yaku (iipeikou and ryanpeikou).
 allStandard :: [[YakuCheck Yaku]]
 allStandard = 
-    [ [ chankan ]
+    [ [ tenhouOrChiihou ]
+    , [ chankan ]
     , [ chanta ]
     , [ chinitsu ]
     , [ yakuhaiRoundWind ]

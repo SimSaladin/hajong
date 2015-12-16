@@ -12,11 +12,12 @@ module Mahjong.Hand.Yaku.Standard where
 
 ------------------------------------------------------------------------------
 import           Import
-import           Mahjong.Tiles (Tile, Number(..), kaze, tileNumber)
+import           Mahjong.Tiles (Tile, Number(..), Kaze(..), kaze, tileNumber)
 import           Mahjong.Hand.Yaku.Builder
 import           Mahjong.Hand.Algo (shantenBy, chiitoitsuShanten)
 ------------------------------------------------------------------------------
 import           Mahjong.Kyoku.Internal
+import           Mahjong.Kyoku.Flags
 import           Mahjong.Hand.Internal
 ------------------------------------------------------------------------------
 
@@ -246,11 +247,12 @@ nagashiMangan = yakuFail -- NOTE: this is implemented in @Mahjong.Kyoku@ current
 
 -- | Dealer (tenhou) or non-dealer (chiihou) tsumo on first draw.
 tenhouOrChiihou :: YakuCheck Yaku
-tenhou = do
+tenhouOrChiihou = do
     requireFlag FirstRoundUninterrupted
-    _ <- menzenTsumo
     info <- yakuState
-    return $ Yaku 13 $ if info^.vPlayer == Ton then "Tenhou" else "Chiihou"
+    case info^?vHand.handPicks._last of
+        Just (AgariTsumo _) -> return $ Yaku 13 $ if info^.vPlayer == Ton then "Tenhou" else "Chiihou"
+        _ -> yakuFail
 
 -- | Non-dealer ron on first uninterrupted round.
 renhou :: YakuCheck Yaku

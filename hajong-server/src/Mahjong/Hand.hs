@@ -14,7 +14,7 @@
 module Mahjong.Hand
     ( Hand(..), HandA, HandP
     , Discard(..)
-    , RiichiState(..), DrawState(..), PickedTile(..), FuritenState(..)
+    , RiichiState(..), DrawState(..), PickedTile(..), FuritenState(..), HandFlag(..)
     , module Mahjong.Hand
     , module Mahjong.Hand.Algo
     , module Mahjong.Hand.Mentsu
@@ -30,6 +30,7 @@ module Mahjong.Hand
     , handConcealed
     , handFuriten  
     , handCanTsumo 
+    , handFlags
 
     , dcTile, dcRiichi, dcTo
     ) where
@@ -54,7 +55,8 @@ maskPublicHand hand =
     hand { _handPicks = map maskPickedTile (_handPicks hand)
          , _handConcealed = Nothing
          , _handFuriten = Nothing
-         , _handCanTsumo = Nothing }
+         , _handCanTsumo = Nothing
+         , _handFlags    = Just $ runIdentity $ _handFlags hand }
     where
         maskPickedTile (FromWall _)         = FromWall Nothing
         maskPickedTile (FromWanpai _)       = FromWanpai Nothing
@@ -64,10 +66,11 @@ maskPublicHand hand =
         maskPickedTile (AgariTsumoWanpai t) = AgariTsumoWanpai t
 
 convertHand :: HandA -> HandP
-convertHand hand = hand { _handPicks = map convertPickedTile (_handPicks hand)
+convertHand hand = hand { _handPicks     = map convertPickedTile (_handPicks hand)
                         , _handConcealed = Just . runIdentity $ _handConcealed hand
-                        , _handFuriten = Just . runIdentity $ _handFuriten hand
-                        , _handCanTsumo = Just . runIdentity $ _handCanTsumo hand }
+                        , _handFuriten   = Just . runIdentity $ _handFuriten hand
+                        , _handCanTsumo  = Just . runIdentity $ _handCanTsumo hand
+                        , _handFlags     = Just . runIdentity $ _handFlags hand }
     where
         convertPickedTile (FromWall t)         = FromWall (Just $ runIdentity t)
         convertPickedTile (FromWanpai t)       = FromWanpai (Just $ runIdentity t)
@@ -110,7 +113,7 @@ discard d@Discard{..} hand
     , p : _ <- hand^.handPicks
     , pickedTile p /= _dcTile                     = throwError "Cannot change wait in riichi"
 
-    | otherwise = setRiichi . setIppatsu . setNoTsumo . movePicks . setDiscard <$> tileFromHand _dcTile hand
+    | otherwise = updateFlags . setRiichi . setIppatsu . setNoTsumo . movePicks . setDiscard <$> tileFromHand _dcTile hand
   where
     movePicks h = h & handConcealed._Wrapped %~ (++ map pickedTile (_handPicks h)) & handPicks .~ []
     setDiscard  = handDiscards %~ (|> d)
@@ -120,6 +123,7 @@ discard d@Discard{..} hand
         | _dcRiichi                           = handRiichi .~ Riichi
         | otherwise                           = id
     setIppatsu = handIppatsu .~ if _dcRiichi then True else False
+    updateFlags = handFlags._Wrapped %~ deleteSet HandFirsRoundUninterrupted
 
 -- | Automatically execute a discard necessary to advance the game (in case
 -- of inactive players).
@@ -243,7 +247,6 @@ handInNagashi h = all id [ h^.handCalled == []
                          , h^..handDiscards.traversed.filtered (isJust . _dcTo) == []
                          , h^..handDiscards.traversed.filtered (isSuited . _dcTile) == [] ]
     
-
 -- | If there is a shuntsu wait, that is the only possible agari. If there
 -- is a single leftover tile that is the agari. otherwise any of the koutsu
 -- waits can be completed (thus agari).

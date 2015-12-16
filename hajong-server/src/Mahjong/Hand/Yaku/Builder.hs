@@ -41,6 +41,7 @@ import           Mahjong.Hand.Algo
 ------------------------------------------------------------------------------
 import           Mahjong.Hand.Internal
 import           Mahjong.Kyoku.Internal
+import           Mahjong.Kyoku.Flags
 ------------------------------------------------------------------------------
 import           Control.Monad.Free
 import           Control.Monad.State
@@ -63,7 +64,7 @@ data Check next = YakuMentsu MentsuProp next
                 | YakuHandConcealedDegrades next
                 | YakuHandConcealed next
                 | YakuHandOpen next
-                | YakuRequireFlag Text next
+                | YakuRequireFlag Flag next
                 | YakuFailed
                 deriving (Functor)
 
@@ -129,7 +130,7 @@ openHand :: YakuCheck ()
 openHand = liftF $ YakuHandOpen ()
 
 requireFlag :: Flag -> YakuCheck ()
-requireFlag flag = liftF $ YakuRequireFlag ()
+requireFlag flag = liftF $ YakuRequireFlag flag ()
 
 -- | Yaku that depends on something else than the mentsu; see "ValueInfo"
 -- for available properties.

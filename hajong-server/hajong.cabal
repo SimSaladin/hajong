@@ -40,6 +40,7 @@ library
                      , Mahjong.Hand.Yaku.Standard
                      , Mahjong.Kyoku
                      , Mahjong.Kyoku.Internal
+                     , Mahjong.Kyoku.Flags
                      , Mahjong.Round
                      , Mahjong.Tiles
                      , Import

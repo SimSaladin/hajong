@@ -14,7 +14,7 @@
 ------------------------------------------------------------------------------
 module Mahjong.Kyoku
     ( -- * Types
-      InKyoku, Machine(..), MachineInput(..)
+      InKyoku, Machine(..), MachineInput(..), Flag(..)
 
     -- * Actions
     , step
@@ -35,6 +35,7 @@ import           Mahjong.Tiles
 import           Mahjong.Hand
 import           Mahjong.Configuration
 ------------------------------------------------------------------------------
+import           Mahjong.Kyoku.Flags
 import           Mahjong.Kyoku.Internal
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
@@ -302,6 +303,12 @@ waitForDraw = do
 
 draw :: InKyoku m => Kaze -> Bool -> m ()
 draw pk wanpai = do
+
+    firstRound <- use $ pFlags.to (member FirstRoundUninterrupted)
+    when firstRound $ do
+        allHandsInterrupted <- use sHands <&> allOf (each.handFlags._Wrapped) (notMember HandFirsRoundUninterrupted)
+        when allHandsInterrupted $ unsetFlag FirstRoundUninterrupted
+
     updateHand pk =<< (if wanpai then drawDeadWall else drawWall) =<< handOf' pk
     tellEvent $ DealTurnAction pk $ TurnTileDraw wanpai Nothing
 
@@ -374,7 +381,8 @@ processShout sk shout = do
             tellEvent $ DealTurnShouted sk shout
             if shoutKind shout `elem` [Ron, Chankan]
                 then endRon sk tk <&> KyokuEnded
-                else do tellEvent $ DealTurnBegins sk
+                else do unsetFlag FirstRoundUninterrupted
+                        tellEvent $ DealTurnBegins sk
                         return (WaitingDiscard sk)
 
 -- ** Ending
@@ -582,3 +590,9 @@ waitingShouts dt = do
     players <- mapM (kazeToPlayer . fst) shouts
 
     return $ zipWith (\p (k, xs) -> (p, k, secs, xs)) players shouts
+
+-- * Flags
+
+unsetFlag, setFlag :: InKyoku m => Flag -> m ()
+setFlag f   = void $ pFlags %= insertSet f
+unsetFlag f = void $ pFlags %= deleteSet f

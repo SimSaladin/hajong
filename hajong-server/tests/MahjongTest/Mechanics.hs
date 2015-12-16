@@ -203,9 +203,27 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
             stepped $ InpTurnAction Ton $ TurnTsumo
 
       requireRight res $ \case
-          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Tenhou"]
+          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Tenhou", Yaku 1 "Menzen Tsumo"]
           x -> assertFailure (show x)
 
+  , testCase "Chiihou (non-dealer goes out on first draw uninterrupted)" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sWall %~ ("P1" <|) . ("P5" <|)
+
+      let res = runKyokuState kyoku $ do
+            stepped_ InpAuto -- start
+            stepped_ InpAuto -- draw Ton
+            stepped_ InpAuto -- discard Ton
+            stepped_ InpAuto -- ignore shout wait
+            stepped_ InpAuto -- check end conditions
+            stepped_ InpAuto -- draw Nan
+            stepped $ InpTurnAction Nan $ TurnTsumo
+
+      requireRight res $ \case
+          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Chiihou", Yaku 1 "Menzen Tsumo"]
+          x -> assertFailure (show x)
+
+ {-
   , testCase "Renhou (out on first round uninterrupted)" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
                          <&> sWall %~ ("P5" <|)
@@ -219,22 +237,7 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
       requireRight res $ \case
           (_, (KyokuEnded (DealRon [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Renhou"]
           x -> assertFailure (show x)
-
-  , testCase "Chiihou (non-dealer goes out on first draw uninterrupted)" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
-                         <&> sWall %~ ("P1" <|) . ("P5" <|)
-
-      let res = runKyokuState kyoku $ do
-            stepped_ InpAuto -- start
-            stepped_ InpAuto -- draw Ton
-            stepped_ InpAuto -- discard Ton
-            stepped_ InpAuto -- ignore shout wait
-            stepped_ InpAuto -- draw Nan
-            stepped $ InpTurnAction Nan $ TurnTsumo
-
-      requireRight res $ \case
-          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Chiihou"]
-          x -> assertFailure (show x)
+          -}
   ]
 
 scoringTests :: TestTree
@@ -242,6 +245,7 @@ scoringTests = testGroup "Scoring"
     [ testCase "Honba is deducted from payers and added to winner on tsumo" $ do
         kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
                            <&> sWall %~ ("P5" <|)
+                           <&> pFlags .~ mempty
                            <&> pHonba .~ 1
 
         let res = runKyokuState kyoku $ do

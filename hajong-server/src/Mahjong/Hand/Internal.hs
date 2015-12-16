@@ -37,6 +37,9 @@ pickedTile (AgariTsumoWanpai t)      = t
 pickedTile (AgariCall t _)           = t
 pickedTile (AgariChankan t _)        = t
 
+data HandFlag = HandFirsRoundUninterrupted
+              deriving (Show, Read, Eq, Ord)
+
 data FuritenState = NotFuriten | Furiten | TempFuriten
                   deriving (Show, Read, Eq)
 
@@ -55,8 +58,10 @@ data Hand m = Hand
     , _handPicks       :: [PickedTile m]          -- ^ Drawn tiles in draw order. True for wanpai.
 
     , _handConcealed   :: m [Tile]                -- ^ Concealed tiles
+    -- TODO these should be flags
     , _handFuriten     :: m FuritenState          -- ^ TODO updating this field
     , _handCanTsumo    :: m Bool                  -- ^ Has concealed complete hand
+    , _handFlags       :: m (Set HandFlag)
     }
 deriving instance Show (Hand Maybe)
 deriving instance Read (Hand Maybe)
@@ -75,7 +80,7 @@ type HandP = Hand Maybe
 
 -- | A hand that contains provided tiles in starting position
 initHand :: [Tile] -> HandA
-initHand tiles = Hand [] [] NoRiichi False DrawNone [] (pure tiles) (pure NotFuriten) (pure False)
+initHand tiles = Hand [] [] NoRiichi False DrawNone [] (pure tiles) (pure NotFuriten) (pure False) (pure $ setFromList [HandFirsRoundUninterrupted])
 
 -- * Lenses
 
