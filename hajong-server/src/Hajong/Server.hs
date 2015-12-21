@@ -117,6 +117,7 @@ instance MonadLogger Server where
 -- * Safecopy
 
 $(deriveSafeCopy 0 'base ''Player)
+$(deriveSafeCopy 0 'base ''Wanpai)
 $(deriveSafeCopy 0 'base ''GameSettings)
 $(deriveSafeCopy 0 'base ''Tile)
 $(deriveSafeCopy 0 'base ''MentsuKind)

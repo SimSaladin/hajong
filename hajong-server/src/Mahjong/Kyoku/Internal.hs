@@ -50,7 +50,7 @@ data Kyoku' m = Kyoku
     , _sEvents        :: [GameEvent]
     , _sHands         :: Map Kaze (Hand m)
     , _sWall          :: [Tile]
-    , _sWanpai        :: [Tile]
+    , _sWanpai        :: Wanpai
     , _sWaiting       :: Maybe Waiting -- ^ Waiting turn action or shout(s)
     } deriving (Typeable)
 
@@ -77,6 +77,14 @@ type Round = (Kaze, Int)
 type WaitShout = (Player, Kaze, Int, [Shout])
 type WaitTurnAction = (Player, Kaze, Int, [Tile])
 
+-- ^ Indices 0-3 are kan supplement tiles. indices 4-8 are dora, 8-12 ura-dora.
+data Wanpai = Wanpai
+    { _wSupplement :: [Tile]
+    , _wDora       :: [Tile]
+    , _wUraDora    :: [Tile]
+    , _wBlank      :: [Tile]
+    } deriving (Typeable, Eq, Show, Read)
+
 -- ** Actions and events
 
 data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a round
@@ -87,7 +95,7 @@ data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a rou
                | DealTurnShouted Kaze Shout -- ^ Who, Shout
                | DealPublicHandChanged Kaze HandP
                | DealPrivateHandChanged Player Kaze HandA -- ^ Wholly private
-               | DealFlipDora Tile (Maybe Tile) -- ^ New dora, tile from wall to wanpai
+               | DealFlipDora Tile -- ^ New dora was flipped
                | DealNick Kaze Player Text -- Pos, player id, nick TODO: no nick but fetch the player info separetely
                | DealRiichi Kaze
                | DealEnded KyokuResults
@@ -121,10 +129,10 @@ data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                   | DealAbort { dReason :: AbortiveDraw }
                   deriving (Eq, Show, Read, Typeable)
 
-data AbortiveDraw = Unrelated9
+data AbortiveDraw = KuushuuKyuuhai -- ^ Nine unrelated tiles in initial hand
                   | SuufontsuRenta -- ^ All four winds
                   | SuuchaRiichi   -- ^ All players riichi
-                  | SuukanSanra    -- ^ Fourth kon declared (or fifth if one player declared all four)
+                  | SuuKaikan      -- ^ Fourth kon declared (or fifth if one player declared all four)
                   | Sanchahou      -- ^ Three players ron
                   deriving (Eq, Show, Read, Typeable)
 
@@ -156,6 +164,9 @@ data Value = Value
     } deriving (Eq, Show, Read)
 
 data Yaku = Yaku
+    { _yHan    :: Int
+    , _yName   :: Text
+    } | YakuExtra
     { _yHan    :: Int
     , _yName   :: Text
     } deriving (Eq, Ord, Show, Read)
@@ -198,22 +209,24 @@ newKyoku players names = do
         , _sEvents        = mempty
         , _sHands         = mempty
         , _sWall          = mempty
-        , _sWanpai        = mempty
+        , _sWanpai        = Wanpai mempty mempty mempty mempty
         , _sWaiting       = Nothing
         }
 
 dealTiles :: [Tile] -> Kyoku -> Kyoku
 dealTiles tiles deal = deal
         { _pWallTilesLeft = length wall
-        , _pDora          = [dora]
+        , _pDora          = [doraX]
         , _sEvents        = []
         , _sHands         = Map.fromList $ zip [Ton .. Pei] (initHand <$> [h1, h2, h3, h4])
         , _sWall          = wall
-        , _sWanpai        = wanpai
+        , _sWanpai        = Wanpai supplement doraXS uradora rest
         } where
            (hands, xs)             = splitAt (13 * 4) tiles
-           ((h1, h2), (h3, h4))    = (splitAt 13 *** splitAt 13) $ splitAt (13*2) hands
-           (dora : wanpai, wall)   = splitAt 14 xs
+           ((h1, h2), (h3, h4))    = splitAt 13 *** splitAt 13 $ splitAt (13*2) hands
+           (wanpai, wall)          = splitAt 14 xs
+           ((supplement, doraX:doraXS), (uradora, rest))
+                                   = splitAt 4 *** splitAt 5 $ splitAt 9 wanpai
 
 shuffleTiles :: IO [Tile]
 shuffleTiles = shuffleM riichiTiles
@@ -222,6 +235,7 @@ shuffleTiles = shuffleM riichiTiles
 
 --
 makeLenses ''Kyoku'
+makeLenses ''Wanpai
 makeLenses ''ValueInfo
 makeLenses ''ValuedHand
 makeLenses ''Value
@@ -232,5 +246,5 @@ makeLenses ''Yaku
 instance P.Pretty Kyoku where
     pretty Kyoku{..} = P.pretty _pDeals P.<$$>
         P.string "wall:"   P.<+> P.hang 0 (prettyList' _sWall) P.<$$>
-        P.string "wanpai:" P.<+> P.hang 0 (prettyList' _sWanpai) P.<$$>
+        P.string "unrevealed dora:" P.<+> P.hang 0 (prettyList' $ _wDora _sWanpai) P.<$$>
         P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)

@@ -12,7 +12,8 @@ module Mahjong.Hand.Yaku.Standard where
 
 ------------------------------------------------------------------------------
 import           Import
-import           Mahjong.Tiles (Tile, Number(..), Kaze(..), kaze, tileNumber)
+import           Mahjong.Tiles (Tile, Number(..), Kaze(..), kaze, tileNumber, (==~))
+import           Mahjong.Hand.Mentsu (mentsuTiles)
 import           Mahjong.Hand.Yaku.Builder
 import           Mahjong.Hand.Algo (shantenBy, chiitoitsuShanten)
 ------------------------------------------------------------------------------
@@ -20,6 +21,15 @@ import           Mahjong.Kyoku.Internal
 import           Mahjong.Kyoku.Flags
 import           Mahjong.Hand.Internal
 ------------------------------------------------------------------------------
+
+-- | All tiles in hand.
+-- TODO move to Hand.hs
+yakuAllTiles :: YakuCheck [Tile]
+yakuAllTiles = do
+    Hand{..} <- yakuState <&> view vHand
+    return $ map pickedTile _handPicks ++
+        runIdentity _handConcealed ++
+        concatMap mentsuTiles _handCalled
 
 -- * 4 mentsu + 1 jantou
 
@@ -259,3 +269,25 @@ renhou :: YakuCheck Yaku
 renhou = do
     requireFlag FirstRoundUninterrupted
     undefined -- TODO This is not implemented yet.
+
+countingDora :: YakuCheck Yaku
+countingDora = do
+    dora <- yakuState <&> view (vKyoku.pDora)
+    tiles <- yakuAllTiles
+    let num = length [ () | a <- dora, b <- tiles, a ==~ b ]
+    case num of
+        0 -> yakuFail
+        _ -> return $ YakuExtra num "Dora"
+
+countingUraDora :: YakuCheck Yaku
+countingUraDora = do
+    _ <- riichi
+    [OpenedUraDora dora] <- yakuState <&> toListOf (vKyoku.pFlags._Wrapped.each.filtered isUraFlag)
+    tiles <- yakuAllTiles
+    let num = length [ () | a <- dora, b <- tiles, a ==~ b ]
+    case num of
+        0 -> yakuFail
+        _ -> return $ YakuExtra num "Ura-Dora"
+  where
+    isUraFlag (OpenedUraDora _) = True
+    isUraFlag _                 = False

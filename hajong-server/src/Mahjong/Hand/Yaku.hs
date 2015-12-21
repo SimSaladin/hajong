@@ -58,6 +58,8 @@ allStandard =
     , [ tanyao ]
     , [ toitoi ]
     , [ nagashiMangan ]
+    , [ countingDora ]
+    , [ countingUraDora ]
     ]
 
 checkYaku :: [[YakuCheck Yaku]] -> ValueInfo -> Grouping -> [Yaku]

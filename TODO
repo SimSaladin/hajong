@@ -10,7 +10,9 @@ x = done, / = half done, ! = needs testing
 [x] test and implement chankan
 [x] implement the yakumans tenhou and renhou. tests are done
 [x] add test: ankan in riichi
-[ ] add test: dora and ura-dora counted on win
+[x] add test: dora and ura-dora counted on win
+[x] add test: dora is flipped on kantsu meld
+[x] add test: cannot win with a hand without yaku. Not even if there are dora or ura-dora.
 [ ] add test: suufonrenda: four consecutive wind discards
 [ ] add test: kuushuu kyuuhai: 9 different honors or terminals on initial draw
 [x] add test: suucha riichi: four players riichi. last discard may be called ron on

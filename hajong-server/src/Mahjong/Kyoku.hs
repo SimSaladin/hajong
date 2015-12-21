@@ -90,7 +90,7 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | pk /= pk'                     = throwError $ "Not your (" ++ tshow pk' ++ ") turn, it's turn of " ++ tshow pk
             | TurnTileDiscard d <- ta       = processDiscard pk d
             | TurnAnkan t <- ta             = processAnkan pk t
-            | TurnTsumo <- ta               = tsumo pk <&> KyokuEnded
+            | TurnTsumo <- ta               = endTsumo pk <&> KyokuEnded
             | TurnShouminkan t <- ta        = processShouminkan pk t
 
 step (WaitingShouts Nothing _ False)      InpAuto        = return CheckEndConditionsAfterDiscard
@@ -136,8 +136,6 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
 
     -- player-private
     DealStarts _ _ _ -> [ ]
-        -- null (_sWanpai new) -> [] -- TODO checks if player; the whole function is to work on server for now
-        -- otherwise           -> [ Endo $ const new ]
 
     DealWaitForShout ws ->
         [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
@@ -148,9 +146,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
     DealRiichi _pk ->
         [ Endo $ pRiichi +~ 1000 ]
 
-    DealFlipDora td mtw ->
-        [ Endo $ pDora %~ (|> td)
-        , Endo $ maybe id (over sWanpai . flip snoc) mtw ]
+    DealFlipDora td -> [ Endo $ pDora %~ (|> td) ]
 
     GamePoints pk ps ->
         [ Endo $ pPlayers.ix pk._2 +~ ps ]
@@ -162,9 +158,7 @@ dealTurnAction p ta = mconcat $ case ta of
         [ Endo $ sHands.ix p.handDiscards %~ (|> dc) ]
 
     TurnTileDraw w _ ->
-        [ Endo $ pWallTilesLeft -~ 1
-        , Endo $ sWall %~ if' w initEx tailEx
-        , Endo $ sWanpai %~ if' w tailEx id ]
+        [ Endo $ pWallTilesLeft -~ 1 ]
 
     TurnAnkan _ ->
         [ ]
@@ -277,7 +271,7 @@ checkEndConditions = do
     dora           <- use pDora
     everyoneRiichi <- use sHands <&> allOf (each.handRiichi) (/= NoRiichi)
     case () of
-        _ | length dora == 5 -> return $ KyokuEnded $ DealAbort SuukanSanra -- TODO check that someone is not waiting for the yakuman
+        _ | length dora == 5 -> return $ KyokuEnded $ DealAbort SuuKaikan -- TODO check that someone is not waiting for the yakuman
           | tilesLeft == 0   -> nagashiOrDraw
           | everyoneRiichi   -> return $ KyokuEnded $ DealAbort SuuchaRiichi
           | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
@@ -313,15 +307,17 @@ draw pk wanpai = do
     tellEvent $ DealTurnAction pk $ TurnTileDraw wanpai Nothing
 
 drawWall :: InKyoku m => HandA -> m HandA
-drawWall hand = preuse (sWall._head) >>= maybe (throwError "Wall is empty") (`toHand` hand)
+drawWall hand = do
+    wallHead <- preuse (sWall._head) >>= maybe (throwError "Wall is empty") return
+    sWall %= tailEx
+    wallHead `toHand` hand
 
 drawDeadWall :: InKyoku m => HandA -> m HandA
-drawDeadWall hand = preuse (sWall._last) >>= \case
-    Nothing  -> throwError "Wall is empty"
-    Just tow -> do
-        t <- use (sWanpai.singular _head)
-        tellEvent $ DealFlipDora t (Just tow)
-        t `toHandWanpai` hand
+drawDeadWall hand = do
+    lastTileInWall <- preuse (sWall._last) >>= maybe (throwError "Wall is empty") return
+    fromWanpai     <- wanpaiGetSupplement lastTileInWall
+    flipNewDora -- TODO should it flip now or after the discard?
+    fromWanpai `toHandWanpai` hand
 
 -- ** Discarding
 
@@ -356,6 +352,36 @@ advanceTurn = do
     tellEvent $ DealTurnBegins pk
     return pk
 
+-- ** Wanpai
+
+-- | Flip a new dora from wanpai. If the kyoku would end in suukaikan after
+-- the next discard, set the @SuuKaikanAfterDiscard@ flag.
+--
+-- Note: does not check if the filp is valid.
+flipNewDora :: InKyoku m => m ()
+flipNewDora = tellEvent . DealFlipDora =<< wanpaiGetDora
+
+-- | Reveals opened ura-dora from the wanpai. Toggles the @OpenedUraDora@
+-- flag.
+revealUraDora :: InKyoku m => m ()
+revealUraDora = do
+    count <- use (pDora.to length)
+    use (sWanpai.wUraDora) >>= setFlag . OpenedUraDora . take count
+
+-- | Get supplementary tile from wanpai. Argument must be a tile from
+-- the wall to append to the wall.
+wanpaiGetSupplement :: InKyoku m => Tile -> m Tile
+wanpaiGetSupplement fromWall = preuse (sWanpai.wSupplement._Cons) >>= \case
+    Just (x, xs) -> do sWanpai.wSupplement .= xs
+                       sWanpai.wBlank %= flip snoc fromWall
+                       return x
+    Nothing      -> throwError "Four kantsu already called"
+
+wanpaiGetDora :: InKyoku m => m Tile
+wanpaiGetDora = preuse (sWanpai.wDora._Cons) >>= \case
+    Just (x, xs) -> sWanpai.wDora .= xs >> return x
+    Nothing      -> throwError "Internal error: no dora left in wanpai"
+
 -- ** Waiting
 
 -- | n seconds
@@ -379,16 +405,18 @@ processShout sk shout = do
             sh' <- meldTo shout m sh
             updateHand sk sh' >> updateHand tk th'
             tellEvent $ DealTurnShouted sk shout
-            if shoutKind shout `elem` [Ron, Chankan]
-                then endRon sk tk <&> KyokuEnded
-                else do unsetFlag FirstRoundUninterrupted
-                        tellEvent $ DealTurnBegins sk
-                        return (WaitingDiscard sk)
+            case () of
+                _ | shoutKind shout `elem` [Ron, Chankan] -> endRon sk tk <&> KyokuEnded
+                  | shoutKind shout == Kan -> unsetFlag FirstRoundUninterrupted >> return (WaitingDraw Ton True)
+                  | otherwise -> do
+                      unsetFlag FirstRoundUninterrupted
+                      tellEvent $ DealTurnBegins sk
+                      return (WaitingDiscard sk)
 
 -- ** Ending
 
-tsumo :: InKyoku m => Kaze -> m KyokuResults
-tsumo winner = do
+endTsumo :: InKyoku m => Kaze -> m KyokuResults
+endTsumo winner = do
     handOf' winner >>= handWin Nothing >>= updateHand winner -- FIXME this shouldn't exist, I think
 
     vh     <- getValuedHand winner
@@ -420,6 +448,8 @@ endRon winner payer = do
 
     dealEnds $ DealRon [win] [(payer, negate pointsFromPayer)]
 
+-- *** Helpers
+
 valuedHandPointsForRon :: Kaze -> ValuedHand -> Points
 valuedHandPointsForRon pk vh = roundKyokuPoints $ if' (pk == Ton) 6 4 * (vh^.vhValue.vaValue)
 
@@ -430,7 +460,9 @@ dealEnds results = do
     return results
 
 getValuedHand :: InKyoku m => Kaze -> m ValuedHand
-getValuedHand pk = valueHand pk <$> handOf' pk <*> get
+getValuedHand pk = do
+    revealUraDora
+    valueHand pk <$> handOf' pk <*> get
 
 -- ** Scoring
 
@@ -516,7 +548,7 @@ buildPlayerState :: Kyoku -> Kaze -> AsPlayer
 buildPlayerState deal pk = flip appEndo (deal { _sHands = imap (\k -> if pk == k then convertHand else maskPublicHand) (_sHands deal) }) $ mconcat
     [ Endo $ sEvents .~ []
     , Endo $ sWall .~ []
-    , Endo $ sWanpai .~ []
+    , Endo $ sWanpai .~ Wanpai [] [] [] []
     , Endo $ sWaiting %~ mwaiting
     ] where
         mwaiting :: Maybe Waiting -> Maybe Waiting

@@ -140,7 +140,7 @@ instance ToJSON GameEvent where
         DealTurnShouted pk shout                 -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
         DealPublicHandChanged pk hand            -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
         DealPrivateHandChanged _ _ hand          -> atEvent "my-hand"      ["hand"        .= hand]
-        DealFlipDora dora _                      -> atEvent "flipped-dora" ["tile"        .= dora]
+        DealFlipDora dora                        -> atEvent "flipped-dora" ["tile"        .= dora]
         DealNick pk p nick                       -> atEvent "nick"         ["player"      .= p, "player-kaze" .= pk, "nick" .= nick]
         DealRiichi pk                            -> atEvent "riichi"       ["player-kaze" .= pk]
         DealEnded results                        -> atEvent "end"          ["results"     .= results]
