@@ -24,13 +24,14 @@ tests = testGroup "Game mechanics"
 gameFlowTests :: TestTree
 gameFlowTests = testGroup "Game flow" 
   [ testCase "Game ends when a Ron is called" $ do
+
         kyoku <- testKyoku <&> sHands.ix Nan .handConcealed . _Wrapped .~ ["M5", "M5", "M5", "P5", "P6", "P7", "P8", "P8", "S4", "S5", "S6", "S7", "S8"]
                            <&> sHands.ix Ton .handConcealed . _Wrapped .~ ["S3"]
+
         let res = runKyokuState kyoku $ do
-                stepped_ InpAuto
-                stepped_ $ InpTurnAction Ton $ TurnTileDraw False Nothing
-                stepped_ $ InpTurnAction Ton $ TurnTileDiscard $ Mahjong.Discard "S3" Nothing False
+                drawAndTurnAction Ton $ TurnTileDiscard $ Mahjong.Discard "S3" Nothing False
                 stepped $ InpShout Nan $ Shout Ron Ton "S3" ["S4", "S5"]
+
         requireRight res $ \case
             (_, (KyokuEnded results,_)) -> return ()
             (_, (m,_))                  -> assertFailure $ "Expected 'Ended' but received " <> show m
@@ -142,6 +143,8 @@ gameFlowTests = testGroup "Game flow"
               drawAndTurnAction Ton $ TurnAnkan "M2"
               drawAndTurnAction Ton $ TurnAnkan "M3"
               drawAndTurnAction Ton $ TurnAnkan "M9"
+              stepped_ InpAuto
+              get >>= traceShowM
               drawAndTurnAction Ton TurnTsumo
 
       requireRight res $ \(_evs, (r,_k)) -> case r of
@@ -303,7 +306,7 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
             stepped $ InpTurnAction Ton $ TurnTsumo
 
       requireRight res $ \case
-          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Tenhou", Yaku 1 "Menzen Tsumo"]
+          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Tenhou"]
           x -> assertFailure (show x)
 
   , testCase "Chiihou (non-dealer goes out on first draw uninterrupted)" $ do
@@ -321,7 +324,7 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
             stepped $ InpTurnAction Nan $ TurnTsumo
 
       requireRight res $ \case
-          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Chiihou", Yaku 1 "Menzen Tsumo"]
+          (_, (KyokuEnded (DealTsumo [win] _), _)) -> win^._3.vhValue.vaYaku @?= [Yaku 13 "Chiihou"]
           x -> assertFailure (show x)
 
  {-

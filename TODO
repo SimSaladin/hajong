@@ -19,6 +19,8 @@ x = done, / = half done, ! = needs testing
 [x] Implement the suukantsu yaku. Add tests. When one player calls the fourth, game must not end.
 [ ] add test: kazoe yakuman
 [ ] add test: double ron
+[x] add tests for the yakumans
+[ ] implement aka-dora
 [ ] clear TODO's from code
 [ ] fix tests
 # client

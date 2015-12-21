@@ -138,7 +138,7 @@ handAutoDiscard hand
 -- shout).
 handWin :: CanError m => Maybe Shout -> HandA -> m HandA
 handWin ms h
-    | not (complete h)                                 = throwError "Cannot win with an incomplete hand"
+    | not (complete h)                                 = throwError $ "Cannot win with an incomplete hand: " ++ tshow h
     | isJust ms, h^.handFuriten._Wrapped /= NotFuriten = throwError "You are furiten"
     | otherwise                                        = return $ setAgari ms h
 
@@ -151,11 +151,11 @@ ankanOn :: CanError m => Tile -> HandA -> m HandA
 ankanOn tile hand
     | sameConcealed >= 4 = return hand'
     | sameConcealed == 3, tile `elem` map pickedTile (hand^.handPicks)
-                         = return $ hand' & handPicks %~ filter ((/= tile) . pickedTile)
+                         = return $ hand' & handPicks %~ L.deleteBy (\a b -> pickedTile a ==~ pickedTile b) (FromWall $ return tile) -- TODO a bit of a hack; looks better if PickedTile -> Tile and agari to its own field
     | otherwise          = throwError "Not enough same tiles"
     where
-        sameConcealed = hand^.handConcealed._Wrapped^..folded.filtered (== tile) & length
-        hand'         = hand & handConcealed._Wrapped %~ L.delete tile . L.delete tile . L.delete tile
+        sameConcealed = hand^.handConcealed._Wrapped^..folded.filtered (==~ tile) & length
+        hand'         = hand & handConcealed._Wrapped %~ L.foldl1' (.) (replicate 4 (L.delete tile)) -- @delete@, not @filter@: allows for hypotethical situation of more than 4 of the same tile
                              & handCalled %~ (:) (kantsu tile)
                              & handState .~ DrawFromWanpai
 
@@ -172,17 +172,23 @@ shouminkanOn tile hand = do
 
 -- * Call
 
--- | Meld the mentsu to the hand
+-- | Meld the mentsu to the hand.
+--
+-- * if the hand wins, call handWin to set agari tile.
+-- * if the shout was kan, set state to DrawFromWanpai
+-- * append the called mentsu
+-- * remove melded tiles from hand
 meldTo :: CanError m => Shout -> Mentsu -> HandA -> m HandA
 meldTo shout mentsu hand
-    | hand^.handConcealed._Wrapped.to (\xs -> length ih + length (xs L.\\ ih) == length xs)
-    = if' (shoutKind shout `elem` [Ron, Chankan]) (handWin $ Just shout) return
-    $ if' (shoutKind shout == Kan) (handState .~ DrawFromWanpai) id
-    $ handCalled %~ (|> mentsu)
-    $ handConcealed._Wrapped %~ (L.\\ ih)
-    $ hand
+    | correctConcealedTilesInHand =
+              if' (shoutKind shout `elem` [Ron, Chankan]) (handWin $ Just shout) return
+            $ if' (shoutKind shout ==      Kan)           (handState .~ DrawFromWanpai) id
+            $ handCalled %~ (|> mentsu) $ handConcealed._Wrapped %~ (L.\\ tilesFromHand) $ hand
     | otherwise = throwError "meldTo: Tiles not available"
-  where ih = shoutTo shout
+  where
+    tilesFromHand               = shoutTo shout
+    concealedTiles              = hand^.handConcealed._Wrapped
+    correctConcealedTilesInHand = length concealedTiles == length (concealedTiles L.\\ tilesFromHand) + length tilesFromHand
 
 -- | Transfer the discard from the hand to a mentsu specified by the shout.
 shoutFromHand :: CanError m => [WaitShout] -> Kaze -> Shout -> HandA -> m (Mentsu, HandA)
@@ -264,10 +270,10 @@ isShuntsuWait _                       = False
 
 -- | Set PickedTile from a agari call
 setAgari :: Maybe Shout -> HandA -> HandA
-setAgari ms h = h & handPicks .~ agari
-    where agari | Just sh <- ms, shoutKind sh == Ron = [AgariCall (shoutTile sh) (shoutFrom sh)]
+setAgari ms h = h & handPicks %~ (++ agari)
+    where agari | Just sh <- ms, shoutKind sh == Ron     = [AgariCall (shoutTile sh) (shoutFrom sh)]
                 | Just sh <- ms, shoutKind sh == Chankan = [AgariChankan (shoutTile sh) (shoutFrom sh)]
-                | otherwise     = h^.handPicks & _last %~ AgariTsumo . pickedTile
+                | otherwise                              = h^.handPicks & _last %~ AgariTsumo . pickedTile -- now agari is the latest tile from wall
 
 -- | Take the tile from hand if possible
 tileFromHand :: CanError m => Tile -> HandA -> m HandA

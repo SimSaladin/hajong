@@ -25,7 +25,7 @@ module Mahjong.Hand.Yaku.Builder
     , anyShuntsu', anyMentsu', anyKoutsuKantsu', anyMentsuJantou'
 
     -- ** Specific
-    , terminal, honor, sangenpai, suited, anyTile, concealed
+    , terminal, honor, sangenpai, kazehai, suited, anyTile, concealed
     , sameTile, containsTile, sameNumber, sameSuit, ofNumber
 
     -- ** Combinators
@@ -97,6 +97,7 @@ data MentsuProp = TileTerminal
                 | TileNumber Number
                 | TileHonor
                 | TileSangenpai
+                | TileKazehai
                 | TileAnd MentsuProp MentsuProp -- ^ &&
                 | TileOr MentsuProp MentsuProp -- ^ ||
                 | TileNot MentsuProp -- ^ not
@@ -172,10 +173,11 @@ tileGroupHead = headEx . tileGroupTiles
 -- Mentsu properties
 
 -- | Tile kinds.
-terminal, honor, sangenpai, suited, anyTile, concealed :: MentsuProp
+terminal, honor, sangenpai, kazehai, suited, anyTile, concealed :: MentsuProp
 terminal  = TileTerminal
 honor     = TileHonor
 sangenpai = TileSangenpai
+kazehai   = TileKazehai
 suited    = TileSuited
 anyTile   = PropAny
 concealed = TileConcealed
@@ -202,8 +204,9 @@ findMatch mp (x:xs)
     | matchProp mp x = Just (x, xs)
     | otherwise      = findMatch mp xs & _Just._2 %~ (x:)
 
--- | Match a property on a TileGroup
+-- | Match a property on a TileGroup. GroupLeftOver's always result False.
 matchProp :: MentsuProp -> TileGroup -> Bool
+matchProp _                  GroupLeftover{}        = False
 matchProp MentsuJantou       tg                     = isPair tg
 matchProp MentsuOrJantou     _                      = True
 matchProp MentsuShuntsu      (GroupComplete mentsu) = isShuntsu mentsu
@@ -220,6 +223,7 @@ matchProp tt tg
     | TileNumber n        <- tt = T.tileNumber (headEx tiles) == Just n
     | TileHonor           <- tt = not $ T.isSuited (headEx tiles)
     | TileSangenpai       <- tt = T.sangenpai (headEx tiles)
+    | TileKazehai         <- tt = T.kazehai (headEx tiles)
     | TileAnd x y         <- tt = matchProp x tg && matchProp y tg
     | TileOr x y          <- tt = matchProp x tg || matchProp y tg
     | TileNot x           <- tt = not $ matchProp x tg

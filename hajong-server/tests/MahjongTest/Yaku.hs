@@ -62,7 +62,8 @@ tests = testGroup "Standard Yaku"
         snd (getYaku vi) @?= [Yaku 2 "Toitoi"]
 
     , testCase "San ankou (+ Toitoi)" $ do
-        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M1", "M1", "S1", "S1", "S1", "S2", "S2", "S2", "S9", "S9", "W", "W"]
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M1", "M1", "S1", "S1", "S1", "S2", "S2", "S2", "W", "W"]
+                           & vHand.handCalled .~ [Mentsu Koutsu "S9" (Just $ Shout Ron Nan "S9" ["S9", "S9"])]
                            & vHand.handPicks .~ [AgariCall "S9" Nan]
         snd (getYaku vi) @?= [Yaku 2 "San ankou", Yaku 2 "Toitoi"]
 
@@ -187,8 +188,51 @@ tests = testGroup "Standard Yaku"
 
         snd (getYaku vi) @?= [Yaku 1 "Riichi", YakuExtra 1 "Dora", YakuExtra 1 "Ura-Dora"]
 
+    -- Yakumans
+
+    , testCase "Daisangen" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ replicate 2 "G" ++ replicate 3 "W!" ++ replicate 3 "R" ++ ["M2", "M3", "M4", "M1", "M1"]
+                           & vHand.handPicks .~ [AgariTsumo "G"]
+        snd (getYaku vi) @?= [Yaku 13 "Daisangen"]
+
+    , testCase "Kokushi Musou" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"]
+                           & vHand.handPicks .~ [AgariTsumo "G"]
+        snd (getYaku vi) @?= [Yaku 13 "Kokushi Musou"]
+
+    , testCase "Suuankou" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ replicate 2 "N" ++ replicate 3 "W!" ++ replicate 3 "R" ++ ["M2", "M2", "M2", "M1", "M1"]
+                           & vHand.handPicks .~ [AgariTsumo "N"]
+        snd (getYaku vi) @?= [Yaku 13 "Suuankou"]
+
+    , testCase "Shousuushii" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ replicate 2 "E" ++ replicate 3 "S" ++ replicate 3 "W" ++ replicate 2 "N" ++ ["M1", "M2", "M3"]
+                           & vHand.handPicks .~ [AgariTsumo "E"]
+        snd (getYaku vi) @?= [Yaku 13 "Shousuushii"]
+
+    , testCase "Daisuushii" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ replicate 3 "E" ++ replicate 3 "S" ++ replicate 3 "W" ++ replicate 2 "N" ++ ["M1", "M2", "M3"]
+                           & vHand.handPicks .~ [AgariTsumo "N"]
+        snd (getYaku vi) @?= [Yaku 13 "Suuankou", Yaku 13 "Daisuushii"]
+
+    , testCase "Tsuuiisou" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ replicate 1 "E" ++ replicate 3 "S" ++ replicate 3 "W" ++ replicate 3 "G" ++ replicate 3 "R"
+                           & vHand.handPicks .~ [AgariTsumo "E"]
+        snd (getYaku vi) @?= [Yaku 13 "Suuankou", Yaku 13 "Tsuuiisou"]
+
+    , testCase "Chinroutou" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ replicate 3 "M1" ++ replicate 3 "M9" ++ replicate 3 "S1" ++ replicate 3 "S9" ++ ["P1"]
+                           & vHand.handPicks .~ [AgariTsumo "P1"]
+        snd (getYaku vi) @?= [Yaku 13 "Suuankou", Yaku 13 "Chinroutou"]
+
+    , testCase "Chuuren Poutou" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["P1","P1","P1","P2","P3","P4","P5","P6","P7","P8","P9","P9","P9"]
+                           & vHand.handPicks .~ [AgariTsumo "P4"]
+        snd (getYaku vi) @?= [Yaku 13 "Chuuren Poutou"]
+
     -- NOTE: implemented in Mechanics test, for now
     -- , testCase "Nagashi Mangan" $ do
     -- , testCase "Chankan" $ do error "test not implemented (here) (yet)"
+    -- , testCase "Suu Kantsu" _
 
     ]

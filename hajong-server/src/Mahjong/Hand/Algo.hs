@@ -34,7 +34,7 @@ import           Mahjong.Tiles
 
 ------------------------------------------------------------------------------
 import           Data.Maybe (fromJust)
-import           Data.List (delete, nub)
+import           Data.List (delete)
 import qualified Data.List as L
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 
@@ -241,10 +241,23 @@ groupingShanten n tgs = case foldl' (\i -> (i -) . tgval) n tgs of
     tgval (GroupWait{})          = 1
     tgval (GroupLeftover{})      = 0
 
-kokushiShanten, chiitoitsuShanten :: Grouping -> Shanten
-kokushiShanten = Just . (13 -) . length . nub. filter suitedOrTerminal . concatMap tileGroupTiles
-  where suitedOrTerminal = liftA2 (||) honor terminal
+-- * Non-standard assembly
+
+-- | TODO: This doesn't require groupings. would be more efficient to check
+-- once with all the tiles.
+chiitoitsuShanten :: Grouping -> Shanten
 chiitoitsuShanten = Just . (6 -) . length . filter isPair
+
+-- | TODO: This doesn't require groupings. would be more efficient to check
+-- once with all the tiles.
+kokushiShanten :: Grouping -> Shanten
+kokushiShanten grp = case concatMap tileGroupTiles grp L.\\ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"] of
+    []                          -> Just 0
+    [x] | honor x || terminal x -> Just (-1)
+    xs                          -> Just 13
+            -- ^ TODO: this branch is hard, because we can have even 18
+            -- tiles in the hand at the moment. should discard kokushi
+            -- altogether when there are melds.
 
 -- Auxilary funtions
 

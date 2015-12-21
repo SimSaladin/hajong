@@ -10,15 +10,17 @@
 ------------------------------------------------------------------------------
 module Mahjong.Hand.Yaku.Standard where
 
+import qualified Data.List as L
 ------------------------------------------------------------------------------
 import           Import
 import           Mahjong.Tiles (Tile, Number(..), Kaze(..), kaze, tileNumber, (==~))
+import qualified Mahjong.Tiles as T
 import           Mahjong.Hand.Mentsu (mentsuTiles)
 import           Mahjong.Hand.Yaku.Builder
 import           Mahjong.Hand.Algo (shantenBy, chiitoitsuShanten)
+import           Mahjong.Kyoku.Flags
 ------------------------------------------------------------------------------
 import           Mahjong.Kyoku.Internal
-import           Mahjong.Kyoku.Flags
 import           Mahjong.Hand.Internal
 ------------------------------------------------------------------------------
 
@@ -27,9 +29,12 @@ import           Mahjong.Hand.Internal
 yakuAllTiles :: YakuCheck [Tile]
 yakuAllTiles = do
     Hand{..} <- yakuState <&> view vHand
-    return $ map pickedTile _handPicks ++
-        runIdentity _handConcealed ++
-        concatMap mentsuTiles _handCalled
+    return $ mapMaybe pickedNotCall _handPicks ++ runIdentity _handConcealed ++ concatMap mentsuTiles _handCalled
+        -- TODO: do something else with the agari info; it either should be
+        -- in the handPicks field, or the PickedTile shouldn't have it.
+  where
+    pickedNotCall AgariCall{} = Nothing
+    pickedNotCall t           = Just $ pickedTile t
 
 -- * 4 mentsu + 1 jantou
 
@@ -100,11 +105,6 @@ sanKantsu :: YakuCheck Yaku
 sanKantsu = do
     replicateM_ 3 $ anyKantsu anyTile
     return (Yaku 2 "San kantsu")
-
-suuKantsu :: YakuCheck Yaku
-suuKantsu = do
-    replicateM_ 4 $ anyKantsu anyTile
-    return (Yaku 13 "Suu Kantsu")
 
 sanshokuDoukou :: YakuCheck Yaku
 sanshokuDoukou = do
@@ -195,6 +195,69 @@ chiitoitsu = do
     if Just (-1) == shantenBy chiitoitsuShanten (info^.vHand.handConcealed._Wrapped ++ map pickedTile (info^.vHand.handPicks))
         then return (Yaku 2 "Chiitoitsu")
         else yakuFail
+
+-- | 13 orphans
+kokushiMusou :: YakuCheck Yaku
+kokushiMusou = do
+    leftover <- yakuAllTiles <&> (L.\\ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"])
+    case leftover of
+        [x] | T.honor x || T.terminal x -> return $ Yaku 13 "Kokushi Musou"
+        _                               -> yakuFail
+
+-- * Yakumans with standard composition
+
+-- | all three dragon triplets
+daisangen :: YakuCheck Yaku
+daisangen = yakuhaiRed >> yakuhaiGreen >> yakuhaiWhite >> return (Yaku 13 "Daisangen")
+
+-- | 4 concealed triplets
+suuankou :: YakuCheck Yaku
+suuankou = do
+    replicateM_ 4 $ anyKoutsuKantsu concealed
+    return (Yaku 13 "Suuankou")
+
+-- | Either shousuushii (3 triplets and pair of winds) or daisuushii (4
+-- triplets of winds).
+suushiihou :: YakuCheck Yaku
+suushiihou = do
+    replicateM_ 3 $ anyKoutsuKantsu kazehai
+    tg <- anyMentsuJantou' kazehai
+    return $ if length (tileGroupTiles tg) == 2 then Yaku 13 "Shousuushii" else Yaku 13 "Daisuushii"
+
+-- | Only honors
+tsuuiisou :: YakuCheck Yaku
+tsuuiisou = do
+    replicateM_ 4 $ anyMentsu honor
+    anyJantou honor
+    return $ Yaku 13 "Tsuuiisou"
+
+-- | all-green; green dragons and/or S2,3,4,6,8
+ryuuiisou :: YakuCheck Yaku
+ryuuiisou = do
+    tiles <- yakuAllTiles
+    if all isGreen tiles then return $ Yaku 13 "Ryyiisou" else yakuFail
+  where
+    isGreen t = any (t ==~) ["G", "S2", "S3", "S4", "S6", "S8"] 
+
+-- | all-terminals
+chinroutou :: YakuCheck Yaku
+chinroutou = do
+    tiles <- yakuAllTiles
+    if all T.terminal tiles then return $ Yaku 13 "Chinroutou" else yakuFail
+
+-- | Nine gates; 1-1-1-2-3-4-5-6-7-8-9-9-9 + any other of the suit.
+chuurenPoutou :: YakuCheck Yaku
+chuurenPoutou = do
+    tiles@(t:ts) <- yakuAllTiles
+    let afterPattern = map (fromMaybe (error "not used") . tileNumber) tiles L.\\ ["1","1","1","2","3","4","5","6","7","8","9","9","9"]
+    if all (T.suitedSame t) ts && length afterPattern == 1
+        then return (Yaku 13 "Chuuren Poutou")
+        else yakuFail
+
+suuKantsu :: YakuCheck Yaku
+suuKantsu = do
+    replicateM_ 4 $ anyKantsu anyTile
+    return (Yaku 13 "Suu Kantsu")
 
 -- * Unrelated to mentsu
 

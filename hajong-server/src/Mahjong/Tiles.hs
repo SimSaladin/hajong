@@ -22,7 +22,10 @@ import Text.PrettyPrint.ANSI.Leijen ((<>), displayS, renderCompact)
 -- | A (japanese) mahjong tile.
 data Tile = Suited TileKind Number Aka
           | Honor Honor
-          deriving (Eq, Ord)
+          deriving (Ord)
+
+instance Eq Tile where
+    a == b = a ==~ b
 
 data TileKind = ManTile | PinTile | SouTile | HonorTile
               deriving (Show, Read, Eq, Ord)
@@ -113,6 +116,7 @@ riichiTiles = join . replicate 4 $
 
 -- * Functions
 
+-- | Discards aka-dora/special info.
 (==~) :: Tile -> Tile -> Bool
 Suited tk n _ ==~ Suited tk' n' _ = tk == tk' && n == n'
 Honor x       ==~ Honor y         = x == y

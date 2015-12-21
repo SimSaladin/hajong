@@ -21,7 +21,10 @@ data RiichiState = NoRiichi | Riichi | DoubleRiichi
 data DrawState = DrawFromWanpai | DrawFromWall | DrawNone
                deriving (Show, Read, Eq)
 
+-- | NOTE: Agari- values do NOT represent a tile that belongs to the hand;
+-- it's already present somewhere else in the Hand datatype.
 data PickedTile m = FromWall (m Tile) | FromWanpai (m Tile) | AgariTsumo Tile | AgariTsumoWanpai Tile | AgariCall Tile Kaze | AgariChankan Tile Kaze
+
 deriving instance Show (PickedTile Maybe)
 deriving instance Read (PickedTile Maybe)
 deriving instance Eq   (PickedTile Maybe)
