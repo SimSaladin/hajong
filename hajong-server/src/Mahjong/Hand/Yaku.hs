@@ -52,6 +52,7 @@ allStandard =
     , [ rinshanKaihou ]
     , [ sanAnkou ]
     , [ sanKantsu ]
+    , [ suuKantsu ]
     , [ sanshokuDoujin ]
     , [ sanshokuDoukou ]
     , [ shouSangen ]

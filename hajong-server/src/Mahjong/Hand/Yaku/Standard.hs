@@ -101,6 +101,11 @@ sanKantsu = do
     replicateM_ 3 $ anyKantsu anyTile
     return (Yaku 2 "San kantsu")
 
+suuKantsu :: YakuCheck Yaku
+suuKantsu = do
+    replicateM_ 4 $ anyKantsu anyTile
+    return (Yaku 13 "Suu Kantsu")
+
 sanshokuDoukou :: YakuCheck Yaku
 sanshokuDoukou = do
     tile <- anyKoutsuKantsu' anyTile <&> tileGroupHead

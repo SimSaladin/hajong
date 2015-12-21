@@ -100,6 +100,54 @@ gameFlowTests = testGroup "Game flow"
       requireRight res $ \(_evs, (_r,k)) -> do
           k ^. pDora.to length @?= 4
           k ^. pFlags @?= setFromList [OpenedUraDora ["P1", "P2", "P3", "P4"]]
+
+  , testCase "Suufonrenda: four consecutive wind discards goes through" $ do
+      kyoku <- testKyoku <&> sWall %~ (["W", "W", "W", "W"] ++)
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "W" Nothing False
+            autoAndDiscard Nan $ Discard "W" Nothing False
+            autoAndDiscard Shaa $ Discard "W" Nothing False
+            autoAndDiscard Pei $ Discard "W" Nothing False
+            autoEndTurn
+
+      requireRight res $ \(_evs, (r,_k)) -> r @?= KyokuEnded (DealAbort SuufonRenda)
+
+  , testCase "Suukaikan: four kans called all not by one player" $ do
+      kyoku <- testKyoku <&> sWall %~ (["M1", "M2", "M3", "M4"] ++)
+                         <&> sHands . ix Ton  . handConcealed._Wrapped %~ (["M1", "M1", "M1"] ++)
+                         <&> sHands . ix Nan  . handConcealed._Wrapped %~ (["M2", "M2", "M2"] ++)
+                         <&> sHands . ix Shaa . handConcealed._Wrapped %~ (["M3", "M3", "M3"] ++)
+                         <&> sHands . ix Pei  . handConcealed._Wrapped %~ (["M4", "M4", "M4", "N"] ++)
+
+      let res = runKyokuState kyoku $ do
+            drawAndTurnAction Ton  (TurnAnkan "M1") >> stepped_ InpAuto >> stepped_ InpAuto
+            drawAndTurnAction Nan  (TurnAnkan "M2") >> stepped_ InpAuto >> stepped_ InpAuto
+            drawAndTurnAction Shaa (TurnAnkan "M3") >> stepped_ InpAuto >> stepped_ InpAuto
+            drawAndTurnAction Pei  (TurnAnkan "M4")
+            autoEndTurn
+
+      requireRight res $ \(_evs, (r,_k)) -> r @?= KyokuEnded (DealAbort SuuKaikan)
+
+  , testCase "Suukantsu: yakuman" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ (replicate 4 "M1" ++ replicate 3 "M2" ++ replicate 3 "M3" ++ replicate 3 "M9")
+                         <&> sWall %~ (["S1"] ++)
+                         <&> sWanpai.wSupplement .~ ["M2", "M3", "M9", "S1"]
+                         <&> sWanpai.wUraDora .~ []
+                         <&> pFlags .~ mempty
+                         <&> pDora .~ []
+
+      let res = runKyokuState kyoku $ do
+              drawAndTurnAction Ton $ TurnAnkan "M1"
+              drawAndTurnAction Ton $ TurnAnkan "M2"
+              drawAndTurnAction Ton $ TurnAnkan "M3"
+              drawAndTurnAction Ton $ TurnAnkan "M9"
+              drawAndTurnAction Ton TurnTsumo
+
+      requireRight res $ \(_evs, (r,_k)) -> case r of
+        KyokuEnded (DealTsumo [win] _) -> do Yaku 13 "Suu Kantsu" `elem` (win^._3.vhValue.vaYaku) @? "Suu kantsu was not yielded"
+                                             win^._3.vhValue.vaNamed @?= Just "Yakuman"
+        _                              -> assertFailure $ "Expected KyokuEnded but received " ++ show r
   ]
 
 furitenTests :: TestTree
@@ -147,7 +195,7 @@ riichiTests = testGroup "Riichi tests"
           k ^?! pPlayers . ix Nan . _2 @?= 24000
 
   , testCase "Riichi points from table are transferred to winner on ron" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5Pinfu
                          <&> pRiichi .~ 2000
                          <&> sWall %~ (["P2", "P5"] ++)
 
@@ -261,6 +309,7 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
   , testCase "Chiihou (non-dealer goes out on first draw uninterrupted)" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
                          <&> sWall %~ ("P1" <|) . ("P5" <|)
+                         <&> pDora .~ []
 
       let res = runKyokuState kyoku $ do
             stepped_ InpAuto -- start
@@ -336,12 +385,8 @@ handThatWinsWithP5      = ["M1", "M1", "M1", "P1", "P2", "P3", "P5", "P7", "P8",
 handThatWinsWithP5Pinfu :: [Tile]
 handThatWinsWithP5Pinfu = ["M1", "M2", "M3", "P3", "P4", "P5", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
 
-testKyoku = newKyoku fourPlayers (map tshow [1..4])
 
-runKyokuState k ma = runStateT ma (NotBegun 0, k)
-
-requireRight (Left err) go = assertFailure (unpack err)
-requireRight (Right res) go = go res
+-- * Game flow testing combinators
 
 autoAndDiscard k d = drawAndTurnAction k (TurnTileDiscard d)
 
@@ -350,6 +395,24 @@ drawAndTurnAction k action = go where
           case st of
             WaitingDiscard{} -> stepped_ (InpTurnAction k action)
             _                -> steppedSt InpAuto >> go
+
+autoEndTurn = gets fst >>= \case
+    CheckEndConditionsAfterDiscard -> stepped_ InpAuto
+    KyokuEnded{}                   -> return ()
+    _                              -> stepped_ InpAuto >> autoEndTurn
+
+
+-- * Mechanics testing framework
+
+-- | Basic kyoku state for testing. Some fields are hard-coded for
+-- reproducible tests.
+testKyoku = newKyoku fourPlayers (map tshow [1..4]) <&> pDora .~ ["M1"]
+                                                    <&> sWanpai.wUraDora .~ ["M1", "M2", "M3", "M4", "M5"]
+
+runKyokuState k ma = runStateT ma (NotBegun 0, k)
+
+requireRight (Left err) go = assertFailure (unpack err)
+requireRight (Right res) go = go res
 
 steppedSt step = stepped_ step >> fmap fst get
 

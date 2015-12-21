@@ -13,11 +13,12 @@ x = done, / = half done, ! = needs testing
 [x] add test: dora and ura-dora counted on win
 [x] add test: dora is flipped on kantsu meld
 [x] add test: cannot win with a hand without yaku. Not even if there are dora or ura-dora.
-[ ] add test: suufonrenda: four consecutive wind discards
-[ ] add test: kuushuu kyuuhai: 9 different honors or terminals on initial draw
+[x] add test: suufonrenda: four consecutive wind discards
 [x] add test: suucha riichi: four players riichi. last discard may be called ron on
-[ ] add test: suukaikan: four kantsu called, all not by one player.
-[ ] Implement the suukantsu yaku. Add tests. When one player calls the fourth, game must not end.
+[x] add test: suukaikan: four kantsu called, all not by one player.
+[x] Implement the suukantsu yaku. Add tests. When one player calls the fourth, game must not end.
+[ ] add test: kazoe yakuman
+[ ] add test: double ron
 [ ] clear TODO's from code
 [ ] fix tests
 # client
@@ -38,6 +39,11 @@ x = done, / = half done, ! = needs testing
 
 
 # someday/maybe
+[ ] inspect test failure:
+      TileGroupings of tiles of 'tileGroup' .<-- [ tileGroup ]:                    FAIL (0.34s)
+              *** Gave up! Passed only 98 tests.
+[ ] refactor the kyoku code: make it possible to only modify the state via events; the event should take effect in the StateT data immediately after 'telling' it
+[ ] add test: kuushuu kyuuhai: 9 different honors or terminals on initial draw
 [ ] (graphics) point sticks (1000 done)
 [ ] (graphics) more esthetic tiles
 [ ] (elm) chat/dialog

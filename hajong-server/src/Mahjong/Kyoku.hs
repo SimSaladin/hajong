@@ -270,11 +270,20 @@ checkEndConditions = do
     tilesLeft      <- use pWallTilesLeft
     dora           <- use pDora
     everyoneRiichi <- use sHands <&> allOf (each.handRiichi) (/= NoRiichi)
+    firstDiscards  <- use sHands <&> toListOf (each.handDiscards._head.dcTile)
+
+    let fourWindTiles = length firstDiscards == 4 && isKaze (headEx firstDiscards) && allSame firstDiscards
+
     case () of
         _ | length dora == 5 -> return $ KyokuEnded $ DealAbort SuuKaikan -- TODO check that someone is not waiting for the yakuman
           | tilesLeft == 0   -> nagashiOrDraw
           | everyoneRiichi   -> return $ KyokuEnded $ DealAbort SuuchaRiichi
+          | fourWindTiles    -> return $ KyokuEnded $ DealAbort SuufonRenda
           | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
+  where
+     allSame :: [Tile] -> Bool
+     allSame [] = True
+     allSame (x:xs) = all (x ==~) xs
 
 -- ** Beginning
 
@@ -459,10 +468,18 @@ dealEnds results = do
     tellEvents $ DealEnded results : payPoints results
     return results
 
+-- | Value the hand. If the hand would be valueless (no yaku, just extras),
+-- raise an error.
 getValuedHand :: InKyoku m => Kaze -> m ValuedHand
 getValuedHand pk = do
     revealUraDora
-    valueHand pk <$> handOf' pk <*> get
+    vh <- valueHand pk <$> handOf' pk <*> get
+    when (length (vh^..vhValue.vaYaku.each.filtered yakuNotExtra) == 0) $
+        throwError "Need at least one yaku that ain't dora to win"
+    return vh
+  where
+    yakuNotExtra Yaku{}      = True
+    yakuNotExtra YakuExtra{} = False
 
 -- ** Scoring
 

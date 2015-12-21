@@ -134,7 +134,8 @@ handAutoDiscard hand
 
 -- * Winning
 
--- | Shout is Nothing if Tsumo
+-- | The hand goes out with tsumo (ms=Nothing) or with a shout (ms=Just
+-- shout).
 handWin :: CanError m => Maybe Shout -> HandA -> m HandA
 handWin ms h
     | not (complete h)                                 = throwError "Cannot win with an incomplete hand"
@@ -148,13 +149,13 @@ handWin ms h
 -- Remember to flip dora when this succeeds.
 ankanOn :: CanError m => Tile -> HandA -> m HandA
 ankanOn tile hand
-    | [_,_,_,_] <- sameConcealed  = return hand'
-    | [_,_,_]   <- sameConcealed
-    , tile `elem` map pickedTile (hand^.handPicks) = return $ hand' & handPicks %~ filter ((/= tile) . pickedTile)
-    | otherwise                                    = throwError "Not enough same tiles"
+    | sameConcealed >= 4 = return hand'
+    | sameConcealed == 3, tile `elem` map pickedTile (hand^.handPicks)
+                         = return $ hand' & handPicks %~ filter ((/= tile) . pickedTile)
+    | otherwise          = throwError "Not enough same tiles"
     where
-        sameConcealed = hand^.handConcealed._Wrapped^..folded.filtered (== tile)
-        hand'         = hand & handConcealed._Wrapped %~ filter (/= tile)
+        sameConcealed = hand^.handConcealed._Wrapped^..folded.filtered (== tile) & length
+        hand'         = hand & handConcealed._Wrapped %~ L.delete tile . L.delete tile . L.delete tile
                              & handCalled %~ (:) (kantsu tile)
                              & handState .~ DrawFromWanpai
 

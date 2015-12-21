@@ -132,6 +132,10 @@ tileNumber (Honor _)      = Nothing
 isSuited :: Tile -> Bool
 isSuited = (/= HonorTile) . tileKind
 
+isKaze :: Tile -> Bool
+isKaze (Honor (Kazehai _)) = True
+isKaze _ = False
+
 suitedSame :: Tile -> Tile -> Bool
 suitedSame (Suited tk _ _) (Suited tk' _ _) = tk == tk'
 suitedSame _ _ = False

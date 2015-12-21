@@ -130,7 +130,7 @@ data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                   deriving (Eq, Show, Read, Typeable)
 
 data AbortiveDraw = KuushuuKyuuhai -- ^ Nine unrelated tiles in initial hand
-                  | SuufontsuRenta -- ^ All four winds
+                  | SuufonRenda    -- ^ All four winds
                   | SuuchaRiichi   -- ^ All players riichi
                   | SuuKaikan      -- ^ Fourth kon declared (or fifth if one player declared all four)
                   | Sanchahou      -- ^ Three players ron
