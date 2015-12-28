@@ -23,7 +23,7 @@ tests = testGroup "Game mechanics"
 
 gameFlowTests :: TestTree
 gameFlowTests = testGroup "Game flow" 
-  [ testCase "Game ends when a Ron is called" $ do
+  [ testCase "Game ends when a Ron is called and game is continued" $ do
 
         kyoku <- testKyoku <&> sHands.ix Nan .handConcealed . _Wrapped .~ ["M5", "M5", "M5", "P5", "P6", "P7", "P8", "P8", "S4", "S5", "S6", "S7", "S8"]
                            <&> sHands.ix Ton .handConcealed . _Wrapped .~ ["S3"]
@@ -31,6 +31,7 @@ gameFlowTests = testGroup "Game flow"
         let res = runKyokuState kyoku $ do
                 drawAndTurnAction Ton $ TurnTileDiscard $ Mahjong.Discard "S3" Nothing False
                 stepped $ InpShout Nan $ Shout Ron Ton "S3" ["S4", "S5"]
+                autoEndTurn
 
         requireRight res $ \case
             (_, (KyokuEnded results,_)) -> return ()
@@ -52,7 +53,9 @@ gameFlowTests = testGroup "Game flow"
                 == 13 @? "Wanpai of 13 (+1 dora) tiles"
         kyoku^.sHands ^.. each.handConcealed._Wrapped.to length == [13, 13, 13, 13]  @? "Four hands of 13 tiles"
         kyoku^.pDora.to length == 1 @? "One dora tile"
-        kyoku^.pRound == (Ton, 1) @? "First round was not Ton, 1"
+        kyoku^.pRound                            == (Ton, 1) @? "First round was not Ton, 1"
+        length (kyokuTiles kyoku)                @?= 136
+        length (filter isAka $ kyokuTiles kyoku) @?= 4 -- TODO: refactor this sum to a @kyokuTiles@ function
 
   , testCase "Tsumo is an option in the DealPrivateHandChanged event" $ do
         kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5
@@ -79,6 +82,7 @@ gameFlowTests = testGroup "Game flow"
       let res = runKyokuState kyoku $ do
             autoAndDiscard Ton $ Discard "P5" Nothing False
             stepped $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
+            autoEndTurn
         
       case res of
           Right (_evs, (r, _k)) -> assertFailure $ "Didn't fail, received " ++ show r
@@ -144,13 +148,24 @@ gameFlowTests = testGroup "Game flow"
               drawAndTurnAction Ton $ TurnAnkan "M3"
               drawAndTurnAction Ton $ TurnAnkan "M9"
               stepped_ InpAuto
-              get >>= traceShowM
               drawAndTurnAction Ton TurnTsumo
 
       requireRight res $ \(_evs, (r,_k)) -> case r of
         KyokuEnded (DealTsumo [win] _) -> do Yaku 13 "Suu Kantsu" `elem` (win^._3.vhValue.vaYaku) @? "Suu kantsu was not yielded"
                                              win^._3.vhValue.vaNamed @?= Just "Yakuman"
         _                              -> assertFailure $ "Expected KyokuEnded but received " ++ show r
+
+  , testCase "Ankan may be robbed to kokushi" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "G", "W!"] -- Win on "R"
+                         <&> sHands . ix Ton . handConcealed._Wrapped .~ ["R", "R", "R", "P1", "P2"]
+                         <&> sWall %~ (["R"] ++)
+
+      let res = runKyokuState kyoku $ do
+              drawAndTurnAction Ton $ TurnAnkan "R"
+              stepped_ $ InpShout Nan $ Shout Chankan Ton "R" []
+              autoEndTurn
+
+      requireRight res $ \_ -> return ()
   ]
 
 furitenTests :: TestTree
@@ -158,16 +173,48 @@ furitenTests = testGroup "Furiten tests"
   [ testCase "Trying to Ron in furiten results in kyoku level error" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed . _Wrapped .~ handThatWinsWithP5
                          <&> sHands . ix Nan . handDiscards .~ [Mahjong.Discard "P5" Nothing False]
-                         <&> sHands . ix Nan . handFuriten .~ return Furiten
+                         <&> sHands . ix Nan . handFuriten._Wrapped .~ Furiten
                          <&> sWall %~ ("P5" <|)
       let res = runKyokuState kyoku $ do
-              stepped_ InpAuto -- start
-              stepped_ InpAuto -- draw
-              stepped_ InpAuto -- discard P5
+              autoAndDiscard Ton $ Discard "P5" Nothing False
               stepped $ InpShout Nan $ Shout Ron Ton "P5" ["P5"] -- should error
+              autoEndTurn
       case res of
           Left err -> err @?= "You are furiten"
           x -> assertFailure $ show x
+
+  , testCase "Temporary furiten is effective until next own draw" $ do
+      undefined
+
+  , testCase "Chiitoi furiten" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "M3"]
+                         <&> sHands . ix Nan . handDiscards .~ [Discard "M3" Nothing False]
+                         <&> sHands . ix Nan %~ updateFuriten
+                         <&> sWall %~ ("M3" <|)
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "M3" Nothing False
+            stepped_ $ InpShout Nan $ Shout Ron Ton "M3" ["M3"]
+            autoEndTurn
+
+      case res of
+          Left err -> err @?= "You are furiten"
+          Right x  -> assertFailure "Should have errored"
+
+  , testCase "Kokushi furiten" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"]
+                         <&> sHands . ix Nan . handDiscards .~ [Discard "G" Nothing False]
+                         <&> sHands . ix Nan %~ updateFuriten
+                         <&> sWall %~ ("G" <|)
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "G" Nothing False
+            stepped_ $ InpShout Nan $ Shout Ron Ton "G" []
+            autoEndTurn
+
+      case res of
+          Left err -> err @?= "You are furiten"
+          Right x  -> assertFailure "Should have errored"
   ]
 
 riichiTests :: TestTree
@@ -200,10 +247,10 @@ riichiTests = testGroup "Riichi tests"
   , testCase "Riichi points from table are transferred to winner on ron" $ do
       kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5Pinfu
                          <&> pRiichi .~ 2000
-                         <&> sWall %~ (["P2", "P5"] ++)
+                         <&> sWall %~ (["P3", "P5"] ++)
 
       let res = runKyokuState kyoku $ do
-            autoAndDiscard Ton $ Discard "P2" Nothing False
+            autoAndDiscard Ton $ Discard "P3" Nothing False
             autoAndDiscard Nan $ Discard "P5" Nothing False
             stepped_ $ InpShout Ton $ Shout Ron Nan "P5" ["P5"]
 
@@ -258,6 +305,17 @@ riichiTests = testGroup "Riichi tests"
       case res of
           Left err -> return ()
           Right _ -> assertFailure "Game should have errored"
+
+  , testCase "(tenpai test) player is not tenpai if waiting only on a tile he already has four of" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ ["M1", "M1", "M1", "M1", "P1", "P2", "P3", "P7", "P8", "P9", "S2", "S3", "S4"]
+                         <&> sWall %~ (["W"] ++)
+
+      let res = runKyokuState kyoku $ do
+              drawAndTurnAction Ton $ TurnTileDiscard $ Discard "W" Nothing True
+
+      case res of
+          Left err -> return ()
+          Right _ -> assertFailure "Game should have errored"
   ]
 
 weirdYaku :: TestTree
@@ -283,9 +341,7 @@ weirdYaku = testGroup "Yaku dependant on the whole game state"
                          <&> sWall %~ ("P5" <|)
 
       let res = runKyokuState kyoku $ do
-            stepped_ InpAuto
-            stepped_ InpAuto -- draw
-            stepped_ $ InpTurnAction Ton $ TurnShouminkan "P5"
+            drawAndTurnAction Ton $ TurnShouminkan "P5"
             stepped $ InpShout Nan $ Shout Chankan Ton "P5" ["P5"]
 
       requireRight res $ \case
@@ -362,7 +418,6 @@ scoringTests = testGroup "Scoring"
             headEx (dWinners r) ^. _2 @?= 1200 + 300
             dPayers r ^..each._2 @?= [-400 - 100, -400 - 100, -400 - 100]
 
-    -- TODO: multi-ron
     , testCase "Honba is deducted from payer and added to winner on ron" $ do
         kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
                            <&> pDora .~ []
@@ -374,10 +429,27 @@ scoringTests = testGroup "Scoring"
                 stepped_ InpAuto -- draw
                 stepped_ InpAuto -- discard
                 stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P4", "P3"]
+                autoEndTurn
 
         requireRight res $ \(_evs, (KyokuEnded r, _k)) -> do
             headEx (dWinners r) ^. _2 @?= 1000 + 2 * 300
             dPayers r ^..each._2 @?= [-1000 - 2 * 300]
+
+    , testCase "Double-ron" $ do
+        kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
+                           <&> sHands . ix Shaa . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
+                           <&> pDora .~ []
+                           <&> sWall %~ (["P5"] ++)
+
+        let res = runKyokuState kyoku $ do
+                autoAndDiscard Ton $ Discard "P5" Nothing False
+                stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P4", "P3"]
+                stepped_ $ InpShout Shaa $ Shout Ron Ton "P5" ["P4", "P3"]
+                autoEndTurn
+
+        requireRight res $ \(_evs, (KyokuEnded r, _k)) -> do
+            map (view _2) (dWinners r) @?= [1000, 1000]
+            map (view _2) (dPayers r)  @?= [-2000]
     ]
 
 -- agari to pair

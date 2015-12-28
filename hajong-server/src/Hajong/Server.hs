@@ -156,17 +156,15 @@ instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
     putCopy (FromWall t) = contain $ do safePut (0 :: Word8); safePut t
     putCopy (FromWanpai t) = contain $ do safePut (1 :: Word8); safePut t
     putCopy (AgariTsumo t) = contain $ do safePut (2 :: Word8); safePut t
-    putCopy (AgariCall t k) = contain $ do safePut (3 :: Word8); safePut t; safePut k
-    putCopy (AgariChankan t k) = contain $ do safePut (4 :: Word8); safePut t; safePut k
-    putCopy (AgariTsumoWanpai t) = contain $ do safePut (5 :: Word8); safePut t
+    putCopy (AgariCall s) = contain $ do safePut (3 :: Word8); safePut s
+    putCopy (AgariTsumoWanpai t) = contain $ do safePut (4 :: Word8); safePut t
     getCopy = contain $ do tag <- safeGet
                            case tag :: Word8 of
                                0 -> FromWall <$> safeGet
                                1 -> FromWanpai <$> safeGet
                                2 -> AgariTsumo <$> safeGet
-                               3 -> AgariCall <$> safeGet <*> safeGet
-                               4 -> AgariChankan <$> safeGet <*> safeGet
-                               5 -> AgariTsumoWanpai <$> safeGet
+                               3 -> AgariCall <$> safeGet
+                               4 -> AgariTsumoWanpai <$> safeGet
                                _ -> fail $ "Couldn't identify tag " ++ show tag
 
 instance SafeCopy a => SafeCopy (Identity a) where

@@ -22,7 +22,7 @@ module Mahjong.Hand.Mentsu
 
     -- * Shouts
     Shout(..), ShoutKind(..),
-    possibleShouts, shoutPrecedence
+    possibleShouts, shoutPrecedence, shoutGE
 
     ) where
 
@@ -32,6 +32,8 @@ import           Mahjong.Tiles
 -- Types
 
 -- | For Shuntsu, the tile is the /first/ tile in chronological order.
+--
+-- TODO: we miss aka etc. flags here.
 data Mentsu = Mentsu
     { mentsuKind :: MentsuKind
     , mentsuTile :: Tile
@@ -62,7 +64,7 @@ data Shout = Shout
            } deriving (Show, Read, Eq, Ord)
 
 -- | Note: Ord instance is used to determine calling order.
-data ShoutKind = Ron | Kan | Pon | Chi | Chankan
+data ShoutKind = Chi | Kan | Pon | Ron | Chankan
                deriving (Show, Read, Eq, Ord)
 
 instance Pretty Shout where
@@ -100,6 +102,7 @@ koutsu  = Mentsu Koutsu `flip` Nothing
 kantsu  = Mentsu Kantsu `flip` Nothing
 jantou  = Mentsu Jantou `flip` Nothing
 
+-- | TODO: This discards flags (aka) from tiles!
 fromShout :: Shout -> Mentsu
 fromShout s@Shout{..} = setShout $ case shoutKind of
     Pon     -> koutsu shoutTile
@@ -137,24 +140,27 @@ isKantsu  = (== Kantsu)  . mentsuKind
 -- On shouts
 
 possibleShouts :: Tile -> [(MentsuKind, [Tile])]
-possibleShouts x = (Koutsu, [x, x])
-    : (Kantsu, [x, x, x])
-    : (Jantou, [x])
-    : catMaybes
-        [ succMay x >>= \y -> succMay y >>= \z -> return (Shuntsu, [y, z]) --  x . .
-        , predMay x >>= \y -> succMay x >>= \z -> return (Shuntsu, [y, z]) --  . x .
-        , predMay x >>= \y -> predMay y >>= \z -> return (Shuntsu, [y, z]) --  . . x
-        ]
+possibleShouts x = (Koutsu, [x, x]) : (Kantsu, [x, x, x]) : (Jantou, [x]) : catMaybes
+    [ succMay x >>= \y -> succMay y >>= \z -> return (Shuntsu, [y, z]) --  x . .
+    , predMay x >>= \y -> succMay x >>= \z -> return (Shuntsu, [y, z]) --  . x .
+    , predMay x >>= \y -> predMay y >>= \z -> return (Shuntsu, [y, z])] --  . . x
 
--- | Which shout takes precedence. Never @EQ@, always 'GT' or 'LT'.
+-- | Which shout takes precedence. Can be EQ.
+--
+-- @shoutPrecedence target a b@
 shoutPrecedence :: Kaze -- ^ shout from
                 -> (Kaze, Shout)
                 -> (Kaze, Shout)
                 -> Ordering
 shoutPrecedence dk (k, s) (k', s') = case comparing shoutKind s s' of
-    EQ | nextKaze dk == k  -> GT
-       | nextKaze dk == k' -> LT
-       | prevKaze dk == k  -> LT
-       | prevKaze dk == k' -> GT
-       | otherwise         -> error "shoutPrecedence: undecidable, this is not possible"
-    other                  -> other
+    EQ | shoutKind s `elem` [Ron, Chankan] -> EQ -- all winning shouts are equal
+       | nextKaze dk == k                  -> GT -- a right after target
+       | nextKaze dk == k'                 -> LT -- b right after target
+       | prevKaze dk == k                  -> LT -- a before target
+       | prevKaze dk == k'                 -> GT -- b before target
+       | otherwise                         -> EQ -- a == b
+    other                                  -> other
+
+-- | @shoutGE turn_kaze a b@: a greater-or-same-precedence-as b
+shoutGE :: Kaze -> (Kaze, Shout) -> (Kaze, Shout) -> Bool
+shoutGE dk a b = shoutPrecedence dk a b `elem` [EQ, GT]

@@ -21,9 +21,14 @@ data RiichiState = NoRiichi | Riichi | DoubleRiichi
 data DrawState = DrawFromWanpai | DrawFromWall | DrawNone
                deriving (Show, Read, Eq)
 
--- | NOTE: Agari- values do NOT represent a tile that belongs to the hand;
--- it's already present somewhere else in the Hand datatype.
-data PickedTile m = FromWall (m Tile) | FromWanpai (m Tile) | AgariTsumo Tile | AgariTsumoWanpai Tile | AgariCall Tile Kaze | AgariChankan Tile Kaze
+-- * PickedTile
+
+-- | Agari tiles do belong to hand; tiles in the shoutTo-field do not.
+data PickedTile m = FromWall (m Tile)
+                  | FromWanpai (m Tile)
+                  | AgariTsumo Tile
+                  | AgariTsumoWanpai Tile
+                  | AgariCall Shout -- ^ The shout is present in handCalled-field too.
 
 deriving instance Show (PickedTile Maybe)
 deriving instance Read (PickedTile Maybe)
@@ -37,8 +42,15 @@ pickedTile (FromWall (Identity t))   = t
 pickedTile (FromWanpai (Identity t)) = t
 pickedTile (AgariTsumo t)            = t
 pickedTile (AgariTsumoWanpai t)      = t
-pickedTile (AgariCall t _)           = t
-pickedTile (AgariChankan t _)        = t
+pickedTile (AgariCall s)             = shoutTile s
+
+-- | Tiles that belong to hand.  The only exception is a kokushi winning
+-- tile, wich doesn't have a mentsu it belongs to, so it given as
+-- a PickedTile only in the hand datatype.
+pickedTileInHand :: PickedTile Identity -> Maybe Tile
+pickedTileInHand (AgariCall s) | null (shoutTo s) = Just (shoutTile s)
+                               | otherwise        = Nothing
+pickedTileInHand x                                = Just $ pickedTile x
 
 data HandFlag = HandFirsRoundUninterrupted
               deriving (Show, Read, Eq, Ord)

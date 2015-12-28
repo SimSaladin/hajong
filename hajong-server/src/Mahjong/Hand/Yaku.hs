@@ -64,6 +64,7 @@ standardYaku =
 
     , [ countingDora ]
     , [ countingUraDora ]
+    , [ countingAkaDora ]
     ]
 
 standardYakumans :: [YakuCheck Yaku]

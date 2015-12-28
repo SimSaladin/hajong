@@ -13,8 +13,9 @@ module Mahjong.Hand.Yaku.Standard where
 import qualified Data.List as L
 ------------------------------------------------------------------------------
 import           Import
-import           Mahjong.Tiles (Tile, Number(..), Kaze(..), kaze, tileNumber, (==~))
+import           Mahjong.Tiles (Tile, Number(..), Kaze(..), kaze, tileNumber, (==~), succCirc)
 import qualified Mahjong.Tiles as T
+import qualified Mahjong.Hand.Mentsu as M
 import           Mahjong.Hand.Mentsu (mentsuTiles)
 import           Mahjong.Hand.Yaku.Builder
 import           Mahjong.Hand.Algo (shantenBy, chiitoitsuShanten)
@@ -29,12 +30,7 @@ import           Mahjong.Hand.Internal
 yakuAllTiles :: YakuCheck [Tile]
 yakuAllTiles = do
     Hand{..} <- yakuState <&> view vHand
-    return $ mapMaybe pickedNotCall _handPicks ++ runIdentity _handConcealed ++ concatMap mentsuTiles _handCalled
-        -- TODO: do something else with the agari info; it either should be
-        -- in the handPicks field, or the PickedTile shouldn't have it.
-  where
-    pickedNotCall AgariCall{} = Nothing
-    pickedNotCall t           = Just $ pickedTile t
+    return $ mapMaybe pickedTileInHand _handPicks ++ runIdentity _handConcealed ++ concatMap mentsuTiles _handCalled
 
 -- * 4 mentsu + 1 jantou
 
@@ -192,7 +188,7 @@ chiitoitsu :: YakuCheck Yaku
 chiitoitsu = do
     concealedHand
     info <- yakuState
-    if Just (-1) == shantenBy chiitoitsuShanten (info^.vHand.handConcealed._Wrapped ++ map pickedTile (info^.vHand.handPicks))
+    if Just (-1) == shantenBy chiitoitsuShanten (info^.vHand.handConcealed._Wrapped ++ (info^..vHand.handPicks.each.to pickedTile) ++ (info^..vHand.handCalled.each.filtered M.isJantou.to mentsuTiles.each))
         then return (Yaku 2 "Chiitoitsu")
         else yakuFail
 
@@ -317,8 +313,8 @@ chankan :: YakuCheck Yaku
 chankan = do
     info <- yakuState
     case info^?vHand.handPicks._last of
-        Just AgariChankan{} -> return (Yaku 1 "Chankan")
-        _                   -> yakuFail
+        Just (AgariCall s) | M.shoutKind s == M.Chankan -> return (Yaku 1 "Chankan")
+        _                                               -> yakuFail
 
 nagashiMangan :: YakuCheck Yaku
 nagashiMangan = yakuFail -- NOTE: this is implemented in @Mahjong.Kyoku@ currently.
@@ -342,7 +338,7 @@ countingDora :: YakuCheck Yaku
 countingDora = do
     dora <- yakuState <&> view (vKyoku.pDora)
     tiles <- yakuAllTiles
-    let num = length [ () | a <- dora, b <- tiles, a ==~ b ]
+    let num = length [ () | a <- map succCirc dora, b <- tiles, a ==~ b ]
     case num of
         0 -> yakuFail
         _ -> return $ YakuExtra num "Dora"
@@ -352,10 +348,18 @@ countingUraDora = do
     _ <- riichi
     [OpenedUraDora dora] <- yakuState <&> toListOf (vKyoku.pFlags._Wrapped.each.filtered isUraFlag)
     tiles <- yakuAllTiles
-    let num = length [ () | a <- dora, b <- tiles, a ==~ b ]
+    let num = length [ () | a <- map succCirc dora, b <- tiles, a ==~ b ]
     case num of
         0 -> yakuFail
         _ -> return $ YakuExtra num "Ura-Dora"
   where
     isUraFlag (OpenedUraDora _) = True
     isUraFlag _                 = False
+
+countingAkaDora :: YakuCheck Yaku
+countingAkaDora = do
+    num <- yakuAllTiles <&> length . filter T.isAka
+    case num of
+        0 -> yakuFail
+        _ -> return $ YakuExtra num "Aka-Dora"
+

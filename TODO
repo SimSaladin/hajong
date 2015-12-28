@@ -1,7 +1,5 @@
 x = done, / = half done, ! = needs testing
 
-[ ] Rework lobby
-
 # mechanics
 [x] add test: riichi score is transferred on ron
 [x] add test: honba are added to payments
@@ -17,20 +15,30 @@ x = done, / = half done, ! = needs testing
 [x] add test: suucha riichi: four players riichi. last discard may be called ron on
 [x] add test: suukaikan: four kantsu called, all not by one player.
 [x] Implement the suukantsu yaku. Add tests. When one player calls the fourth, game must not end.
-[ ] add test: kazoe yakuman
-[ ] add test: double ron
+[x] add test: 13 orphans can be ron from an ankan
+[x] implement: A player is not considered tenpai if he is waiting only for a tile of which he already has 4
+[x] add test: kazoe yakuman
+[x] add test: double ron
 [x] add tests for the yakumans
-[ ] implement aka-dora
+[x] implement aka-dora
+[x] add test: aka-dora are yielded as extrayaku
+[ ] add test: when a ron/chankan shout isn't possible due to furiten/0 yaku or otherwise, someone can still go for a kan/pon/chi on the tile. (The invalid ron should not be present in the kyoku state machine in the first place.)
+[ ] add test: aka-dora are calculated from a called mentsu
+[x] add test: kokushi furiten
+[x] add test: chiitoi furiten
 [ ] clear TODO's from code
 [ ] fix tests
 # client
 [ ] Display concealed hands of other players
+[ ] display aka-dora as red
 [ ] Display winning hand
 [ ] Display error prompts when receiving errors in elm
+[ ] agari-call deserialization has changed (agarichankan removed)
 [ ] Undisplay riichi when clicked
 [ ] Highlight corresponding tiles on shout hovers
 [ ] when a call is passed, update callable info to client. client should not show it
 # site
+[ ] Rework lobby
 [ ] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
       [ ] test facebook authentication
 [ ] Save game results to relational database

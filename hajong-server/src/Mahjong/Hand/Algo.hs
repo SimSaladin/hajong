@@ -16,11 +16,12 @@ module Mahjong.Hand.Algo
     Shanten,
     HasGroupings(..),
     shanten, shantenBy, tenpai, complete,
-    chiitoitsuShanten, kokushiShanten,
+    chiitoitsuShanten, kokushiShanten, kokushiAgari,
 
     -- * Tile grouping
     tilesGroupL, tilesSplitGroupL,
     leftovers, waits, tileGroupTiles, isPair,
+    getAgari,
 
     -- * Types
     Wait, Grouping, TileGroup(..),
@@ -189,9 +190,7 @@ instance HasGroupings [x] => HasGroupings [[x]] where
                           in concatMap fst . filter ((== min_ss) . snd) $ zip gs ss
 
 instance HasGroupings HandA where
-    getGroupings h = getGroupings $ (,)
-        <$> _handCalled
-        <*> (liftA2 (++) (map pickedTile._handPicks) (runIdentity._handConcealed)) $ h
+    getGroupings h = getGroupings $ (,) <$> _handCalled <*> liftA2 (++) (mapMaybe pickedTileInHand._handPicks) (runIdentity._handConcealed) $ h
 
 shanten :: HasGroupings x => x -> Shanten
 shanten = shantenBy shanten'
@@ -233,6 +232,7 @@ shanten' = fmap minimumEx . sequence <$> sequence
 groupingShanten :: Int -> Grouping -> Shanten
 groupingShanten n tgs = case foldl' (\i -> (i -) . tgval) n tgs of
     -1 | length (filter isPair tgs) /= 1 -> Nothing
+    0  | [t] <- getAgari tgs, length (filter (== t) $ concatMap tileGroupTiles tgs) == 4 -> Nothing -- XXX: No shanten implied if waiting only on a tile we already have 4 of. correct would be to build some other wait - how many would that take?
     s -> Just $ s + max 0 (length (filter notPairable tgs) - 4)
   where
     tgval (GroupComplete m)
@@ -240,6 +240,20 @@ groupingShanten n tgs = case foldl' (\i -> (i -) . tgval) n tgs of
         | otherwise              = 2
     tgval (GroupWait{})          = 1
     tgval (GroupLeftover{})      = 0
+    
+-- | If there is a shuntsu wait, that is the only possible agari. If there
+-- is a single leftover tile that is the agari. otherwise any of the koutsu
+-- waits can be completed (thus agari).
+getAgari :: Grouping -> [Tile]
+getAgari xs | [GroupWait Shuntsu _ ws] <- filter isShuntsuWait xs  = ws -- shuntsu wait
+            | [t] <- leftovers xs                                  = [t] -- tanki wait
+            | Just x <- kokushiAgari (concatMap tileGroupTiles xs) = either return id x -- kokushi wait
+            | [GroupLeftover t] <- filter (not . isPair) xs        = [t] -- chiitoi ("tanki") wait
+            | otherwise                                            = concatMap (either return id) $ waits xs -- koutsu wait
+
+isShuntsuWait :: TileGroup -> Bool
+isShuntsuWait (GroupWait Shuntsu _ _) = True
+isShuntsuWait _                       = False
 
 -- * Non-standard assembly
 
@@ -254,10 +268,21 @@ kokushiShanten :: Grouping -> Shanten
 kokushiShanten grp = case concatMap tileGroupTiles grp L.\\ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"] of
     []                          -> Just 0
     [x] | honor x || terminal x -> Just (-1)
-    xs                          -> Just 13
+    _                           -> Just 13
             -- ^ TODO: this branch is hard, because we can have even 18
             -- tiles in the hand at the moment. should discard kokushi
             -- altogether when there are melds.
+
+-- | One of:
+--  * no agari (complete or some crap)
+--  * any honor or terminal
+--  * specific honor or terminal
+kokushiAgari :: [Tile] -> Maybe (Either Tile [Tile])
+kokushiAgari tiles = case tiles L.\\ terminalsAndHonors of
+    []                                              -> Just (Right terminalsAndHonors)
+    [x] | length tiles == 13, honor x || terminal x -> Just $ Left $ headEx $ terminalsAndHonors L.\\ tiles
+    _                                               -> Nothing
+  where terminalsAndHonors = ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"]
 
 -- Auxilary funtions
 
