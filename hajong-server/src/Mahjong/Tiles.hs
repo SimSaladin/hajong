@@ -1,3 +1,4 @@
+{-# LANGUAGE DefaultSignatures #-}
 ------------------------------------------------------------------------------
 -- |
 -- Module         : Mahjong.Tiles
@@ -15,6 +16,7 @@ import Prelude (Read(..), lex)
 import Import hiding ((<>))
 ------------------------------------------------------------------------------
 import Text.PrettyPrint.ANSI.Leijen ((<>), displayS, renderCompact)
+import qualified Data.List as L
 ------------------------------------------------------------------------------
 
 -- * Types
@@ -109,18 +111,15 @@ sangen :: Sangen -> Tile
 sangen = Honor . Sangenpai
 
 riichiTiles :: [Tile]
-riichiTiles = join . replicate 4 $
+riichiTiles = addAka . join . replicate 4 $
     [ Suited k n False | n <- [Ii .. Chuu], k <- [ManTile, PinTile, SouTile] ]
     ++ map (Honor . Sangenpai) [Haku .. Chun]
     ++ map (Honor . Kazehai)   [Ton .. Pei]
+  where
+    addAka tiles = L.deleteFirstsBy (==~) tiles [ Suited k Wu False | k <- [ManTile, PinTile, PinTile, SouTile] ]
+                   & (++ [ Suited k Wu True | k <- [ManTile, PinTile, PinTile, SouTile] ])
 
 -- * Functions
-
--- | Discards aka-dora/special info.
-(==~) :: Tile -> Tile -> Bool
-Suited tk n _ ==~ Suited tk' n' _ = tk == tk' && n == n'
-Honor x       ==~ Honor y         = x == y
-_             ==~ _               = False
 
 -- | Extract tile kind
 tileKind :: Tile -> TileKind
@@ -161,9 +160,36 @@ terminal t = case tileNumber t of
     Just n -> n == minBound || n == maxBound
     _      -> False
 
+-- * Tile order
+
+-- | @CircularOrd@ models the succession of tiles, dragons and winds.
+class CircularOrd a where
+    (==~) :: CircularOrd a => a -> a -> Bool
+    default (==~) :: Eq a => a -> a -> Bool
+    (==~) = (==)
+    succCirc :: CircularOrd a => a -> a
+    default succCirc :: (Eq a, Bounded a, Enum a) => a -> a
+    succCirc x = if x == maxBound then minBound else succ x
+
+instance CircularOrd Number
+instance CircularOrd Kaze
+instance CircularOrd Sangen
+
+-- | The next tile according to the succession rules. Discards flags like
+-- dora from the tile.
+instance CircularOrd Tile where
+    Suited tk n _ ==~ Suited tk' n' _ = tk == tk' && n == n'
+    Honor x       ==~ Honor y         = x == y
+    _             ==~ _               = False
+
+    succCirc (Suited k n _) = Suited k (succCirc n) False
+    succCirc (Honor (Kazehai k)) = Honor $ Kazehai $ succCirc k
+    succCirc (Honor (Sangenpai s)) = Honor $ Sangenpai $ succCirc s
+
 -- | Next or previous kaze. Wraps around.
 nextKaze, prevKaze :: Kaze -> Kaze
 nextKaze = toEnum . (`mod` 4) . (+ 1) . fromEnum
+{-# DEPRECATED nextKaze "use succCirc" #-}
 prevKaze = toEnum . (`mod` 4) . (\i -> i - 1) . fromEnum
 
 -- | Like @succ@ and @pred@, but fail as nothing if the succession wouldn't make sense

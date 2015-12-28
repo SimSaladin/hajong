@@ -190,15 +190,11 @@ meldTo shout mentsu hand
     concealedTiles              = hand^.handConcealed._Wrapped
     correctConcealedTilesInHand = length concealedTiles == length (concealedTiles L.\\ tilesFromHand) + length tilesFromHand
 
--- | Transfer the discard from the hand to a mentsu specified by the shout.
-shoutFromHand :: CanError m => [WaitShout] -> Kaze -> Shout -> HandA -> m (Mentsu, HandA)
-shoutFromHand waiting sk shout hand
-    | Just (_, _, _, shouts) <- find (^._2.to (== sk)) waiting
-    , shout `elem` shouts = case hand ^? handDiscards._last of
-        Just Discard{..}                     -> return (fromShout shout, hand & handDiscards._last.dcTo .~ Just sk)
-        Nothing | shoutKind shout == Chankan -> return (fromShout shout, hand)
-                | otherwise                  -> throwError "The impossible happened: waiting an a shout that is not on a discarded tile nor chankan"
-    | otherwise = throwError "Such shout is not possible"
+shoutFromHand :: CanError m => Kaze -> Shout -> HandA -> m (Mentsu, HandA)
+shoutFromHand sk shout hand
+    | shoutKind shout == Chankan                     = return (fromShout shout, hand)
+    | Just Discard{..} <- hand ^? handDiscards._last = return (fromShout shout, hand & handDiscards._last.dcTo .~ Just sk)
+    | otherwise                                      = throwError "shoutFromHand: There were no discards on the hand."
 
 -- * Valued hand
 

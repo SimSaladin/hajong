@@ -144,7 +144,6 @@ gameFlowTests = testGroup "Game flow"
               drawAndTurnAction Ton $ TurnAnkan "M3"
               drawAndTurnAction Ton $ TurnAnkan "M9"
               stepped_ InpAuto
-              get >>= traceShowM
               drawAndTurnAction Ton TurnTsumo
 
       requireRight res $ \(_evs, (r,_k)) -> case r of
@@ -258,6 +257,17 @@ riichiTests = testGroup "Riichi tests"
       case res of
           Left err -> return ()
           Right _ -> assertFailure "Game should have errored"
+
+  , testCase "(tenpai test) player is not tenpai if waiting only on a tile he already has four of" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ ["M1", "M1", "M1", "M1", "P1", "P2", "P3", "P7", "P8", "P9", "S2", "S3", "S4"]
+                         <&> sWall %~ (["W"] ++)
+
+      let res = runKyokuState kyoku $ do
+              drawAndTurnAction Ton $ TurnTileDiscard $ Discard "W" Nothing True
+
+      case res of
+          Left err -> return ()
+          Right _ -> assertFailure "Game should have errored"
   ]
 
 weirdYaku :: TestTree
@@ -362,7 +372,6 @@ scoringTests = testGroup "Scoring"
             headEx (dWinners r) ^. _2 @?= 1200 + 300
             dPayers r ^..each._2 @?= [-400 - 100, -400 - 100, -400 - 100]
 
-    -- TODO: multi-ron
     , testCase "Honba is deducted from payer and added to winner on ron" $ do
         kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
                            <&> pDora .~ []
@@ -378,6 +387,21 @@ scoringTests = testGroup "Scoring"
         requireRight res $ \(_evs, (KyokuEnded r, _k)) -> do
             headEx (dWinners r) ^. _2 @?= 1000 + 2 * 300
             dPayers r ^..each._2 @?= [-1000 - 2 * 300]
+
+    , testCase "Double-ron" $ do
+        kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
+                           <&> sHands . ix Shaa . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
+                           <&> pDora .~ []
+                           <&> sWall %~ (["P5"] ++)
+
+        let res = runKyokuState kyoku $ do
+                autoAndDiscard Ton $ Discard "P5" Nothing False
+                stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P4", "P3"]
+                stepped_ $ InpShout Shaa $ Shout Ron Ton "P5" ["P4", "P3"]
+
+        requireRight res $ \(_evs, (KyokuEnded r, _k)) -> do
+            map (view _2) (dWinners r) @?= [1000, 1000]
+            map (view _2) (dPayers r)  @?= [-2000]
     ]
 
 -- agari to pair

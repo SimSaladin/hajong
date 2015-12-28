@@ -230,6 +230,12 @@ tests = testGroup "Standard Yaku"
                            & vHand.handPicks .~ [AgariTsumo "P4"]
         snd (getYaku vi) @?= [Yaku 13 "Chuuren Poutou"]
 
+    , testCase "Kazoe Yakuman" $ do
+        let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["P1", "P1", "P1", "P2", "P3", "P5", "P5", "P5", "P7", "P7", "P7", "P9", "P9"]
+                           & vHand.handPicks .~ [AgariTsumo "P1"]
+                           & vKyoku.pDora .~ ["P9", "P2"]
+        snd (getYaku vi) @?= [Yaku 13 "Kazoe Yakuman"]
+
     -- NOTE: implemented in Mechanics test, for now
     -- , testCase "Nagashi Mangan" $ do
     -- , testCase "Chankan" $ do error "test not implemented (here) (yet)"

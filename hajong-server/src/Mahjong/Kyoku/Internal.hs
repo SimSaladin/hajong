@@ -73,8 +73,10 @@ type Waiting = Either WaitTurnAction [WaitShout]
 -- | @E1 == (Ton, 1)@ etc.
 type Round = (Kaze, Int)
 
--- | (shouting player, shouting kaze, seconds left, available shouts)
+-- | (shouting player, shouting kaze, secs_until_auto, shout)
 type WaitShout = (Player, Kaze, Int, [Shout])
+
+-- | When waiting for a turn action: (player, player_kaze, secs_until_auto, tiles_to_riichi_with)
 type WaitTurnAction = (Player, Kaze, Int, [Tile])
 
 -- ^ Indices 0-3 are kan supplement tiles. indices 4-8 are dora, 8-12 ura-dora.

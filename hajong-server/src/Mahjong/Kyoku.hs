@@ -25,7 +25,7 @@ module Mahjong.Kyoku
 
     -- * Utility
     , playerToKaze
-    , waitingShouts
+    , getShouts
     , module Mahjong.Kyoku.Internal
     ) where
 
@@ -40,7 +40,7 @@ import           Mahjong.Kyoku.Internal
 ------------------------------------------------------------------------------
 import qualified Data.Map as Map
 import           Data.Monoid (Endo(..))
-import qualified Data.List as L (delete, find, filter)
+import qualified Data.List as L (delete, find, filter, findIndex, (!!))
 
 -- | Context of game and deal flow.
 --
@@ -65,7 +65,7 @@ data Machine = NotBegun Int -- Seconds to wait before continuing. Waiting is not
              | CheckEndConditionsAfterDiscard
              | WaitingDraw Kaze Bool
              | WaitingDiscard Kaze
-             | WaitingShouts (Maybe (Player, Shout)) [WaitShout] Bool -- ^ flag if chankan, to continue with discard
+             | WaitingShouts (Set Kaze) (Maybe [Int]) [(Kaze, Shout)] Bool -- ^ set of players who could shout but have not (passed), index of now winning shout(s), flag: chankan? (to continue with discard)
              | KyokuEnded KyokuResults
              deriving (Eq, Show, Read)
 
@@ -93,14 +93,19 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | TurnTsumo <- ta               = endTsumo pk <&> KyokuEnded
             | TurnShouminkan t <- ta        = processShouminkan pk t
 
-step (WaitingShouts Nothing _ False)      InpAuto        = return CheckEndConditionsAfterDiscard
-step (WaitingShouts Nothing _ True)       InpAuto        = use pTurn >>= return . WaitingDiscard
-step (WaitingShouts winning shouts chank) (InpPass pk) = return $ WaitingShouts winning (L.filter (\(_,k,_,_) -> k /= pk) shouts) chank
-step (WaitingShouts _winning shouts _)    (InpShout pk shout)
-            -- TODO Precedences not implemented
-            | Just (_,_,_,xs) <- L.find (\(_,pk',_,_) -> pk' == pk) shouts
-            , shout `elem` xs               = processShout pk shout
-            | otherwise                     = throwError $ "No such call is possible " ++ tshow shouts -- TODO gives away information to others! enable in debug mode only
+step (WaitingShouts couldShout winning shouts chankan) inp
+            | InpAuto <- inp, Just xs <- couldShout = processShouts (map (shouts L.!!) xs) chankan
+            | InpAuto == inp || null couldShout     = if chankan then use pTurn >>= return . WaitingDiscard
+                                                                 else return CheckEndConditionsAfterDiscard
+            | InpPass pk <- inp                     = return $ WaitingShouts (deleteSet pk couldShout) winning shouts chankan
+            | InpShout pk shout <- inp, Just i <- L.findIndex (== (pk, shout)) shouts
+            = use pTurn >>= \tk -> case winning of
+                Just (j:js) -> case shoutPrecedence tk (shouts L.!! j) (pk, shout) of
+                                   EQ -> return $ WaitingShouts (deleteSet pk couldShout) (Just (i:j:js)) shouts chankan -- new goes through with old ones
+                                   GT -> return $ WaitingShouts couldShout                (Just (j:js))   shouts chankan -- old takes precedence (XXX: this branch should never even be reached
+                                   LT -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i]) (filter (\x -> shoutGE tk x (pk, shout)) shouts) chankan -- new takes precedence
+                Nothing     ->           return $ WaitingShouts (deleteSet pk couldShout)  (Just [i]) (filter (\x -> shoutGE tk x (pk, shout)) shouts) chankan
+            | otherwise = throwError "No such call is possible"
 
 step CheckEndConditionsAfterDiscard InpAuto = checkEndConditions
 
@@ -255,15 +260,12 @@ processAnkan pk t = handOf' pk >>= ankanOn t >>= updateHand pk >> return (Waitin
 processShouminkan :: InKyoku m => Kaze -> Tile -> m Machine
 processShouminkan pk t = do
     handOf' pk >>= shouminkanOn t >>= updateHand pk
-
-    chankans <- waitingShouts t <&> map (_4 %~ map toChankan . filter ((== Ron) . shoutKind)) -- ron shouts to chankan
-                                <&> filter (^._4.to (not . null)) -- filter out empty things
-
-    if null chankans then return (WaitingDraw pk True)
-                     else do tellEvents $ map DealWaitForShout chankans
-                             return (WaitingShouts Nothing chankans True)
+    chankanShouts <- getShouts t <&> over (each._2) toChankan . filter ((== Ron) . shoutKind . snd)
+    if null chankanShouts then return (WaitingDraw pk True)
+                          else do tellEvents . map DealWaitForShout =<< toWaitShouts chankanShouts
+                                  return (WaitingShouts Nothing chankanShouts True)
  where
-   toChankan s = s { shoutKind = Chankan } -- XXX: because waitingShouts doesn't support chankans directly
+   toChankan s = s { shoutKind = Chankan }
 
 checkEndConditions :: InKyoku m => m Machine
 checkEndConditions = do
@@ -336,11 +338,12 @@ processDiscard pk d' = do
     when (d^.dcRiichi) $ doRiichi pk
     updateHand pk =<< discard d =<< handOf' pk
 
-    waiting <- waitingShouts (d^.dcTile)
+    shouts <- getShouts (d^.dcTile)
+    waiting <- toWaitShouts shouts
     tellEvents $ map DealWaitForShout waiting
     return $ if null waiting
                  then CheckEndConditionsAfterDiscard
-                 else WaitingShouts Nothing waiting False
+                 else WaitingShouts Nothing shouts False
 
 doRiichi :: InKyoku m => Kaze -> m ()
 doRiichi pk = do
@@ -401,26 +404,30 @@ askForTurnAction n = do
     rt <- handOf' tk <&> handCanRiichiWith
     tellEvent $ DealWaitForTurnAction (tp, tk, n, rt)
 
--- | @processShout shouter shout@
-processShout :: InKyoku m => Kaze -> Shout -> m Machine
-processShout sk shout = do
+-- | @processShout shouts chankan?@
+--
+-- Multiple shouts are allowed only when they go out
+processShouts :: InKyoku m => [(Kaze, Shout)] -> Bool -> m Machine
+processShouts shouts@((fsk,fs):_) chank = do
     tk <- use pTurn
-    sh <- handOf' sk
     th <- handOf' tk
-    preuse (sWaiting._Just._Right) >>= \case
-        Nothing -> throwError "Not waiting on anything"
-        Just waiting -> do
-            (m, th') <- shoutFromHand waiting sk shout th
-            sh' <- meldTo shout m sh
-            updateHand sk sh' >> updateHand tk th'
-            tellEvent $ DealTurnShouted sk shout
-            case () of
-                _ | shoutKind shout `elem` [Ron, Chankan] -> endRon sk tk <&> KyokuEnded
-                  | shoutKind shout == Kan -> unsetFlag FirstRoundUninterrupted >> return (WaitingDraw Ton True)
-                  | otherwise -> do
-                      unsetFlag FirstRoundUninterrupted
-                      tellEvent $ DealTurnBegins sk
-                      return (WaitingDiscard sk)
+
+    (th':_) <- forM shouts $ \(sk, s) -> do
+        sh <- handOf' sk
+        (m, th') <- shoutFromHand sk s th -- TODO: split shoutFromHand to two functions so it only needs to be run once
+        meldTo s m sh >>= updateHand sk
+        tellEvent $ DealTurnShouted sk s
+        return th'
+
+    updateHand tk th'
+
+    case () of
+        _ | shoutKind fs `elem` [Ron, Chankan] -> endRon (map fst shouts) tk <&> KyokuEnded
+          | shoutKind fs == Kan -> unsetFlag FirstRoundUninterrupted >> return (WaitingDraw fsk True)
+          | otherwise -> do
+              unsetFlag FirstRoundUninterrupted
+              tellEvent $ DealTurnBegins fsk
+              return (WaitingDiscard fsk)
 
 -- ** Ending
 
@@ -445,17 +452,17 @@ endDraw = do
                | otherwise          = x & both %~ div 3000 . fromIntegral . length
     dealEnds $ DealDraw (map (,r) tp) (map (,-p) np)
 
--- TODO: support multi-ron. where riichi bets in table go then?
-endRon :: InKyoku m => Kaze -> Kaze -> m KyokuResults
-endRon winner payer = do
-    vh       <- getValuedHand winner
-    honba    <- use pHonba
-    riichi   <- use pRiichi
+endRon :: InKyoku m => [Kaze] -> Kaze -> m KyokuResults
+endRon winners payer = do
+    valuedHands <- mapM getValuedHand winners
+    honba       <- use pHonba
+    riichi      <- use pRiichi
 
-    let pointsFromPayer = valuedHandPointsForRon winner vh + honba * 300
-        win             = (winner, pointsFromPayer + riichi, vh)
+    let pointsForHonba  = honba * 300
+        pointsFromPayer = map (+ pointsForHonba) $ zipWith valuedHandPointsForRon winners valuedHands
+        winEntries      = zip3 winners pointsFromPayer valuedHands
 
-    dealEnds $ DealRon [win] [(payer, negate pointsFromPayer)]
+    dealEnds $ DealRon winEntries [(payer, negate $ sum pointsFromPayer)]
 
 -- *** Helpers
 
@@ -615,30 +622,28 @@ handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") re
 
 -- * Waiting
 
-filterCouldShout :: Tile -- ^ Tile to shout
-                 -> Kaze -- ^ Whose tile
-                 -> Map Kaze HandA
-                 -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority first)
-filterCouldShout dt np =
-    sortBy (shoutPrecedence np)
+-- | Get all possible shouts from all players for a given tile.
+filterCouldShout :: Tile            -- ^ Tile to shout
+                 -> Kaze            -- ^ Whose tile
+                 -> Map Kaze HandA  -- ^ All hands
+                 -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority as head)
+filterCouldShout dt np = sortBy (shoutPrecedence np)
     . concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
   where flatten (k, xs) = map (k,) xs
 
--- | Calculate every possible shout on normal discard.
-waitingShouts :: InKyoku m => Tile -> m [WaitShout]
-waitingShouts dt = do
-    let secs = 15 -- TODO hard-coded limit
-
+getShouts :: InKyoku m => Tile -> m [(Kaze, Shout)]
+getShouts dt = do
     lastTile <- use pWallTilesLeft <&> (== 0)
-    shouts'  <- filterCouldShout dt <$> use pTurn <*> use sHands
+    shouts   <- filterCouldShout dt <$> use pTurn <*> use sHands
+    return $ if' lastTile (filter ((`elem` [Ron, Chankan]) . shoutKind . snd)) id shouts
+        -- when there are no tiles, only go-out shouts are allowed
 
-    let shouts = map (liftA2 (,) (^?!_head._1) (^..each._2))
-                $ groupBy ((==) `on` view _1)
-                $ if' lastTile (filter ((`elem` [Ron, Chankan]) . shoutKind . snd)) id shouts'
-
-    players <- mapM (kazeToPlayer . fst) shouts
-
-    return $ zipWith (\p (k, xs) -> (p, k, secs, xs)) players shouts
+toWaitShouts :: InKyoku m => [(Kaze, Shout)] -> m [WaitShout]
+toWaitShouts shouts = do
+    let grouped = map (liftA2 (,) (^?!_head._1) (^..each._2)) $ groupBy ((==) `on` view _1) shouts
+    forM grouped $ \(k, s) -> do
+        player <- kazeToPlayer k
+        return (player, k, 15, s)
 
 -- * Flags
 

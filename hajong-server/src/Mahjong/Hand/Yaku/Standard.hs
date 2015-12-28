@@ -13,7 +13,7 @@ module Mahjong.Hand.Yaku.Standard where
 import qualified Data.List as L
 ------------------------------------------------------------------------------
 import           Import
-import           Mahjong.Tiles (Tile, Number(..), Kaze(..), kaze, tileNumber, (==~))
+import           Mahjong.Tiles (Tile, Number(..), Kaze(..), kaze, tileNumber, (==~), succCirc)
 import qualified Mahjong.Tiles as T
 import           Mahjong.Hand.Mentsu (mentsuTiles)
 import           Mahjong.Hand.Yaku.Builder
@@ -342,7 +342,7 @@ countingDora :: YakuCheck Yaku
 countingDora = do
     dora <- yakuState <&> view (vKyoku.pDora)
     tiles <- yakuAllTiles
-    let num = length [ () | a <- dora, b <- tiles, a ==~ b ]
+    let num = length [ () | a <- map succCirc dora, b <- tiles, a ==~ b ]
     case num of
         0 -> yakuFail
         _ -> return $ YakuExtra num "Dora"
@@ -352,7 +352,7 @@ countingUraDora = do
     _ <- riichi
     [OpenedUraDora dora] <- yakuState <&> toListOf (vKyoku.pFlags._Wrapped.each.filtered isUraFlag)
     tiles <- yakuAllTiles
-    let num = length [ () | a <- dora, b <- tiles, a ==~ b ]
+    let num = length [ () | a <- map succCirc dora, b <- tiles, a ==~ b ]
     case num of
         0 -> yakuFail
         _ -> return $ YakuExtra num "Ura-Dora"

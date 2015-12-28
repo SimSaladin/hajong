@@ -22,7 +22,7 @@ module Mahjong.Hand.Mentsu
 
     -- * Shouts
     Shout(..), ShoutKind(..),
-    possibleShouts, shoutPrecedence
+    possibleShouts, shoutPrecedence, shoutGE
 
     ) where
 
@@ -146,7 +146,7 @@ possibleShouts x = (Koutsu, [x, x])
         , predMay x >>= \y -> predMay y >>= \z -> return (Shuntsu, [y, z]) --  . . x
         ]
 
--- | Which shout takes precedence. Never @EQ@, always 'GT' or 'LT'.
+-- | Which shout takes precedence. Can be EQ.
 shoutPrecedence :: Kaze -- ^ shout from
                 -> (Kaze, Shout)
                 -> (Kaze, Shout)
@@ -156,5 +156,10 @@ shoutPrecedence dk (k, s) (k', s') = case comparing shoutKind s s' of
        | nextKaze dk == k' -> LT
        | prevKaze dk == k  -> LT
        | prevKaze dk == k' -> GT
-       | otherwise         -> error "shoutPrecedence: undecidable, this is not possible"
+       | otherwise         -> EQ
     other                  -> other
+
+-- | @shoutGE turn_kaze a b@: a greater-or-same-precedence-as b
+shoutGE :: Kaze -> (Kaze, Shout) -> (Kaze, Shout) -> Bool
+shoutGE dk a b = shoutPrecedence dk a b `elem` [EQ, GT]
+                     
