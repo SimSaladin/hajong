@@ -73,7 +73,7 @@ data MachineInput = InpAuto
                   | InpTurnAction Kaze TurnAction
                   | InpShout Kaze Shout
                   | InpPass Kaze
-                  deriving (Show, Read, Eq)
+                  deriving (Show, Read)
 
 -- | Remember to publish the turn action when successful
 step :: InKyoku m => Machine -> MachineInput -> m Machine
@@ -95,8 +95,8 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
 
 step (WaitingShouts couldShout winning shouts chankan) inp
             | InpAuto <- inp, Just xs <- winning    = processShouts (map (shouts L.!!) xs) chankan
-            | InpAuto == inp || null couldShout     = if chankan then use pTurn >>= return . WaitingDiscard
-                                                                 else return CheckEndConditionsAfterDiscard
+            | InpAuto <- inp      = if chankan then use pTurn >>= return . WaitingDiscard else return CheckEndConditionsAfterDiscard
+            | null couldShout     = if chankan then use pTurn >>= return . WaitingDiscard else return CheckEndConditionsAfterDiscard
             | InpPass pk <- inp                     = return $ WaitingShouts (deleteSet pk couldShout) winning shouts chankan
             | InpShout pk shout <- inp, Just i <- L.findIndex (== (pk, shout)) shouts
             = do
@@ -388,7 +388,7 @@ flipNewDora = tellEvent . DealFlipDora =<< wanpaiGetDora
 revealUraDora :: InKyoku m => m ()
 revealUraDora = do
     count <- use (pDora.to length)
-    use (sWanpai.wUraDora) >>= setFlag . OpenedUraDora . take count
+    use (sWanpai.wUraDora) >>= setFlag . OpenedUraDora . map TileEq . take count
 
 -- | Get supplementary tile from wanpai. Argument must be a tile from
 -- the wall to append to the wall.
@@ -599,10 +599,10 @@ updateHand pk new = do
     p   <- kazeToPlayer pk
     old <- handOf' pk
     sHands.at pk .= Just new
-    when (old /= new)
-        $ tellEvent (DealPrivateHandChanged p pk new)
-    when (maskPublicHand old /= maskPublicHand new)
-        $ tellEvent (DealPublicHandChanged pk $ maskPublicHand new)
+    {- when (old /= new) $ -}
+    tellEvent (DealPrivateHandChanged p pk new)
+    {- when (maskPublicHand old /= maskPublicHand new) $ -}
+    tellEvent (DealPublicHandChanged pk $ maskPublicHand new)
 
 tellEvent :: InKyoku m => GameEvent -> m ()
 tellEvent ev = do

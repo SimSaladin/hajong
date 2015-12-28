@@ -36,9 +36,9 @@ import           Mahjong.Tiles
 -- TODO: we miss aka etc. flags here.
 data Mentsu = Mentsu
     { mentsuKind :: MentsuKind
-    , mentsuTile :: Tile
+    , mentsuTiles :: [Tile] -- always in order
     , mentsuShout :: Maybe Shout
-    } deriving (Show, Read, Eq, Ord)
+    } deriving (Show, Read {-, Eq, Ord -})
 
 data MentsuKind = Shuntsu -- ^ 3 Tile straight
                 | Koutsu -- ^ Triplet
@@ -61,7 +61,7 @@ data Shout = Shout
            , shoutFrom :: Kaze
            , shoutTile :: Tile
            , shoutTo :: [Tile]
-           } deriving (Show, Read, Eq, Ord)
+           } deriving (Show, Read)
 
 -- | Note: Ord instance is used to determine calling order.
 data ShoutKind = Chi | Kan | Pon | Ron | Chankan
@@ -77,51 +77,45 @@ instance Pretty Shout where
 
 -- Helpers
 
-mentsuTiles :: Mentsu -> [Tile]
-mentsuTiles Mentsu{..} = case mentsuKind of
-    Shuntsu -> mentsuTile : catMaybes [succMay mentsuTile, succMay mentsuTile >>= succMay]
-    Koutsu  -> replicate 3 mentsuTile
-    Kantsu  -> replicate 4 mentsuTile
-    Jantou  -> replicate 2 mentsuTile
-
 mentsuShouted :: Mentsu -> Bool
 mentsuShouted = isJust . mentsuShout
 
 -- Construct
 
 toMentsu :: MentsuKind -> Tile -> [Tile] -> Mentsu
-toMentsu mk t ts = case mk of
-    Shuntsu -> shuntsu $ headEx $ sort (t : ts)
-    Koutsu -> koutsu t
-    Kantsu -> kantsu t
-    Jantou -> jantou t
+toMentsu mk t ts = Mentsu mk (sortOn TileEq $ t:ts) Nothing
 
 shuntsu, koutsu, kantsu, jantou :: Tile -> Mentsu
-shuntsu = Mentsu Shuntsu `flip` Nothing
-koutsu  = Mentsu Koutsu `flip` Nothing
-kantsu  = Mentsu Kantsu `flip` Nothing
-jantou  = Mentsu Jantou `flip` Nothing
+shuntsu = mentsuFromKind Shuntsu
+koutsu  = mentsuFromKind Koutsu
+kantsu  = mentsuFromKind Kantsu
+jantou  = mentsuFromKind Jantou
 
--- | TODO: This discards flags (aka) from tiles!
+mentsuFromKind :: MentsuKind -> Tile -> Mentsu
+mentsuFromKind mk t = case mk of
+    Shuntsu -> Mentsu mk (t : catMaybes [succMay t, succMay t >>= succMay]) Nothing
+    Koutsu  -> Mentsu mk (replicate 3 t) Nothing
+    Kantsu  -> Mentsu mk (replicate 4 t) Nothing
+    Jantou  -> Mentsu mk (replicate 2 t) Nothing
+
 fromShout :: Shout -> Mentsu
-fromShout s@Shout{..} = setShout $ case shoutKind of
-    Pon     -> koutsu shoutTile
-    Kan     -> kantsu shoutTile
-    Chi     -> shuntsu (minimumEx $ shoutTile : shoutTo)
-    -- Ron and Chankan:
-    _ | [_]    <- shoutTo                           -> jantou shoutTile
-      | [x, y] <- shoutTo, x == y                   -> koutsu shoutTile
-      | Just m <- shuntsuWith (shoutTile : shoutTo) -> m
-      | otherwise                                   -> error "fromShout: malformed shout"
-    where
-        setShout (Mentsu k t _) = Mentsu k t (Just s)
+fromShout s@Shout{..} = Mentsu mk (sortOn TileEq $ shoutTile : shoutTo) (Just s)
+  where mk = case shoutKind of
+               Pon     -> Koutsu
+               Kan     -> Kantsu
+               Chi     -> Shuntsu
+               -- Ron and Chankan:
+               _ | [_]    <- shoutTo                           -> Jantou
+                 | [x, y] <- shoutTo, x ==~ y                  -> Koutsu
+                 | Just m <- shuntsuWith (shoutTile : shoutTo) -> Shuntsu
+                 | otherwise                                   -> error "fromShout: malformed shout"
 
 -- | @shuntsuWith tiles@ attempts to build a shuntsu from `tiles`. Note
 -- that `tiles` __must be in order of succession__.
 shuntsuWith :: [Tile] -> Maybe Mentsu
-shuntsuWith = go . sort where
-    go [x, y, z] = shuntsu x <$ do succMay x >>= guard . (== y)
-                                   succMay y >>= guard . (== z)
+shuntsuWith = go . sortOn TileEq where
+    go [x, y, z] = shuntsu x <$ do succMay x >>= guard . (==~ y)
+                                   succMay y >>= guard . (==~ z)
     go _ = Nothing
 
 -- | Promote an open koutsu to a shouminkantsu

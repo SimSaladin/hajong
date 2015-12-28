@@ -115,9 +115,9 @@ discard d@Discard{..} hand
     setDiscard  = handDiscards %~ (|> d)
     setNoTsumo  = handCanTsumo._Wrapped .~ False
     setRiichi
-        | _dcRiichi, hand^.handDiscards == [] = handRiichi .~ DoubleRiichi
-        | _dcRiichi                           = handRiichi .~ Riichi
-        | otherwise                           = id
+        | _dcRiichi, null (hand^.handDiscards) = handRiichi .~ DoubleRiichi
+        | _dcRiichi                            = handRiichi .~ Riichi
+        | otherwise                            = id
     setIppatsu = handIppatsu .~ if _dcRiichi then True else False
     updateFlags = handFlags._Wrapped %~ deleteSet HandFirsRoundUninterrupted
 
@@ -165,7 +165,7 @@ ankanOn tile hand
 shouminkanOn :: CanError m => Tile -> HandA -> m HandA
 shouminkanOn tile hand = do
     hand' <- tile `tileFromHand` hand
-    let isShoum m = mentsuKind m == Koutsu && mentsuTile m == tile
+    let isShoum m = mentsuKind m == Koutsu && headEx (mentsuTiles m) ==~ tile
     case hand' ^? handCalled.each.filtered isShoum of
         Nothing -> throwError "Shouminkan not possible: no such open koutsu"
         Just _  -> return $ handCalled.each.filtered isShoum %~ promoteToKantsu $ hand'
@@ -247,8 +247,8 @@ furiten h = any (`elem` (h^..handDiscards.each.dcTile)) . concatMap getAgari
 
 handInNagashi :: HandA -> Bool
 handInNagashi h = all id [ h^.handCalled == []
-                         , h^..handDiscards.traversed.filtered (isJust . _dcTo) == []
-                         , h^..handDiscards.traversed.filtered (isSuited . _dcTile) == [] ]
+                         , null $ h^..handDiscards.traversed.filtered (isJust . _dcTo)
+                         , null $ h^..handDiscards.traversed.filtered (isSuited . _dcTile) ]
 
 -- | Set PickedTile from a agari call
 setAgari :: Maybe Shout -> HandA -> HandA
@@ -261,7 +261,7 @@ setAgari ms h = h & handPicks %~ agari
 -- | Take the tile from hand if possible
 tileFromHand :: CanError m => Tile -> HandA -> m HandA
 tileFromHand tile hand
-    | pick : _ <- filter ((== tile).pickedTile) (hand^.handPicks) = return $ handPicks %~ L.delete pick $ hand
+    | pick : _ <- filter ((==~ tile).pickedTile) (hand^.handPicks) = return $ handPicks %~ L.deleteBy ((==~) `on` pickedTile) pick $ hand
     | (xs, _ : ys) <- break (== tile) (runIdentity $ _handConcealed hand) = return $ handConcealed._Wrapped .~ (xs ++ ys) $ hand
     | otherwise                                                   = throwError "Tile not in hand"
 

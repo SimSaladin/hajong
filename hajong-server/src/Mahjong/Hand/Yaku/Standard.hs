@@ -44,7 +44,7 @@ pinfu = do
     -- require: wait (at least) two-sided
     agari <- yakuState <&> pickedTile . view (vHand.handPicks.to lastEx)
     [a, _, c] <- anyShuntsu' (suited &. containsTile agari) <&> tileGroupTiles
-    if (tileNumber a == Just Ii && agari == c) || (tileNumber c == Just Chuu && agari == a)
+    if (tileNumber a == Just Ii && agari ==~ c) || (tileNumber c == Just Chuu && agari ==~ a)
         then yakuFail
         else do
             replicateM_ 3 (anyShuntsu suited)
@@ -348,7 +348,7 @@ countingUraDora = do
     _ <- riichi
     [OpenedUraDora dora] <- yakuState <&> toListOf (vKyoku.pFlags._Wrapped.each.filtered isUraFlag)
     tiles <- yakuAllTiles
-    let num = length [ () | a <- map succCirc dora, b <- tiles, a ==~ b ]
+    let num = length [ () | a <- map succCirc dora, b <- tiles, a ==~ T.TileEq b ]
     case num of
         0 -> yakuFail
         _ -> return $ YakuExtra num "Ura-Dora"

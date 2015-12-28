@@ -32,10 +32,8 @@ data PickedTile m = FromWall (m Tile)
 
 deriving instance Show (PickedTile Maybe)
 deriving instance Read (PickedTile Maybe)
-deriving instance Eq   (PickedTile Maybe)
 deriving instance Show (PickedTile Identity)
 deriving instance Read (PickedTile Identity)
-deriving instance Eq   (PickedTile Identity)
 
 pickedTile :: PickedTile Identity -> Tile
 pickedTile (FromWall (Identity t))   = t
@@ -62,7 +60,7 @@ data Discard = Discard
     { _dcTile          :: Tile
     , _dcTo            :: Maybe Kaze
     , _dcRiichi        :: Bool
-    } deriving (Show, Read, Eq)
+    } deriving (Show, Read)
 
 data Hand m = Hand
     { _handCalled      :: [Mentsu]                -- ^ Open mentsu
@@ -80,10 +78,8 @@ data Hand m = Hand
     }
 deriving instance Show (Hand Maybe)
 deriving instance Read (Hand Maybe)
-deriving instance Eq   (Hand Maybe)
 deriving instance Show (Hand Identity)
 deriving instance Read (Hand Identity)
-deriving instance Eq   (Hand Identity)
 
 -- | All info
 type HandA = Hand Identity

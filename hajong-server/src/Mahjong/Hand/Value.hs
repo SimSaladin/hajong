@@ -76,14 +76,14 @@ waitFu t xs = case xs of
     _ -> 0
 
 mentsuValue :: Mentsu -> Fu
-mentsuValue (Mentsu mk t ms) = product [gokind mk, gotile, goshout ms]
+mentsuValue (Mentsu mk ts ms) = product [gokind mk, gotile (headEx ts), goshout ms]
   where
     gokind Koutsu = 2
     gokind Kantsu = 8
     gokind _      = 0
 
-    gotile | not (isSuited t) || isNothing (succMay t) || isNothing (predMay t) = 2
-           | otherwise                                                          = 1
+    gotile t | not (isSuited t) || isNothing (succMay t) || isNothing (predMay t) = 2
+             | otherwise                                                          = 1
 
     goshout Nothing  = 2
     goshout (Just _) = 1

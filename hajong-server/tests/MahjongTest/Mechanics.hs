@@ -44,7 +44,7 @@ gameFlowTests = testGroup "Game flow"
                 stepped_ InpAuto
                 stepped_ $ InpTurnAction Ton $ TurnTileDraw False Nothing
                 stepped $ InpTurnAction Ton $ TurnTileDiscard $ Mahjong.Discard tile Nothing False
-        requireRight res $ \(_, (_, k)) -> k ^?! sHands . ix Ton . handDiscards == [Hand.Discard tile Nothing False] @? "Discard didn't equal"
+        requireRight res $ \(_, (_, k)) -> k ^?! sHands . ix Ton . handDiscards.to length == 1 @? "Discard didn't equal"
 
   , testCase "New kyoku state has correct properties" $ do
         kyoku <- testKyoku
@@ -55,7 +55,7 @@ gameFlowTests = testGroup "Game flow"
         kyoku^.pDora.to length == 1 @? "One dora tile"
         kyoku^.pRound                            == (Ton, 1) @? "First round was not Ton, 1"
         length (kyokuTiles kyoku)                @?= 136
-        length (filter isAka $ kyokuTiles kyoku) @?= 4 -- TODO: refactor this sum to a @kyokuTiles@ function
+        length (filter isAka $ kyokuTiles kyoku) == 4 @? show kyoku -- TODO: refactor this sum to a @kyokuTiles@ function
 
   , testCase "Tsumo is an option in the DealPrivateHandChanged event" $ do
         kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5
@@ -104,7 +104,7 @@ gameFlowTests = testGroup "Game flow"
 
       requireRight res $ \(_evs, (_r,k)) -> do
           k ^. pDora.to length @?= 4
-          k ^. pFlags @?= setFromList [OpenedUraDora ["P1", "P2", "P3", "P4"]]
+          k ^. pFlags @?= setFromList [OpenedUraDora $ map TileEq ["P1", "P2", "P3", "P4"]]
 
   , testCase "Suufonrenda: four consecutive wind discards goes through" $ do
       kyoku <- testKyoku <&> sWall %~ (["W", "W", "W", "W"] ++)
@@ -337,7 +337,7 @@ weirdYaku = testGroup "Yaku dependant on the whole game state"
 
   , testCase "Chankan is possible" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
-                         <&> sHands . ix Ton . handCalled .~ [Mentsu Koutsu "P5" (Just (Shout Pon Shaa "P5" ["P5", "P5"]))]
+                         <&> sHands . ix Ton . handCalled .~ [fromShout $ Shout Pon Shaa "P5" ["P5", "P5"]]
                          <&> sWall %~ ("P5" <|)
 
       let res = runKyokuState kyoku $ do

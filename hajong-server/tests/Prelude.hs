@@ -66,9 +66,9 @@ instance Arbitrary Number where arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary Mentsu where
     arbitrary = oneof
-        [ Mentsu Kantsu <$> arbitrary <*> arbitrary
-        , Mentsu Koutsu <$> arbitrary <*> arbitrary
-        , Mentsu Jantou <$> arbitrary <*> arbitrary
+        [ kantsu <$> arbitrary
+        , koutsu <$> arbitrary
+        , jantou <$> arbitrary
         , arbitraryShuntsu
         ]
 
@@ -137,6 +137,5 @@ instance Arbitrary TileGroup where
                         , GroupWait Shuntsu [t , t''] [t']
                         ]
 
-arbitraryShuntsu = do
-     tile <- arbitrary `suchThat` (\tile -> isSuited tile && fromJust (tileNumber tile) <= Chii)
-     return $ Mentsu Shuntsu tile Nothing
+arbitraryShuntsu = do tile <- arbitrary `suchThat` (\tile -> isSuited tile && fromJust (tileNumber tile) <= Chii)
+                      return $ shuntsu tile

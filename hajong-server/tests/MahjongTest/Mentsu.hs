@@ -69,8 +69,8 @@ tgSplitTests desc fun = testGroup desc
         length ml <= 5 ==> fun (concatMap tileGroupTiles ml) .<-- [ map tileGroupStripShout ml ]
     ]
 
-mentsuToTileGroup (Mentsu Jantou t _) = GroupWait Koutsu [t,t] [t]
-mentsuToTileGroup (Mentsu mk t _) = GroupComplete $ Mentsu mk t Nothing
+mentsuToTileGroup (Mentsu Jantou (t:_) _) = GroupWait Koutsu [t,t] [t]
+mentsuToTileGroup (Mentsu mk ts _) = GroupComplete $ Mentsu mk ts Nothing
 
 tileGroupStripShout (GroupComplete m) = mentsuToTileGroup m
 tileGroupStripShout x = x
@@ -105,7 +105,7 @@ hasNoDups xs = S.size (S.fromList xs) == length xs
 --  * Shallow (*partial*) hands for testing
 
 -- | a complete mentsu
-men = GroupComplete (Mentsu Koutsu "W!" Nothing)
+men = GroupComplete (Mentsu Koutsu ["W!", "W!", "W!"] Nothing)
 
 testHands =
     [ (0, tenpai_1)

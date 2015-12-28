@@ -53,6 +53,17 @@ type Shanten = Maybe Int
 -- | A single grouping variant.
 type Grouping = [TileGroup]
 
+-- To ease our lifes, we derive orphan instances for this module only.
+-- TODO: These are actually useful when comparing shouts coming from the
+-- client-side..
+instance Eq Tile where (==) = (==~)
+deriving instance Ord Tile
+deriving instance Eq Mentsu
+deriving instance Ord Mentsu
+deriving instance Eq Shout
+deriving instance Ord Shout
+
+
 -- | Data type used to describe some group of tiles.
 data TileGroup = GroupWait MentsuKind [Tile] [Tile]
                 -- ^ A @MentsuWait kind Inhand waits@ describes a wait on
@@ -66,7 +77,7 @@ data TileGroup = GroupWait MentsuKind [Tile] [Tile]
                 | GroupLeftover Tile
                 -- ^ A leftover tile which cannot be associated with any
                 -- other tile.
-                deriving (Show, Read, Eq, Ord)
+                deriving (Show, Read, Ord, Eq)
 
 instance P.Pretty TileGroup where
     pretty (GroupWait _ inh _) = "w" P.<> P.tupled (map P.pretty inh)
@@ -106,22 +117,22 @@ instance P.Pretty TileGroup where
 -- maybe if we changed the input from [Tile] to [(Tile, Int)] where second
 -- value stands for the number of those tiles it could fit well.
 tilesGroupL :: [Tile] -> [Grouping]
-tilesGroupL = go . L.sort
+tilesGroupL = go . L.sortOn TileEq
     where
         go []       = [ [] ]
         go [x]      = [ [GroupLeftover x] ]
         go (x:y:xs) = takeKantsu ++ takeTriplet ++ takePair ++ takeShuntsu ++ dropOne
             where
                 takePair
-                    | x == y                            = GroupWait Koutsu [x, x] [x] `goWith` xs
+                    | x ==~ y                           = GroupWait Koutsu [x, x] [x] `goWith` xs
                     | otherwise                         = []
 
                 takeTriplet
-                    | (z:xs') <- xs, x == z              = GroupComplete (koutsu x) `goWith` xs'
+                    | (z:xs') <- xs, x ==~ z             = GroupComplete (koutsu x) `goWith` xs'
                     | otherwise                         = []
 
                 takeKantsu
-                    | (z:w:xs') <- xs, x == z, z == w    = GroupComplete (kantsu x) `goWith` xs'
+                    | (z:w:xs') <- xs, x ==~ z, z ==~ w = GroupComplete (kantsu x) `goWith` xs'
                     | otherwise                         = []
 
                 takeShuntsu = concat $ catMaybes

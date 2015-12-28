@@ -54,11 +54,11 @@ data Kyoku' m = Kyoku
     , _sWaiting       :: Maybe Waiting -- ^ Waiting turn action or shout(s)
     } deriving (Typeable)
 
-deriving instance Eq   (Kyoku' Maybe)
+-- deriving instance Eq   (Kyoku' Maybe)
 deriving instance Show (Kyoku' Maybe)
 deriving instance Read (Kyoku' Maybe)
 
-deriving instance Eq   (Kyoku' Identity)
+-- deriving instance Eq   (Kyoku' Identity)
 deriving instance Show (Kyoku' Identity)
 deriving instance Read (Kyoku' Identity)
 
@@ -102,7 +102,7 @@ data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a rou
                | DealRiichi Kaze
                | DealEnded KyokuResults
                | GamePoints Kaze Int -- ^ Point change
-               deriving (Eq, Show, Read, Typeable)
+               deriving (Show, Read, Typeable)
 
 -- | Actions you do on your turn.
 data TurnAction = TurnTileDiscard Discard
@@ -110,13 +110,13 @@ data TurnAction = TurnTileDiscard Discard
                 | TurnAnkan Tile
                 | TurnShouminkan Tile
                 | TurnTsumo
-                deriving (Eq, Show, Read, Typeable)
+                deriving (Show, Read, Typeable)
 
 -- | Actions you do on someone else's turn.
 data GameAction = GameTurn TurnAction
                 | GameShout Shout
                 | GameDontCare -- ^ About shouting last discarded tile
-                deriving (Eq, Show, Read, Typeable)
+                deriving (Show, Read, Typeable)
 
 -- ** Points, results
 
@@ -178,7 +178,7 @@ data ValueInfo = ValueInfo
     { _vKyoku  :: Kyoku
     , _vPlayer :: Kaze
     , _vHand   :: HandA
-    } deriving (Eq, Show, Read)
+    } deriving (Show, Read)
 
 instance HasGroupings ValueInfo where getGroupings = getGroupings . _vHand
 

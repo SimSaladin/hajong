@@ -21,13 +21,20 @@ import qualified Data.List as L
 
 -- * Types
 
--- | A (japanese) mahjong tile.
+-- | A (japanese) mahjong tile. Note the lack of Eq/Ord, because tiles can
+-- have flags.
 data Tile = Suited TileKind Number Aka
           | Honor Honor
-          deriving (Ord)
 
-instance Eq Tile where
-    a == b = a ==~ b
+-- | A wrapped tile, with Eq and Ord via (==~).
+newtype TileEq = TileEq Tile deriving (Show, Read, CircularOrd)
+
+instance Eq TileEq where a == b = a ==~ b
+instance Ord TileEq where
+    TileEq (Suited tk n a) <= TileEq (Suited tk' n' a') = (tk, n, a) <= (tk', n', a')
+    TileEq Suited{} <= TileEq Honor{}                   = True
+    TileEq (Honor h) <= TileEq (Honor h')               = h <= h'
+    _ <= _                                              = False
 
 data TileKind = ManTile | PinTile | SouTile | HonorTile
               deriving (Show, Read, Eq, Ord)

@@ -23,7 +23,7 @@ x = done, / = half done, ! = needs testing
 [x] implement aka-dora
 [x] add test: aka-dora are yielded as extrayaku
 [ ] add test: when a ron/chankan shout isn't possible due to furiten/0 yaku or otherwise, someone can still go for a kan/pon/chi on the tile. (The invalid ron should not be present in the kyoku state machine in the first place.)
-[ ] add test: aka-dora are calculated from a called mentsu
+[x] add test: aka-dora are calculated from a called mentsu
 [x] add test: kokushi furiten
 [x] add test: chiitoi furiten
 [ ] clear TODO's from code

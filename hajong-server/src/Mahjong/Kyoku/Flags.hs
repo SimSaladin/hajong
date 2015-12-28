@@ -19,5 +19,5 @@ import           Mahjong.Tiles
 -- | Extendable data type which defines flags that can be used in the game
 -- engine.
 data Flag = FirstRoundUninterrupted -- ^ Tenhou, chiihou and renhou are yielded if someone goes out when this flag is in effect.
-          | OpenedUraDora [Tile]
+          | OpenedUraDora [TileEq]
           deriving (Eq, Ord, Read, Show)

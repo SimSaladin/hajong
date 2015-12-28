@@ -21,13 +21,13 @@ tests :: TestTree
 tests = testGroup "Standard Yaku"
     [ testCase "Pinfu" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M2", "M3", "P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
-                           & vHand.handCalled .~ [Mentsu Shuntsu "M1" $ Just $ Shout Ron Nan "M1" ["M2","M3"]]
+                           & vHand.handCalled .~ [fromShout $ Shout Ron Nan "M1" ["M2","M3"]]
                            & vHand.handPicks .~ [AgariCall $ Shout Ron Nan "M1" ["M2", "M3"]]
         snd (getYaku vi) @?= [Yaku 1 "Pinfu"]
 
     , testCase "Pinfu NOT on end wait " $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M2", "P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
-                           & vHand.handCalled .~ [Mentsu Shuntsu "M1" $ Just $ Shout Ron Nan "M1" ["M1","M2"]]
+                           & vHand.handCalled .~ [fromShout $ Shout Ron Nan "M3" ["M1","M2"]]
                            & vHand.handPicks .~ [AgariCall $ Shout Ron Nan "M3" ["M1", "M2"]]
         snd (getYaku vi) @?= []
 
@@ -57,7 +57,7 @@ tests = testGroup "Standard Yaku"
 
     , testCase "Honroutou (+ Toitoi)" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["S1", "S1", "S1", "S9", "S9", "W", "W"]
-                           & vHand.handCalled .~ [Mentsu Koutsu "M1" $ Just $ Shout Pon Nan "M1" undefined, Mentsu Koutsu "M9" $ Just $ Shout Pon Nan "M9" ["M9", "M9"], fromShout $ Shout Ron Nan "S9" ["S9", "S9"]]
+                           & vHand.handCalled .~ [fromShout $ Shout Pon Nan "M1" ["M1", "M1"], fromShout $ Shout Pon Nan "M9" ["M9", "M9"], fromShout $ Shout Ron Nan "S9" ["S9", "S9"]]
                            & vHand.handPicks .~ [AgariCall $ Shout Ron Nan "S9" ["S9", "S9"]]
         snd (getYaku vi) @?= [Yaku 2 "Honroutou", Yaku 2 "Toitoi"]
 
@@ -69,7 +69,7 @@ tests = testGroup "Standard Yaku"
 
     , testCase "San ankou (+ Toitoi)" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["M1", "M1", "M1", "S1", "S1", "S1", "S2", "S2", "S2", "W", "W"]
-                           & vHand.handCalled .~ [Mentsu Koutsu "S9" $ Just $ Shout Ron Nan "S9" ["S9", "S9"]]
+                           & vHand.handCalled .~ [fromShout $ Shout Ron Nan "S9" ["S9", "S9"]]
                            & vHand.handPicks .~ [AgariCall $ Shout Ron Nan "S9" ["S9", "S9"]]
         snd (getYaku vi) @?= [Yaku 2 "San ankou", Yaku 2 "Toitoi"]
 
@@ -81,7 +81,7 @@ tests = testGroup "Standard Yaku"
 
     , testCase "San kantsu (+ Toitoi)" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["W", "W"]
-                           & vHand.handCalled .~ [Mentsu Kantsu "M1" $ Just $ Shout Pon Nan "M1" ["M1", "M1"], Mentsu Kantsu "M9" $ Just $ Shout Pon Nan "M9" ["M9", "M9"], Mentsu Kantsu "S2" $ Just $ Shout Pon Nan "S2" ["S2", "S2"], fromShout $ Shout Ron Nan "S9" ["S7", "S8"]]
+                           & vHand.handCalled .~ [Mentsu Kantsu ["M1","M1","M1","M1"] $ Just $ Shout Pon Nan "M1" ["M1", "M1"], Mentsu Kantsu (replicate 4 "M9") $ Just $ Shout Pon Nan "M9" ["M9", "M9"], Mentsu Kantsu (replicate 4 "S2") $ Just $ Shout Pon Nan "S2" ["S2", "S2"], fromShout $ Shout Ron Nan "S9" ["S7", "S8"]]
                            & vHand.handPicks .~ [AgariCall $ Shout Ron Nan "S9" ["S7", "S8"]]
         snd (getYaku vi) @?= [Yaku 2 "San kantsu"]
 
@@ -194,13 +194,13 @@ tests = testGroup "Standard Yaku"
 
     , testCase "Dora, ura-dora and aka-dora are counted when calculating hand" $ do
         let vi = valueInfo & vHand.handConcealed._Wrapped .~ ["P2", "P3", "P4", setAka "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
-                           & vHand.handCalled .~ [fromShout $ Shout Ron Nan "M3" ["M1", "M2"]]
-                           & vHand.handPicks .~ [AgariCall $ Shout Ron Nan "M3" ["M1", "M2"]]
+                           & vHand.handCalled .~ [fromShout $ Shout Ron Nan "M3" ["M4", setAka "M5"]]
+                           & vHand.handPicks .~ [AgariCall $ Shout Ron Nan "M3" ["M4", setAka "M5"]]
                            & vHand.handRiichi .~ Riichi
                            & vKyoku.pDora .~ ["S1"]
-                           & vKyoku.pFlags .~ setFromList [OpenedUraDora ["M1"]]
+                           & vKyoku.pFlags .~ setFromList [OpenedUraDora [TileEq "P1"]]
 
-        snd (getYaku vi) @?= [Yaku 1 "Riichi", YakuExtra 1 "Dora", YakuExtra 1 "Ura-Dora", YakuExtra 1 "Aka-Dora"]
+        snd (getYaku vi) @?= [Yaku 1 "Riichi", Yaku 1 "Pinfu", YakuExtra 1 "Dora", YakuExtra 1 "Ura-Dora", YakuExtra 2 "Aka-Dora"]
 
     -- Yakumans
 
