@@ -26,6 +26,7 @@ module Mahjong.Kyoku
     -- * Utility
     , playerToKaze
     , getShouts
+    , nextRound
     , module Mahjong.Kyoku.Internal
     ) where
 
@@ -192,8 +193,7 @@ maybeGameResults :: Kyoku -> Maybe FinalPoints
 maybeGameResults kyoku@Kyoku{..}
     | minimumOf (traversed._2) _pPlayers < Just 0 = return score
     | otherwise = do
-        guard (fst _pRound >= Nan)
-        guard (nextRound kyoku ^. _1 > Nan)
+        guard (nextRound kyoku ^. _1 >= Shaa)
         guard (maximumOf (traversed._2) _pPlayers > Just 30000)
         return score
   where
@@ -201,11 +201,14 @@ maybeGameResults kyoku@Kyoku{..}
 
 nextRound :: Kyoku -> Round
 nextRound Kyoku{..}
-    | Just DealAbort{..} <- _pResults = _pRound & _2 +~ 1
-    | Just DealDraw{..}  <- _pResults = if Ton `elem` (dNooten^..each._1)  then _pRound & _2 +~ 1 else (_pRound & fst & nextKaze, 1)
-    | Just DealRon{..}   <- _pResults = if Ton `elem` (dWinners^..each._1) then _pRound & _2 +~ 1 else (_pRound & fst & nextKaze, 1)
-    | Just DealTsumo{..} <- _pResults = if Ton `elem` (dWinners^..each._1) then _pRound & _2 +~ 1 else (_pRound & fst & nextKaze, 1)
+    | Just DealAbort{..} <- _pResults = _pRound & _3 +~ 1
+    | Just DealDraw{..}  <- _pResults = _pRound & if elemOf (each._1) Ton dTenpais then _3 +~ 1 else set _3 (_pRound^._3 + 1) . roundRotates
+    | Just DealRon{..}   <- _pResults = _pRound & if elemOf (each._1) Ton dWinners then _3 +~ 1 else roundRotates
+    | Just DealTsumo{..} <- _pResults = _pRound & if elemOf (each._1) Ton dWinners then _3 +~ 1 else roundRotates
     | Nothing            <- _pResults = _pRound
+  where
+    roundRotates (k, 4, _) = (nextKaze k, 1, 0)
+    roundRotates (k, r, _) = (k, r + 1, 0)
 
 -- | Advance the game to next deal, or end it.
 -- TODO move to Round.hs
@@ -220,19 +223,15 @@ nextDeal kyoku = do tiles <- shuffleTiles
   where
     go = set pRound newRound
        . set pTurn Ton
+       . set pHonba (newRound^._3)
        . if' rotate (pOja .~ nextOja) id
        . if' rotate (over pPlayers rotatePlayers) id
-       . if' honbaResets (pHonba .~ 0) (pHonba +~ 1)
        . if' riichiTransfers (pRiichi .~ 0) id
        . set pResults Nothing
        . over pDeals (cons $ _pRound kyoku)
 
     newRound    = nextRound kyoku
-    rotate      = newRound^._2 == 1
-    honbaResets = case kyoku^?!pResults of
-                      Just DealTsumo{..} -> notElemOf (each._1) Ton dWinners
-                      Just DealRon{..}   -> notElemOf (each._1) Ton dWinners
-                      _                  -> False
+    rotate      = newRound^._2 /= kyoku^.pRound._2
     riichiTransfers = case kyoku^?!pResults of
                           Just DealAbort{} -> False
                           Just DealDraw{} -> False

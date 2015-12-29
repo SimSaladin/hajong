@@ -211,7 +211,7 @@ readShoutKind s = case s of
 roundState : Decoder RoundState
 roundState = object8 RoundState
     ("mypos"      := kaze)
-    ("round"      := tuple2 (,) kaze int)
+    ("round"      := round)
     ("turn"       := kaze)
     ("player"     := int)
     ("oja"        := int)
@@ -225,8 +225,11 @@ roundState = object8 RoundState
        ("results"    := maybe results)
        ("honba"      := int)
        ("in-table"   := int)
-       ("prev-deals" := list (tuple2 (,) kaze int))
+       ("prev-deals" := list round)
     )
+
+round : Decoder Round
+round = tuple3 (\k a b -> { kaze = k, round_rot = a, round_honba = b }) kaze int int
 
 points : Decoder (Kaze, Int)
 points = tuple2 (,) kaze int

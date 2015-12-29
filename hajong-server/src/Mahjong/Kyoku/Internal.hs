@@ -70,8 +70,8 @@ type AsPlayer = Kyoku' Maybe
 -- | Left for turn, right for shout(s)
 type Waiting = Either WaitTurnAction [WaitShout]
 
--- | @E1 == (Ton, 1)@ etc.
-type Round = (Kaze, Int)
+-- | @E1 == (Ton, 1, 0)@ etc. last is for renchans.
+type Round = (Kaze, Int, Int)
 
 -- | (shouting player, shouting kaze, secs_until_auto, shout)
 type WaitShout = (Player, Kaze, Int, [Shout])
@@ -203,7 +203,7 @@ newKyoku players names = do
         , _pOja           = oja
         , _pPlayers       = mapFromList $ zip [Ton .. Pei] (zip3 players (repeat 25000) names)
         , _pResults       = Nothing
-        , _pRound         = (Ton, 1)
+        , _pRound         = (Ton, 1, 0)
         , _pTurn          = Ton
         , _pFlags         = setFromList [FirstRoundUninterrupted]
 

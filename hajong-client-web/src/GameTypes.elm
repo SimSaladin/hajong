@@ -43,7 +43,7 @@ type alias Player = Int
 -- This duplicates Hajong.Game.Round.GamePlayer
 type alias RoundState = 
    { mypos     : Kaze
-   , round     : (Kaze, Int)
+   , round     : Round
    , turn      : Kaze
    , player    : Player
    , oja       : Player
@@ -56,8 +56,10 @@ type alias RoundState =
    , results   : Maybe RoundResult
    , honba     : Int
    , inTable   : Int -- Number of riichi sticks in table
-   , prevDeals : List (Kaze, Int)
+   , prevDeals : List Round
    }
+
+type alias Round = { kaze : Kaze, round_rot : Int, round_honba : Int }
 
 type RoundResult = DealTsumo { winners : List Winner, payers : List Payer }
                  | DealRon   { winners : List Winner, payers : List Payer }

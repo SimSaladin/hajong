@@ -18,7 +18,7 @@ import Time exposing (inSeconds)
 t_w = 62
 t_h = 82
 discards_off = 330
-called_off   = 650
+called_off   = 600
 riichi_off   = 130
 
 -- {{{ Controls ------------------------------------------------------
@@ -73,10 +73,10 @@ getShout = maybe Nothing (\k -> Just <| Shout k Ton (Suited ManTile 1 False) [])
 display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
    Just rs -> flow down
-        [ container 1000 650 midTop <| collage 1000 650
+        [ container 1000 800 midTop <| collage 1000 800
             [ dispInfoBlock co gs rs
             , dispDiscards co gs rs |> scale 0.7
-            , dispCalled co gs rs |> scale 0.6
+            , dispOthersHands co gs rs |> scale 0.6
             , group <| map (fst >> \k -> moveRotateKaze riichi_off rs.mypos k playerRiichi)
                     <| List.filter (snd >> .riichiState >> \x -> x /= NoRiichi) rs.hands
             , maybe (toForm empty) dispResults rs.results
@@ -104,11 +104,12 @@ dispDiscards co gs rs = group <| map
        |> moveRotateKaze discards_off rs.mypos k)
    [Ton, Nan, Shaa, Pei]
 
-dispCalled co gs rs = [Ton, Nan, Shaa, Pei]
+dispOthersHands : Controls -> GameState -> RoundState -> Form
+dispOthersHands co gs rs = [Ton, Nan, Shaa, Pei]
    |> List.filter (\x -> x /= rs.mypos)
    |> map (
       \k -> Util.listFind k rs.hands
-         |> dispPublicMentsu co k
+         |> dispOthersHand co k
          |> toForm
          |> moveRotateKaze called_off rs.mypos k
       )
@@ -147,7 +148,7 @@ dispInfoBlock co gs rs =
       ]
       ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 95 rs.mypos k) [Ton, Nan, Shaa, Pei]
 
-dealAndRoundIndicator rs = toForm <| kazeImage (fst rs.round) `beside` centered (T.fromString (toString <| snd rs.round))
+dealAndRoundIndicator rs = toForm <| kazeImage (rs.round.kaze) `beside` centered (T.fromString (toString <| rs.round.round_rot))
 
 kazeImage kaze = fittedImage 28 38 <| case kaze of
    Ton  -> "/static/img/Ton.jpg"
@@ -270,7 +271,19 @@ dispDiscard d = if d.riichi
    then collage (t_h+4) (t_w+4) [ rotate (degrees 90) <| toForm <| dispTile d.tile ]
    else dispTile d.tile
 
+dispPublicMentsu : Controls -> Kaze -> HandPublic -> Element
 dispPublicMentsu co k h = flow right <| map (dispMentsu k) h.called
+
+dispHiddenTiles : HandPublic -> Element
+dispHiddenTiles h =
+   let num = 13 - 2 * List.length h.called
+       in flow right <| List.repeat num tileHidden
+
+tileHidden : Element
+tileHidden = container 54 34 middle <| collage 54 34 [ rect 50 30 |> outlined defaultLine ]
+
+dispOthersHand : Controls -> Kaze -> HandPublic -> Element
+dispOthersHand co k h = dispHiddenTiles h `beside` dispPublicMentsu co k h
 
 -- | The first argument tells who we are. We need to know in order to rotate the
 -- correct tile in a shouted mentsu.

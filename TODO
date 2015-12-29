@@ -32,8 +32,8 @@ x = done, / = half done, ! = needs testing
 [ ] fix tests
 # client
 [ ] interface for viewing different kyoku states
-[ ] Display concealed hands of other players
-[ ] display aka-dora as red
+[x] Display concealed hands of other players
+[x] display aka-dora as red
 [ ] Display winning hand
 [ ] Display error prompts when receiving errors in elm
 [ ] sending messages

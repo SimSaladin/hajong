@@ -51,7 +51,7 @@ gameFlowTests = testGroup "Game flow"
         kyoku^.sWall.to length                   @?= 136-14-4*13
         kyoku^.sWanpai.to wanpaiTiles.to length  @?= 13 -- + 1 x dora
         kyoku^.pDora.to length                   @?= 1
-        kyoku^.pRound                            @?= (Ton, 1)
+        kyoku^.pRound                            @?= (Ton, 1, 0)
         length (kyokuTiles kyoku)                @?= 136
         length (filter isAka $ kyokuTiles kyoku) @?= 4
         kyoku^.sHands ^.. each.handConcealed._Wrapped.to length @?= [13, 13, 13, 13]
@@ -179,6 +179,23 @@ gameFlowTests = testGroup "Game flow"
       case res of
           Left err -> err @?= "You have already called on that tile"
           Right _  -> assertFailure "Game should have errored"
+
+  , testCase "When no-one tenpai, round kaze rotates" $ do
+      kyoku <- testKyoku <&> pResults .~ Just (DealDraw [] [])
+      nextRound kyoku @?= (Ton, 2, 1)
+
+  , testCase "When oja tenpai, round kaze doesn't rotate" $ do
+      kyoku <- testKyoku <&> pResults .~ Just (DealDraw [(Ton, 3000)] [])
+      nextRound kyoku @?= (Ton, 1, 1)
+
+  , testCase "When oja wins, round kaze doesn't rotate" $ do
+      kyoku <- testKyoku <&> pResults .~ Just (DealTsumo [(Ton, 3000, error "not needed")] [])
+      nextRound kyoku @?= (Ton, 1, 1)
+
+  , testCase "When somene else wins, round kaze rotates" $ do
+      kyoku <- testKyoku <&> pResults .~ Just (DealTsumo [(Nan, 3000, error "not needed")] [])
+                         <&> pRound .~ (Ton, 1, 2)
+      nextRound kyoku @?= (Ton, 2, 0)
   ]
 
 furitenTests :: TestTree
