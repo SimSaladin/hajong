@@ -98,6 +98,7 @@ step (WaitingShouts couldShout winning shouts chankan) inp
             | InpAuto <- inp                     = proceedWithoutShoutsAfterDiscard chankan
             | null couldShout                    = proceedWithoutShoutsAfterDiscard chankan
             | InpPass pk <- inp                  = return $ WaitingShouts (deleteSet pk couldShout) winning shouts chankan
+            | InpShout pk _ <- inp, pk `onotElem` couldShout, elemOf (each._1) pk shouts = throwError "You have already called on that tile"
             | InpShout pk shout <- inp, Just i <- L.findIndex (== (pk, shout)) shouts
             = do
                 res <- use pTurn >>= \tk -> case winning of
