@@ -178,7 +178,7 @@ shouminkanOn tile hand = do
 -- * move the melded mentsu to called.
 -- * if the shout was kan, meld it and set state to DrawFromWanpai.
 meldTo :: CanError m => Shout -> Mentsu -> HandA -> m HandA
-meldTo shout mentsu hand
+meldTo shout mentsu hand -- TODO why must the shout be passed separetely?
     | correctConcealedTilesInHand = if' (shoutKind shout `elem` [Ron, Chankan]) (handWin $ Just shout) return
                                   $ if' (shoutKind shout == Kan) (handState .~ DrawFromWanpai) id $ moveFromConcealed hand
     | otherwise                   = throwError $ "meldTo: Tiles not available (concealed: " ++ tshow concealedTiles ++ ", needed: " ++ tshow tilesFromHand ++ ")"

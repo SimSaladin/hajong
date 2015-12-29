@@ -167,7 +167,7 @@ gameFlowTests = testGroup "Game flow"
       requireRight res $ \_ -> return ()
 
   , testCase "Supplying the same shout twice is not possible" $ do
-      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
                          <&> sHands.ix Nan .handConcealed._Wrapped .~ ["P5", "P5"] -- needed to ensure some other possible shout
                          <&> sWall %~ cons "P5"
 
@@ -184,7 +184,7 @@ gameFlowTests = testGroup "Game flow"
 furitenTests :: TestTree
 furitenTests = testGroup "Furiten tests"
   [ testCase "Temporary furiten is effective until next own draw" $ do
-      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
                          <&> sHands.ix Ton .handConcealed._Wrapped .~ ["P5", "P5"] -- needed to ensure some other possible shout
                          <&> sWall %~ cons "P5" . cons "P5" . cons "S1" . cons "P5"
 
@@ -194,7 +194,7 @@ furitenTests = testGroup "Furiten tests"
           sndRound   = do autoAndDiscard Shaa $ Discard "S1" Nothing False
                           autoAndDiscard Pei $ Discard "P5" Nothing False
 
-          shout k    = stepped_ $ InpShout Shaa $ Shout Ron k "P5" ["P5"]
+          shout k    = do stepped_ $ InpShout Shaa $ Shout Ron k "P5" ["P5"]
 
       case runKyokuState kyoku (firstRound >> shout Nan) of
           Left err -> err @?= "No such call is possible"
@@ -237,7 +237,7 @@ furitenTests = testGroup "Furiten tests"
   , testCase "Ron is not possible if furiten; must fail before shout goes through" $ do
       kyoku <- testKyoku <&> sHands.ix Nan .handConcealed._Wrapped .~ handThatWinsWithP5
                          <&> sHands.ix Nan .handFuriten._Wrapped .~ Furiten
-                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5 -- needed to ensure some other possible shout
+                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5Pinfu -- needed to ensure some other possible shout
                          <&> sWall %~ cons "P5"
 
       let res = runKyokuState kyoku $ do
@@ -251,7 +251,7 @@ furitenTests = testGroup "Furiten tests"
   , testCase "Ron is not possible if 0 yaku; must fail before shout goes through" $ do
       kyoku <- testKyoku <&> sHands.ix Nan .handConcealed . _Wrapped .~ handThatWinsWithP5
                          <&> sHands.ix Nan .handRiichi .~ NoRiichi
-                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5 -- needed to ensure some other possible shout
+                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5Pinfu -- needed to ensure some other possible shout
                          <&> sWall %~ cons "P5"
 
       let res = runKyokuState kyoku $ do
@@ -259,7 +259,7 @@ furitenTests = testGroup "Furiten tests"
             stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
 
       case res of
-          Left err -> err @?= "Need yaku to win"
+          Left err -> err @?= "No such call is possible"
           _        -> assertFailure "Game should have errored"
 
   ]

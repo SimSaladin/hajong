@@ -56,6 +56,7 @@ x = done, / = half done, ! = needs testing
               *** Gave up! Passed only 98 tests.
 [ ] refactor the kyoku code: make it possible to only modify the state via events; the event should take effect in the StateT data immediately after 'telling' it
 [ ] add test: kuushuu kyuuhai: 9 different honors or terminals on initial draw
+[ ] when discarding "valid" shout options for furiten/no yaku, instead of discarding add them to a not-allowed record and if someone attempts to call them, emit corresponding error message. This eases debugging in the future. 
 [ ] (graphics) point sticks (1000 done)
 [ ] (graphics) more esthetic tiles
 [ ] (elm) chat/dialog

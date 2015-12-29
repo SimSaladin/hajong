@@ -248,7 +248,7 @@ nagashiOrDraw = do
     wins  <- iforM hands $ \pk hand -> if handInNagashi hand then return $ handWinsNagashi pk hand else return Nothing
 
     let winners = map fst $ catMaybes $ map snd $ mapToList wins :: [Winner]
-        payers  = map (\xs@((p,_):_) -> (p, sumOf (traversed._2) xs)) $ groupBy ((==) `on` fst) $ (concatMap snd $ catMaybes $ map snd $ mapToList wins) :: [Payer]
+        payers  = map (\xs@((p,_):_) -> (p, sumOf (traversed._2) xs)) $ groupBy (equating fst) $ (concatMap snd $ catMaybes $ map snd $ mapToList wins) :: [Payer]
 
     if null winners then KyokuEnded <$> endDraw else return $ KyokuEnded $ DealTsumo winners payers
 
@@ -276,12 +276,10 @@ processAnkan pk t = do
 processShouminkan :: InKyoku m => Kaze -> Tile -> m Machine
 processShouminkan pk t = do
     handOf' pk >>= shouminkanOn t >>= updateHand pk
-    chankanShouts <- getShouts t <&> over (each._2) toChankan . filter ((== Ron) . shoutKind . snd)
+    chankanShouts <- getShouts True t
     if null chankanShouts then return (WaitingDraw pk True)
                           else do tellEvents . map DealWaitForShout =<< toWaitShouts chankanShouts
                                   return (WaitingShouts (setFromList $ map fst chankanShouts) Nothing chankanShouts True)
- where
-   toChankan s = s { shoutKind = Chankan }
 
 checkEndConditions :: InKyoku m => m Machine
 checkEndConditions = do
@@ -356,7 +354,7 @@ processDiscard pk d' = do
     when (d^.dcRiichi) $ doRiichi pk
     updateHand pk =<< discard d =<< handOf' pk
 
-    shouts <- getShouts (d^.dcTile)
+    shouts <- getShouts False (d^.dcTile)
     waiting <- toWaitShouts shouts
     tellEvents $ map DealWaitForShout waiting
     return $ if null waiting
@@ -516,9 +514,6 @@ getValuedHand pk = do
     when (length (vh^..vhValue.vaYaku.each.filtered yakuNotExtra) == 0) $
         throwError $ "Need at least one yaku that ain't dora to win.\nThe ValuedHand: " ++ tshow vh
     return vh
-  where
-    yakuNotExtra Yaku{}      = True
-    yakuNotExtra YakuExtra{} = False
 
 -- ** Scoring
 
@@ -660,15 +655,35 @@ filterCouldShout :: Tile            -- ^ Tile to shout
                  -> Map Kaze HandA  -- ^ All hands
                  -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority as head)
 filterCouldShout dt np = sortBy (shoutPrecedence np)
-    . concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt) . Map.filter ((== NotFuriten) . runIdentity . _handFuriten)
+    . concatMap flatten . Map.toList
+    . Map.mapWithKey (shoutsOn np dt)
+    . Map.filter ((== NotFuriten) . runIdentity . _handFuriten) -- discard furiten
   where flatten (k, xs) = map (k,) xs
 
-getShouts :: InKyoku m => Tile -> m [(Kaze, Shout)]
-getShouts dt = do
+-- | Flag for chankan.
+getShouts :: InKyoku m => Bool -> Tile -> m [(Kaze, Shout)]
+getShouts chankan dt = do
     lastTile <- use pWallTilesLeft <&> (== 0)
     shouts   <- filterCouldShout dt <$> use pTurn <*> use sHands
-    return $ if' lastTile (filter ((`elem` [Ron, Chankan]) . shoutKind . snd)) id shouts
-        -- when there are no tiles, only go-out shouts are allowed
+    filterM couldContainYaku $
+        if' chankan (over (each._2) toChankan . filter ((== Ron) . shoutKind.snd)) id $
+        if' lastTile (filter $ (== Ron) . shoutKind . snd) id -- when there are no tiles, only go-out shouts are allowed
+        shouts
+
+yakuNotExtra Yaku{}      = True
+yakuNotExtra YakuExtra{} = False
+
+toChankan s = s { shoutKind = Chankan }
+
+-- | The shout wouldn't result in a 0-yaku mahjong call
+couldContainYaku :: InKyoku m => (Kaze, Shout) -> m Bool
+couldContainYaku (k, s)
+    | Ron <- shoutKind s = do
+        h  <- handOf' k
+        vh <- valueHand k <$> meldTo s (fromShout s) h <*> get
+        return $ length (vh^..vhValue.vaYaku.each.filtered yakuNotExtra) /= 0
+    | otherwise = return True
+
 
 toWaitShouts :: InKyoku m => [(Kaze, Shout)] -> m [WaitShout]
 toWaitShouts shouts = do
