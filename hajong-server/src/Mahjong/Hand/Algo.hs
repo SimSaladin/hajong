@@ -16,7 +16,7 @@ module Mahjong.Hand.Algo
     Shanten,
     HasGroupings(..),
     shanten, shantenBy, tenpai, complete,
-    chiitoitsuShanten, kokushiShanten, kokushiAgari, groupingShanten,
+    chiitoitsuShanten, kokushiShanten, kokushiAgari, groupingShanten, tenpaiGroupings,
 
     -- * Tile grouping
     tilesGroupL, tilesSplitGroupL,
@@ -212,6 +212,9 @@ shantenBy f = minimumMay . mapMaybe f . getGroupings
 complete, tenpai :: HasGroupings x => x -> Bool
 complete = (== Just (-1)) . shanten
 tenpai   = (== Just 0) . shanten
+
+tenpaiGroupings :: HasGroupings x => x -> [Grouping]
+tenpaiGroupings = filter tenpai . getGroupings
 
 shanten' :: Grouping -> Shanten
 shanten' = fmap minimumEx . sequence <$> sequence

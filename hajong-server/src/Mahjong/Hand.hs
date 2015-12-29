@@ -181,7 +181,7 @@ meldTo :: CanError m => Shout -> Mentsu -> HandA -> m HandA
 meldTo shout mentsu hand
     | correctConcealedTilesInHand = if' (shoutKind shout `elem` [Ron, Chankan]) (handWin $ Just shout) return
                                   $ if' (shoutKind shout == Kan) (handState .~ DrawFromWanpai) id $ moveFromConcealed hand
-    | otherwise                   = throwError "meldTo: Tiles not available"
+    | otherwise                   = throwError $ "meldTo: Tiles not available (concealed: " ++ tshow concealedTiles ++ ", needed: " ++ tshow tilesFromHand ++ ")"
   where
     tilesFromHand               = shoutTo shout
     concealedTiles              = hand^.handConcealed._Wrapped
@@ -257,6 +257,10 @@ setAgari ms h = h & handPicks %~ agari
                 | otherwise     = _last %~ (\case
                                            FromWanpai (Identity t) -> AgariTsumoWanpai t
                                            x                       -> AgariTsumo $ pickedTile x )
+
+-- XXX: Could cache the result in the Hand data
+handGetAgari :: HandA -> [Tile]
+handGetAgari = L.nub . concatMap getAgari . tenpaiGroupings
 
 -- | Take the tile from hand if possible
 tileFromHand :: CanError m => Tile -> HandA -> m HandA

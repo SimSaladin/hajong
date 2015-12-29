@@ -165,12 +165,44 @@ gameFlowTests = testGroup "Game flow"
               autoEndTurn
 
       requireRight res $ \_ -> return ()
+
+  , testCase "Supplying the same shout twice is not possible" $ do
+      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sHands.ix Nan .handConcealed._Wrapped .~ ["P5", "P5"] -- needed to ensure some other possible shout
+                         <&> sWall %~ cons "P5"
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "P5" Nothing False
+            stepped_ $ InpShout Nan $ Shout Pon Ton "P5" ["P5", "P5"]
+            stepped_ $ InpShout Nan $ Shout Pon Ton "P5" ["P5", "P5"]
+    
+      case res of
+          Left err -> err @?= "You have already called on that tile"
+          Right _  -> assertFailure "Game should have errored"
   ]
 
 furitenTests :: TestTree
 furitenTests = testGroup "Furiten tests"
   [ testCase "Temporary furiten is effective until next own draw" $ do
-      undefined
+      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sHands.ix Ton .handConcealed._Wrapped .~ ["P5", "P5"] -- needed to ensure some other possible shout
+                         <&> sWall %~ cons "P5" . cons "P5" . cons "S1" . cons "P5"
+
+      let firstRound = do autoAndDiscard Ton $ Discard "P5" Nothing False
+                          autoAndDiscard Nan $ Discard "P5" Nothing False
+
+          sndRound   = do autoAndDiscard Shaa $ Discard "S1" Nothing False
+                          autoAndDiscard Pei $ Discard "P5" Nothing False
+
+          shout k    = stepped_ $ InpShout Shaa $ Shout Ron k "P5" ["P5"]
+
+      case runKyokuState kyoku (firstRound >> shout Nan) of
+          Left err -> err @?= "No such call is possible"
+          _        -> assertFailure "Game should have errored"
+
+      case runKyokuState kyoku (firstRound >> sndRound >> shout Pei) of
+          Left err -> assertFailure $ unpack err
+          Right _  -> return ()
 
   , testCase "Chiitoi furiten" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "M3"]

@@ -94,10 +94,10 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | TurnShouminkan t <- ta        = processShouminkan pk t
 
 step (WaitingShouts couldShout winning shouts chankan) inp
-            | InpAuto <- inp, Just xs <- winning    = processShouts (map (shouts L.!!) xs) chankan
-            | InpAuto <- inp      = if chankan then use pTurn >>= return . WaitingDiscard else return CheckEndConditionsAfterDiscard
-            | null couldShout     = if chankan then use pTurn >>= return . WaitingDiscard else return CheckEndConditionsAfterDiscard
-            | InpPass pk <- inp                     = return $ WaitingShouts (deleteSet pk couldShout) winning shouts chankan
+            | InpAuto <- inp, Just xs <- winning = processShouts (map (shouts L.!!) xs) chankan
+            | InpAuto <- inp                     = proceedWithoutShoutsAfterDiscard chankan
+            | null couldShout                    = proceedWithoutShoutsAfterDiscard chankan
+            | InpPass pk <- inp                  = return $ WaitingShouts (deleteSet pk couldShout) winning shouts chankan
             | InpShout pk shout <- inp, Just i <- L.findIndex (== (pk, shout)) shouts
             = do
                 res <- use pTurn >>= \tk -> case winning of
@@ -115,6 +115,10 @@ step CheckEndConditionsAfterDiscard InpAuto = checkEndConditions
 
 step (KyokuEnded{}) _ = throwError "This kyoku has ended!"
 step st inp           = throwError $ "Kyoku.step: Invalid input in state " <> tshow st <> ": " <> tshow inp
+
+-- | chankan?
+proceedWithoutShoutsAfterDiscard :: InKyoku m => Bool -> m Machine
+proceedWithoutShoutsAfterDiscard chankan = if' chankan (WaitingDiscard <$> use pTurn) (return CheckEndConditionsAfterDiscard)
 
 dealGameEvent :: GameEvent -> Kyoku -> Kyoku
 dealGameEvent ev = appEndo . mconcat $ case ev of
@@ -280,6 +284,8 @@ processShouminkan pk t = do
 
 checkEndConditions :: InKyoku m => m Machine
 checkEndConditions = do
+    updateTempFuritens
+
     tilesLeft      <- use pWallTilesLeft
     dora           <- use pDora
     everyoneRiichi <- use sHands <&> allOf (each.handRiichi) (/= NoRiichi)
@@ -364,6 +370,19 @@ doRiichi pk = do
 
 autoDiscard :: InKyoku m => Kaze -> m Machine
 autoDiscard tk = processDiscard tk =<< handAutoDiscard =<< handOf' tk
+
+-- | Update temporary furiten state of all players after a discard.
+updateTempFuritens :: InKyoku m => m ()
+updateTempFuritens = do
+    pk   <- use pTurn
+    tile <- _dcTile . lastEx . _handDiscards <$> handOf' pk
+    handOf' pk >>= \h -> case h^.handFuriten._Wrapped of
+        NotFuriten | tile `elem` handGetAgari h -> updateHand pk $ h & handFuriten._Wrapped .~ TempFuriten
+        TempFuriten                             -> updateHand pk $ h & handFuriten._Wrapped .~ NotFuriten
+        _                                       -> return ()
+    forM_ (L.delete pk [Ton .. Pei]) $ \k -> handOf' k >>= \h -> case h^.handFuriten._Wrapped of
+        NotFuriten | tile `elem` handGetAgari h -> updateHand k $ h & handFuriten._Wrapped .~ TempFuriten
+        _                                       -> return ()
 
 -- ** Turn-passing
 
