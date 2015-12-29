@@ -16,7 +16,7 @@ module Mahjong.Hand.Algo
     Shanten,
     HasGroupings(..),
     shanten, shantenBy, tenpai, complete,
-    chiitoitsuShanten, kokushiShanten, kokushiAgari,
+    chiitoitsuShanten, kokushiShanten, kokushiAgari, groupingShanten,
 
     -- * Tile grouping
     tilesGroupL, tilesSplitGroupL,
@@ -243,14 +243,16 @@ shanten' = fmap minimumEx . sequence <$> sequence
 groupingShanten :: Int -> Grouping -> Shanten
 groupingShanten n tgs = case foldl' (\i -> (i -) . tgval) n tgs of
     -1 | length (filter isPair tgs) /= 1 -> Nothing
-    0  | [t] <- getAgari tgs, length (filter (== t) $ concatMap tileGroupTiles tgs) == 4 -> Nothing -- XXX: No shanten implied if waiting only on a tile we already have 4 of. correct would be to build some other wait - how many would that take?
-    s -> Just $ s + max 0 (length (filter notPairable tgs) - 4)
+    s  | 0 <- s + pairExtra, [t] <- getAgari tgs, length (filter (== t) $ concatMap tileGroupTiles tgs) == 4 -> Nothing -- XXX: No shanten implied if waiting only on a tile we already have 4 of. correct would be to build some other wait - how many would that take?
+       | 0 <- s + pairExtra, [] <- getAgari tgs -> Nothing -- XXX: Also, if there simply isn't a tile in the world which could complete the hand, it's not tenpai
+       | otherwise -> Just (s + pairExtra)
   where
     tgval (GroupComplete m)
         | Jantou <- mentsuKind m = 1
         | otherwise              = 2
     tgval (GroupWait{})          = 1
     tgval (GroupLeftover{})      = 0
+    pairExtra = max 0 (length (filter notPairable tgs) - 4)
     
 -- | If there is a shuntsu wait, that is the only possible agari. If there
 -- is a single leftover tile that is the agari. otherwise any of the koutsu
@@ -260,7 +262,7 @@ getAgari xs | [GroupWait Shuntsu _ ws] <- filter isShuntsuWait xs  = ws -- shunt
             | [t] <- leftovers xs                                  = [t] -- tanki wait
             | Just x <- kokushiAgari (concatMap tileGroupTiles xs) = either return id x -- kokushi wait
             | [GroupLeftover t] <- filter (not . isPair) xs        = [t] -- chiitoi ("tanki") wait
-            | otherwise                                            = concatMap (either return id) $ waits xs -- koutsu wait
+            | otherwise                                            = L.nub $ concatMap (either return id) $ waits xs -- koutsu wait; XXX: nub'ed because think double koutsu wait: [x, x, x, x] results in [x,x] waits
 
 isShuntsuWait :: TileGroup -> Bool
 isShuntsuWait (GroupWait Shuntsu _ _) = True

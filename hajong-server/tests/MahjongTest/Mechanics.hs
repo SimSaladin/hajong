@@ -338,14 +338,14 @@ riichiTests = testGroup "Riichi tests"
 
   , testCase "(tenpai test) player is not tenpai if waiting only on a tile he already has four of" $ do
       kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ ["M1", "M1", "M1", "M1", "P1", "P2", "P3", "P7", "P8", "P9", "S2", "S3", "S4"]
-                         <&> sWall %~ (["W"] ++)
+                         <&> sWall %~ cons "W"
 
       let res = runKyokuState kyoku $ do
               drawAndTurnAction Ton $ TurnTileDiscard $ Discard "W" Nothing True
 
       case res of
-          Left err -> return ()
-          Right _ -> assertFailure "Game should have errored"
+          Left err -> err @?= "Cannot riichi: not tenpai"
+          Right (_,(m,k)) -> traceShowM (m,k) >> assertFailure "Game should have errored"
   ]
 
 weirdYaku :: TestTree
