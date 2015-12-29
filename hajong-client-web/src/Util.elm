@@ -54,8 +54,7 @@ pickedTile pt = case pt of
    FromWall t         -> fromJust t
    FromWanpai t       -> fromJust t
    AgariTsumo t       -> t
-   AgariCall t _      -> t
-   AgariChankan t _   -> t
+   AgariCall shout    -> shout.shoutTile
    AgariTsumoWanpai t -> t
 
 blockElement : Int -> Int -> Element -> Element

@@ -152,13 +152,12 @@ riichiState = string |> map (\x -> case x of
 
 pickedTile : Decoder PickedTile
 pickedTile = "type" := string `andThen` \t -> case t of
-   "from-wall"     -> object1 FromWall     (maybe ("tile" := tile))
-   "from-wanpai"   -> object1 FromWanpai   (maybe ("tile" := tile))
-   "agari-tsumo"   -> object1 AgariTsumo   ("tile" := tile)
-   "agari-call"    -> object2 AgariCall    ("tile" := tile) ("from-kaze" := kaze)
-   "agari-chankan" -> object2 AgariChankan ("tile" := tile) ("from-kaze" := kaze)
+   "from-wall"          -> object1 FromWall         (maybe ("tile" := tile))
+   "from-wanpai"        -> object1 FromWanpai       (maybe ("tile" := tile))
+   "agari-tsumo"        -> object1 AgariTsumo       ("tile" := tile)
+   "agari-call"         -> object1 AgariCall        ("shout" := shout)
    "agari-tsumo-wanpai" -> object1 AgariTsumoWanpai ("tile" := tile)
-   _               -> Debug.crash <| "Couldn't deserialize tile kind `" ++ t ++ "'"
+   _                    -> Debug.crash <| "Couldn't deserialize tile kind `" ++ t ++ "'"
 
 furitenState : Decoder FuritenState
 furitenState = string |> map (\x -> case x of
