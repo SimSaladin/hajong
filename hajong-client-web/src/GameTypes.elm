@@ -188,6 +188,11 @@ sangenNth k = case k of
    Hatsu -> 1
    Chun  -> 2
 
+isAka : Tile -> Bool
+isAka t = case t of
+   Suited _ _ a -> a
+   _            -> False
+
 sortTiles = List.sortWith tileOrder
 -- }}}
 

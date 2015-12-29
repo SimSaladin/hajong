@@ -36,6 +36,7 @@ x = done, / = half done, ! = needs testing
 [ ] display aka-dora as red
 [ ] Display winning hand
 [ ] Display error prompts when receiving errors in elm
+[ ] sending messages
 [ ] agari-call deserialization has changed (agarichankan removed)
 [ ] Undisplay riichi when clicked
 [ ] Highlight corresponding tiles on shout hovers

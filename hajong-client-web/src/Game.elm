@@ -302,7 +302,10 @@ dispTile : Tile -> Element
 dispTile tile = container (t_w + 4) (t_h + 4) middle
    <| hoverable (\h -> message discardHover.address <| if h then Just tile else Nothing)
    <| size t_w t_h
-   <| tileImage tile
+   <| layers [ tileImage tile, if isAka tile then akaIndicator else empty ]
+
+akaIndicator : Element
+akaIndicator = collage 20 20 [ oval 20 20 |> filled red ]
 
 dispWanpai : Controls -> RoundState -> Element
 dispWanpai co = .dora >> map dispTile >> flow right
