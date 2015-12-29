@@ -228,7 +228,7 @@ type FuritenState = NotFuriten | Furiten | TempFuriten
 type MentsuKind   = Shuntsu | Koutsu | Kantsu | Jantou
 type alias Mentsu =
    { mentsuKind : MentsuKind
-   , tile       : Tile
+   , tiles      : List Tile
    , from       : Maybe Shout }
 -- }}}
 

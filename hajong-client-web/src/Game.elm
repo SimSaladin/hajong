@@ -132,6 +132,7 @@ playerRiichi = toForm <| image 200 20 "/static/img/point1000.svg"
 -- }}}
 
 -- {{{ Info block ----------------------------------------------------
+dispInfoBlock : Controls -> GameState -> RoundState -> Form
 dispInfoBlock co gs rs =
    toForm
    <| color black <| container 234 234 middle
@@ -146,7 +147,7 @@ dispInfoBlock co gs rs =
       ]
       ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 95 rs.mypos k) [Ton, Nan, Shaa, Pei]
 
-dealAndRoundIndicator rs = toForm <| kazeImage rs.round `beside` centered (T.fromString (toString rs.deal))
+dealAndRoundIndicator rs = toForm <| kazeImage (fst rs.round) `beside` centered (T.fromString (toString <| snd rs.round))
 
 kazeImage kaze = fittedImage 28 38 <| case kaze of
    Ton  -> "/static/img/Ton.jpg"
@@ -207,22 +208,22 @@ titleText : String -> Element
 titleText txt = T.fromString txt |> T.height 40 |> centered
 
 dispWinner : Winner -> Element
-dispWinner {player, valuehand} =
-   [ T.concat [ T.fromString (toString player)
+dispWinner {player_kaze, valuehand} =
+   [ T.concat [ T.fromString (toString player_kaze)
               , T.fromString (toString valuehand.value.points) |> T.append (T.fromString "+") |> T.color green
               ] |> centered
    , dispValued valuehand ]
    |> flow down
 
 dispPayer : Payer -> Element
-dispPayer {player, points} = T.concat
-   [ T.fromString (toString player), T.fromString "        "
+dispPayer {player_kaze, points} = T.concat
+   [ T.fromString (toString player_kaze), T.fromString "        "
    , T.fromString (toString points) |> T.append (T.fromString "-") |> T.color red ]
    |> centered
 
 dispTenpai : Payer -> Element
-dispTenpai {player, points} = T.concat
-   [ T.fromString (toString player), T.fromString "        "
+dispTenpai {player_kaze, points} = T.concat
+   [ T.fromString (toString player_kaze), T.fromString "        "
    , T.fromString (toString points) |> T.append (T.fromString "+") |> T.color green ]
    |> centered
 
@@ -348,9 +349,11 @@ nocareButton w str = case w of
 findFourTiles : RoundState -> Maybe Tile
 findFourTiles rs = counted 4 <| sortTiles <| rs.myhand.concealed ++ map pickedTile rs.myhand.picks
 
-findShouminkan h = List.filter (\x -> x.mentsuKind == Koutsu &&
-   (List.any (\t -> t == x.tile) h.concealed || map pickedTile h.picks == [x.tile])) h.called -- TODO This fails when picked more than one tile
-   |> map .tile
+findShouminkan : Hand -> List Tile
+findShouminkan h = List.filter
+   (\mentsu -> mentsu.mentsuKind == Koutsu && List.any (\t -> t `List.member` mentsu.tiles) (h.concealed ++ map pickedTile h.picks))
+   h.called -- TODO This fails when picked more than one tile
+     |> map (fromJust << List.head << .tiles)
 
 -- | The nth unique tile
 counted : Int -> List Tile -> Maybe Tile
@@ -410,7 +413,7 @@ processInGameEvent event gs = case event of
 
    RoundNick {player_kaze, nick} -> setNick player_kaze nick gs
    RoundRiichi {player_kaze} -> setRiichi player_kaze gs
-   RoundGamePoints {player,points} -> setPoints player points gs
+   RoundGamePoints {player_kaze,points} -> setPoints player_kaze points gs
    RoundFlippedDora {tile} -> flipDora tile gs
 
 -- {{{ Field modify boilerplate ----------------------------------------------
@@ -474,8 +477,9 @@ processTurnAction player action gs =
          TurnShouminkan tile -> gs
          TurnTsumo           -> gs
 
+-- | TODO this discards aka-dora info 
 kantsu : Tile -> Mentsu
-kantsu t = Mentsu Kantsu t Nothing
+kantsu t = Mentsu Kantsu [t, t, t, t] Nothing
 
 -- }}}
 -- }}}

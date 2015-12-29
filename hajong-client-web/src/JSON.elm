@@ -177,7 +177,7 @@ drawState = string |> map (\x -> case x of
 -- }}}
 
 -- * {{{ Mentsu ------------------------------------------------------
-mentsu = object3 Mentsu ("kind" := mentsuKind) ("tile" := tile) ("shout" := shoutMaybe)
+mentsu = object3 Mentsu ("kind" := mentsuKind) ("tiles" := list tile) ("shout" := shoutMaybe)
 
 mentsuKind = map readMentsuKind string
 
@@ -211,28 +211,28 @@ readShoutKind s = case s of
 roundState : Decoder RoundState
 roundState = object8 RoundState
     ("mypos"      := kaze)
-    ("round"      := tuple2 kaze int)
+    ("round"      := tuple2 (,) kaze int)
     ("turn"       := kaze)
     ("player"     := int)
     ("oja"        := int)
     ("first-oja"  := int)
     ("tiles-left" := int)
     ("dora"       := list tile)
-    `andThen` (\x -> object8 x
+    `andThen` (\x -> object7 x
        ("hands"      := list playerHand)
        ("players"    := list players)
        ("myhand"     := hand)
        ("results"    := maybe results)
        ("honba"      := int)
        ("in-table"   := int)
-       (succeed []) -- ([] -- TODO : "prev-deals" .: game |> withArray
+       ("prev-deals" := list (tuple2 (,) kaze int))
     )
 
 points : Decoder (Kaze, Int)
 points = tuple2 (,) kaze int
 
 players : Decoder (Kaze, (Player, Int, String))
-players = tuple2 (\k (p, ps, n) -> (k, (p, ps, n))) kaze (tuple3 (,,) player int string)
+players = tuple2 (\k (p, ps, n) -> (k, (p, ps, n))) kaze (tuple3 (,,) int int string)
 -- }}}
 
 -- * {{{ Results -------------------------------------------------------
