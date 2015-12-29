@@ -38,7 +38,7 @@ gameFlowTests = testGroup "Game flow"
             (_, (m,_))                  -> assertFailure $ "Expected 'Ended' but received " <> show m
 
   , testCase "Discarding a tile results in correct state and yields correct GameEvents" $ do
-        kyoku <- testKyoku
+        kyoku <- newKyoku fourPlayers (map tshow [1..4])
         let Just tile = kyoku ^? sHands . ix Ton . handConcealed . _Wrapped . _head
             res = runKyokuState kyoku $ do
                 stepped_ InpAuto
@@ -47,15 +47,14 @@ gameFlowTests = testGroup "Game flow"
         requireRight res $ \(_, (_, k)) -> k ^?! sHands . ix Ton . handDiscards.to length == 1 @? "Discard didn't equal"
 
   , testCase "New kyoku state has correct properties" $ do
-        kyoku <- testKyoku
-        kyoku^.sWall.to length == 136-14-4*13 @? "Wall of 136-14-4*13 tiles"
-        kyoku^.sWanpai.to ((\a b c d -> length a + length b + length c + length d) <$> _wSupplement <*> _wDora <*> _wUraDora <*> _wBlank)
-                == 13 @? "Wanpai of 13 (+1 dora) tiles"
-        kyoku^.sHands ^.. each.handConcealed._Wrapped.to length == [13, 13, 13, 13]  @? "Four hands of 13 tiles"
-        kyoku^.pDora.to length == 1 @? "One dora tile"
-        kyoku^.pRound                            == (Ton, 1) @? "First round was not Ton, 1"
+        kyoku <- newKyoku fourPlayers (map tshow [1..4])
+        kyoku^.sWall.to length                   @?= 136-14-4*13
+        kyoku^.sWanpai.to wanpaiTiles.to length  @?= 13 -- + 1 x dora
+        kyoku^.pDora.to length                   @?= 1
+        kyoku^.pRound                            @?= (Ton, 1)
         length (kyokuTiles kyoku)                @?= 136
-        length (filter isAka $ kyokuTiles kyoku) == 4 @? show kyoku -- TODO: refactor this sum to a @kyokuTiles@ function
+        length (filter isAka $ kyokuTiles kyoku) @?= 4
+        kyoku^.sHands ^.. each.handConcealed._Wrapped.to length @?= [13, 13, 13, 13]
 
   , testCase "Tsumo is an option in the DealPrivateHandChanged event" $ do
         kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5
@@ -166,6 +165,37 @@ gameFlowTests = testGroup "Game flow"
               autoEndTurn
 
       requireRight res $ \_ -> return ()
+
+  , testCase "Ron is not possible if furiten; must fail before shout goes through" $ do
+      kyoku <- testKyoku <&> sHands.ix Nan .handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sHands.ix Nan .handFuriten._Wrapped .~ Furiten
+                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5 -- needed to ensure some other possible shout
+                         <&> sWall %~ cons "P5"
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "P5" Nothing False
+            stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
+            -- must be in waiting state here!
+
+      case res of
+          Left err -> err @?= "You are furiten"
+          _        -> assertFailure "Game should have errored"
+
+  , testCase "Ron is not possible if 0 yaku; must fail before shout goes through" $ do
+      kyoku <- testKyoku <&> sHands.ix Nan .handConcealed . _Wrapped .~ handThatWinsWithP5
+                         <&> sHands.ix Nan .handRiichi .~ NoRiichi
+                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5 -- needed to ensure some other possible shout
+                         <&> sWall %~ cons "P5"
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "P5" Nothing False
+            stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
+            -- must be in waiting state here!
+
+      case res of
+          Left err -> err @?= "Need yaku to win"
+          _        -> assertFailure "Game should have errored"
+
   ]
 
 furitenTests :: TestTree

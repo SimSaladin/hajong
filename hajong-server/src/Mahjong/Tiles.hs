@@ -15,7 +15,7 @@ module Mahjong.Tiles where
 import Prelude (Read(..), lex)
 import Import hiding ((<>))
 ------------------------------------------------------------------------------
-import Text.PrettyPrint.ANSI.Leijen ((<>), displayS, renderCompact)
+import Text.PrettyPrint.ANSI.Leijen ((<>), displayS, renderCompact, dquotes)
 import qualified Data.List as L
 ------------------------------------------------------------------------------
 
@@ -72,6 +72,9 @@ instance IsString Tile where
             | otherwise  -> Suited SouTile (fromString [num]) False
         'M'              -> Suited ManTile (fromString [num]) False
         'P'              -> Suited PinTile (fromString [num]) False
+        's'              -> Suited SouTile (fromString [num]) True
+        'm'              -> Suited ManTile (fromString [num]) True
+        'p'              -> Suited PinTile (fromString [num]) True
         _                -> error "no read"
     fromString _       = error "no read"
 
@@ -90,9 +93,10 @@ instance Pretty Tile where
                          Nan     -> "S "
                          Shaa    -> "W "
                          Pei     -> "N "
-instance Show Tile where showsPrec _ = displayS . renderCompact . pretty
+instance Show Tile where showsPrec _ = displayS . renderCompact . dquotes . pretty
 instance Read Tile where
     readsPrec _ = \s -> case lex s of
+        ('"':xs, s) : []  -> [(fromString (initEx xs), s)]
         ([t],'!':s') : [] -> [(fromString [t,'!'], s')]
         (t,s') : [] -> [(fromString t, s')]
         _ -> []

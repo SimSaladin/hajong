@@ -13,9 +13,9 @@
 ------------------------------------------------------------------------------
 module Prelude ( module Prelude, module X ) where
 
-import ClassyPrelude as X hiding (assert, Index, index, uncons, unsnoc)
+import ClassyPrelude as X hiding (assert, Index, index, uncons, unsnoc, cons)
 import Data.Maybe                         as X (fromJust)
-import           Control.Lens             as X hiding (elements, snoc, cons, (<.>))
+import           Control.Lens             as X hiding (elements, snoc, (<.>))
 import           Test.Tasty               as X
 import           Test.Tasty.HUnit         as X
 import           Test.Tasty.QuickCheck    as X
