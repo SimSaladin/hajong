@@ -262,7 +262,8 @@ processAnkan :: InKyoku m => Kaze -> Tile -> m Machine
 processAnkan pk t = do
     handOf' pk >>= ankanOn t >>= updateHand pk
     otherHands <- use sHands <&> filter ((/=pk).fst) . Map.toList
-    let kokushiWins = filter ((== Just (-1)) . shantenBy kokushiShanten . (handConcealed._Wrapped %~ cons t) . snd) otherHands
+    let kokushiWins = filter ((== NotFuriten) . runIdentity . _handFuriten . snd) $
+                      filter ((== Just (-1)) . shantenBy kokushiShanten . (handConcealed._Wrapped %~ cons t) . snd) otherHands
     if null kokushiWins -- chankan on ankan only when kokushi could win from it
         then return $ WaitingDraw pk True
         else return $ WaitingShouts (setFromList $ map fst kokushiWins) Nothing (each._2 .~ Shout Chankan pk t [] $ kokushiWins) True
@@ -639,7 +640,7 @@ filterCouldShout :: Tile            -- ^ Tile to shout
                  -> Map Kaze HandA  -- ^ All hands
                  -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority as head)
 filterCouldShout dt np = sortBy (shoutPrecedence np)
-    . concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt)
+    . concatMap flatten . Map.toList . Map.mapWithKey (shoutsOn np dt) . Map.filter ((== NotFuriten) . runIdentity . _handFuriten)
   where flatten (k, xs) = map (k,) xs
 
 getShouts :: InKyoku m => Tile -> m [(Kaze, Shout)]

@@ -165,6 +165,42 @@ gameFlowTests = testGroup "Game flow"
               autoEndTurn
 
       requireRight res $ \_ -> return ()
+  ]
+
+furitenTests :: TestTree
+furitenTests = testGroup "Furiten tests"
+  [ testCase "Temporary furiten is effective until next own draw" $ do
+      undefined
+
+  , testCase "Chiitoi furiten" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "M3"]
+                         <&> sHands . ix Nan . handDiscards .~ [Discard "M3" Nothing False]
+                         <&> sHands . ix Nan %~ updateFuriten
+                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ ["M3", "M3"] -- needed to ensure some other possible shout
+                         <&> sWall %~ ("M3" <|)
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "M3" Nothing False
+            stepped_ $ InpShout Nan $ Shout Ron Ton "M3" ["M3"]
+
+      case res of
+          Left err -> err @?= "No such call is possible"
+          Right x  -> assertFailure "Should have errored"
+
+  , testCase "Kokushi furiten" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"]
+                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ ["G", "G"] -- needed to ensure some other possible shout
+                         <&> sHands . ix Nan . handDiscards .~ [Discard "G" Nothing False]
+                         <&> sHands . ix Nan %~ updateFuriten
+                         <&> sWall %~ cons "G"
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "G" Nothing False
+            stepped_ $ InpShout Nan $ Shout Ron Ton "G" []
+
+      case res of
+          Left err -> err @?= "No such call is possible"
+          Right x  -> assertFailure "Should have errored"
 
   , testCase "Ron is not possible if furiten; must fail before shout goes through" $ do
       kyoku <- testKyoku <&> sHands.ix Nan .handConcealed._Wrapped .~ handThatWinsWithP5
@@ -175,10 +211,9 @@ gameFlowTests = testGroup "Game flow"
       let res = runKyokuState kyoku $ do
             autoAndDiscard Ton $ Discard "P5" Nothing False
             stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
-            -- must be in waiting state here!
 
       case res of
-          Left err -> err @?= "You are furiten"
+          Left err -> err @?= "No such call is possible"
           _        -> assertFailure "Game should have errored"
 
   , testCase "Ron is not possible if 0 yaku; must fail before shout goes through" $ do
@@ -190,61 +225,11 @@ gameFlowTests = testGroup "Game flow"
       let res = runKyokuState kyoku $ do
             autoAndDiscard Ton $ Discard "P5" Nothing False
             stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
-            -- must be in waiting state here!
 
       case res of
           Left err -> err @?= "Need yaku to win"
           _        -> assertFailure "Game should have errored"
 
-  ]
-
-furitenTests :: TestTree
-furitenTests = testGroup "Furiten tests"
-  [ testCase "Trying to Ron in furiten results in kyoku level error" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed . _Wrapped .~ handThatWinsWithP5
-                         <&> sHands . ix Nan . handDiscards .~ [Mahjong.Discard "P5" Nothing False]
-                         <&> sHands . ix Nan . handFuriten._Wrapped .~ Furiten
-                         <&> sWall %~ ("P5" <|)
-      let res = runKyokuState kyoku $ do
-              autoAndDiscard Ton $ Discard "P5" Nothing False
-              stepped $ InpShout Nan $ Shout Ron Ton "P5" ["P5"] -- should error
-              autoEndTurn
-      case res of
-          Left err -> err @?= "You are furiten"
-          x -> assertFailure $ show x
-
-  , testCase "Temporary furiten is effective until next own draw" $ do
-      undefined
-
-  , testCase "Chiitoi furiten" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "M3"]
-                         <&> sHands . ix Nan . handDiscards .~ [Discard "M3" Nothing False]
-                         <&> sHands . ix Nan %~ updateFuriten
-                         <&> sWall %~ ("M3" <|)
-
-      let res = runKyokuState kyoku $ do
-            autoAndDiscard Ton $ Discard "M3" Nothing False
-            stepped_ $ InpShout Nan $ Shout Ron Ton "M3" ["M3"]
-            autoEndTurn
-
-      case res of
-          Left err -> err @?= "You are furiten"
-          Right x  -> assertFailure "Should have errored"
-
-  , testCase "Kokushi furiten" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"]
-                         <&> sHands . ix Nan . handDiscards .~ [Discard "G" Nothing False]
-                         <&> sHands . ix Nan %~ updateFuriten
-                         <&> sWall %~ ("G" <|)
-
-      let res = runKyokuState kyoku $ do
-            autoAndDiscard Ton $ Discard "G" Nothing False
-            stepped_ $ InpShout Nan $ Shout Ron Ton "G" []
-            autoEndTurn
-
-      case res of
-          Left err -> err @?= "You are furiten"
-          Right x  -> assertFailure "Should have errored"
   ]
 
 riichiTests :: TestTree
