@@ -87,6 +87,20 @@ label {
 }
 
 #game {
-  background:rgb(230,240,230);
   padding:0.5em;
+  border:1px solid gray;
 }
+#msg-dialog {
+}
+#msg-messages {
+  height:170px;
+  border:1px solid gray;
+  overflow-y:auto;
+}
+#msg-dialog-nick {
+  font-style:bold;
+  color:blue;
+  padding:3px;
+}
+.msg { padding:0 5px; line-height:1.2em; }
+.msg-debug { color:gray; }

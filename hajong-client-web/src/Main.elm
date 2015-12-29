@@ -1,6 +1,7 @@
 module Main where
 
 import Lounge
+import MsgDialog
 import Game
 import Events
 import Util exposing (..)
@@ -17,36 +18,6 @@ import Graphics.Element exposing (..)
 import Color exposing (..)
 import Signal exposing (..)
 import Debug
-
--- {{{ Log view ---------------------------------------------------
-logView : GameState -> Element
-logView game = above (spacer 5 5) <| blockElement 500 200
-      <| above (renderTitle "Log")
-      <| flow down
-      <| List.map (eventView >> leftAligned)
-      <| List.take 6
-      <| List.filter isNotInGame game.eventlog
-
-isNotInGame x = case x of
-   InGameEvents _ -> False
-   _              -> True
-
-eventView : Event -> Text.Text
-eventView ev = case ev of
-    Identity {nick}        -> "I am `" ++ nick ++ "'"    |> Text.fromString |> Text.color blue
-    JoinServer {nick}      -> nick ++ " joined server."  |> Text.fromString |> Text.color green
-    PartServer {nick}      -> nick ++ " has left."       |> Text.fromString |> Text.color red
-    Message {from,content} -> Text.fromString "<" ++ (Text.fromString from |> Text.bold) ++ Text.fromString "> " ++ Text.fromString content
-    Invalid {content}      -> content                    |> Text.fromString |> Text.color white
-    LoungeInfo {lounge}    -> Text.fromString "Lounge updated - connection established!" |> Text.color blue
-    GameCreated {game}     -> Text.join (Text.fromString " ")
-       [ Text.fromString "Game"
-       , Text.fromString game.topic
-       , Text.fromString <| toString game.ident
-       , Text.join (Text.fromString " ") <| List.map Text.fromString <| Set.toList game.players]
-    InGameEvents _         -> "in-game" |> Text.fromString
-    _                      -> toString ev |> Text.fromString |> Text.color orange
--- }}}
 
 -- {{{ Server IO ----------------------------------------------
 port downstream : Signal String
@@ -77,8 +48,7 @@ newState = { status     = InLounge
            , turnBegan  = 0
            , riichiWith = []
 
-           , eventlog   = []
-           , debuglog   = []
+           , logging    = []
            }
 -- }}}
 
@@ -126,7 +96,8 @@ gameState = foldp stepGame newState input
 
 stepGame : Input -> GameState -> GameState
 stepGame x gs = case x of
-   AnEvent event -> stepEvent event <| { gs | eventlog = event :: gs.eventlog }
+   AnEvent event -> stepEvent event <| { gs | logging =
+      maybe gs.logging (\x -> x :: gs.logging) <| MsgDialog.eventToDebugMsg event }
    TimeDelta time -> { gs | updated = time
                      , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
                      }
@@ -171,7 +142,7 @@ deleteNick n l =
 display : GameState -> Element -> Element
 display game view = flow down
    [ view
-   , logView game
+   , MsgDialog.dialog (500, 200) game
    ]
 
 mainView = mergeMany

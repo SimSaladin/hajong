@@ -18,7 +18,7 @@ lookupGameInfo : GameState -> Int -> Maybe GameInfo
 lookupGameInfo game ident = List.head <| List.filter (\g -> g.ident == ident) game.lounge.games
 
 log : String -> GameState -> GameState
-log str gs = { gs | debuglog = str :: gs.debuglog }
+log str gs = { gs | logging = LogDebug {msg = str } :: gs.logging }
 
 groupInto n xs = case xs of
    [] -> []

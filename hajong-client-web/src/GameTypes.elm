@@ -23,13 +23,17 @@ type alias GameState =
    , riichiWith     : List Tile
 
    -- Debug
-   , eventlog   : List Event
-   , debuglog   : List String
+   , logging    : List LogItem
    }
 
 type Status = InLounge | InGame
 
 type alias WaitRecord = { seconds : Int, added : Time }
+
+type LogItem = LogMsg { player_nick : String, msg : String }
+             | LogDebug { msg : String }
+             | LogError { msg : String }
+
 -- }}}
 
 -- {{{ RoundState ------------------------------------------------------------

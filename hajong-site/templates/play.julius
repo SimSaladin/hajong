@@ -112,6 +112,12 @@ joinToGame = #{maybe Null (Number . fromIntegral) mgid};
 ident      = Number(localStorage.getItem("ident")); // Number(null) =  = 0 // player identity server-side
 token      = localStorage.getItem("token");
 
+// A hack to scroll the message dialog into view
+window.setInterval(function(){
+  e = document.getElementById("msg-messages");
+  if (e) e.scrollTop = e.scrollHeight;
+}, 1000);
+
 $(function(){
   if (token) { // join with cached creds
     startGame({ "type": "join", "nick" : nick, "ident": ident, "token": token
