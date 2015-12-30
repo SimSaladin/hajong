@@ -19,6 +19,9 @@ decodeEvent str = case decodeString event str of
    Ok ev   -> ev
    Err err -> Invalid { content = err }
 
+decodeRoundState : String -> Result String RoundState
+decodeRoundState str = decodeString roundState str
+
 event : Decoder Event
 event = ("type" := string) `andThen` eventOfType
 

@@ -10,6 +10,6 @@ set -e
 
 cd $(dirname $0)
 mkdir -p dist/images
-elm-make src/Main.elm --output dist/elm.js
+elm-make src/ViewingGame.elm src/Main.elm --output dist/elm.js
 cp images/* dist/images
 

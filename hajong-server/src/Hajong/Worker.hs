@@ -31,6 +31,8 @@ import           Mahjong
 ------------------------------------------------------------------------------
 import           Control.Concurrent
 import           Control.Monad.Logger
+import           Control.Monad.Trans.Control        (MonadBaseControl(..))
+import           Control.Monad.Base                 (MonadBase)
 import           Control.Concurrent.Async
 import           Data.Maybe (fromJust)
 import           System.Log.FastLogger
@@ -59,7 +61,13 @@ data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
                  | WorkerReplaceKyoku Machine (Maybe Kyoku) -- ^ For debugging only.
 
 newtype Worker a = Worker { runWorker :: LoggingT (ReaderT WorkerData IO) a }
-                   deriving ( Functor, Applicative, Monad, MonadIO, MonadLogger, MonadReader WorkerData)
+                   deriving ( Functor, Applicative, Monad, MonadIO, MonadLogger, MonadReader WorkerData, MonadBase IO)
+
+instance MonadBaseControl IO Worker where
+    type StM Worker a = a
+    liftBaseWith f    = Worker $ liftBaseWith $ \q -> f (q . runWorker)
+    restoreM          = Worker . restoreM
+
 
 -- | When a worker exits gracefully it spits out @FinalPoints@.
 type WCont = Worker FinalPoints
@@ -100,7 +108,7 @@ unsafeRoundM = roundM >=> either failed go
 -- | Send to everyone in game.
 multicast :: Event -> Worker ()
 multicast ev = do gs <- rview wGame
-                  mapM_ (`unicast` ev) (gs^.gamePlayers^..each)
+                  mapM_ (`safeUnicast` ev) (gs^.gamePlayers^..each)
 
 -- | Hide sensitive info per player
 sendGameEvents :: [GameEvent] -> Worker ()
@@ -116,7 +124,7 @@ sendGameEvents events = do
     f _ _                                    = return True
 
     sendPrivate gs p e = do
-        maybe (return ()) (`unicast` InGamePrivateEvent e) (playerToClient gs p)
+        maybe (return ()) (`safeUnicast` InGamePrivateEvent e) (playerToClient gs p)
         return False
 
 -- * Input layer

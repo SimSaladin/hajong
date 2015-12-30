@@ -180,3 +180,13 @@ goGame ev = do
     liftIO $ with appGameLock $ do
         putMVar gameIn ev
         takeMVar gameOut
+
+-- | Used to higlight navigation links
+isNavOf :: Text -> Maybe (Route App) -> Bool
+isNavOf "game" (Just LobbyR) = True
+isNavOf "game" (Just (PlayR _))  = True
+isNavOf "support" (Just SupportR) = True
+isNavOf "support" (Just (SupportWithUuidR _)) = True
+isNavOf "history" (Just GamesR) = True
+isNavOf "history" (Just (ViewR _ _ _ _)) = True
+isNavOf _ _ = False

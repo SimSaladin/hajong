@@ -37,7 +37,8 @@ postSupportWithUuidR = supportWithUuidR . Just
 
 ticketForm :: Maybe Text -> Form Ticket
 ticketForm maybeUuid = renderBootstrap3 BootstrapBasicForm $ Ticket
-    <$> areq emailField "Your email address" Nothing
+    <$> lift (liftIO getCurrentTime)
+    <*> areq emailField "Your email address" Nothing
     <*> fmap unTextarea (areq textareaField "Description" { fsAttrs = [("rows", "17")] } $ Just $ ticketTemplate maybeUuid)
 
 ticketTemplate :: Maybe Text -> Textarea

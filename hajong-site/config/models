@@ -15,9 +15,11 @@ PastGame
    created UTCTime
    started UTCTime
    finished UTCTime
+   data Text -- serialized json
    UniquePastGame uuid
 
 Ticket
+   created UTCTime
    email Text
    content Text
 

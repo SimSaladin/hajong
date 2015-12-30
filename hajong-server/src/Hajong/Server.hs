@@ -1,5 +1,4 @@
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-} -- SafeCopy
 {-# LANGUAGE MultiWayIf #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -25,6 +24,8 @@ import           Mahjong
 ------------------------------------------------------------------------------
 import           Prelude (read)
 import           Control.Monad.Logger
+import           Control.Monad.Trans.Control        (MonadBaseControl(..))
+import           Control.Monad.Base                 (MonadBase)
 import           Control.Concurrent
 import           Data.Acid
 import           Data.Acid.Remote
@@ -96,7 +97,12 @@ instance Exception PartedException
 
 -- | Server logic monad.
 newtype Server a = Server { unServer :: ReaderT ServerSt IO a }
-    deriving ( Functor, Applicative, Monad, MonadIO, MonadReader ServerSt )
+    deriving ( Functor, Applicative, Monad, MonadIO, MonadReader ServerSt, MonadBase IO )
+
+instance MonadBaseControl IO Server where
+    type StM Server a = a
+    liftBaseWith f    = Server $ liftBaseWith $ \q -> f (q . unServer)
+    restoreM          = Server . restoreM
 
 -- * Lenses
 
@@ -473,14 +479,14 @@ multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
 -- | Send updated lounge to everyone there
 updateLounge :: Server ()
 updateLounge = do
-    nicksInLounge <- rview seLounge <&> mapMonotonic getNick
-    games         <- query' GetGames
-    nicks         <- rview seWorkers <&> map (\x -> setFromList $ x^..gClients.folded.to getNick)
+    lounge <- rview seLounge
+    games  <- query' GetGames
+    nicks  <- rview seWorkers <&> map (\x -> setFromList $ x^..gClients.folded.to getNick)
 
-    let gameInfos = intersectionWithMap (\g ns -> (g^.gameSettings, ns, g^.gameUUID.to UUID.toText)) games nicks
-        lounge    = Lounge nicksInLounge gameInfos
+    let gameInfos  = intersectionWithMap (\g ns -> (g^.gameSettings, ns, g^.gameUUID.to UUID.toText)) games nicks
+        loungeInfo = LoungeInfo $ Lounge (mapMonotonic getNick lounge) gameInfos
 
-    forM_ il (`unicast` LoungeInfo lounge)
+    forM_ lounge (`unicast` loungeInfo)
 
 withInGame :: (Int -> Server ()) -> Server ()
 withInGame f = do

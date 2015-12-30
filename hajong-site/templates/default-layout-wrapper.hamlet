@@ -27,17 +27,16 @@ $newline never
           <header class="wrapper clearfix">
             <a href=@{HomeR}>
               <h1 class="title">Funjong
-                $if route /= Just HomeR
-                  \ - #{pageTitle pc}
             <nav>
               <ul>
                 <li>
-                  <a href=@{HomeR} :route == Just HomeR:.active>Home
+                  <a href=@{LobbyR} :isNavOf "game" route:.active>Play
                 <li>
-                  <a href=@{LobbyR} :route == Just LobbyR:.active>Play
-                <!-- <li>
-                  <a href=@{GamesR} :route == Just GamesR:.active>Games
-                  -->
+                  <a href=@{GamesR} :isNavOf "history" route:.active>Stats
+                <li>
+                  <a href>My Profile
+                <li>
+                  <a href=@{SupportR} :isNavOf "support" route:.active>Support
 
         <div class="main-container">
           <div id="main" role="main" class="main wrapper clearfix">
@@ -52,7 +51,13 @@ $newline never
             <p>Having problems? Found a bug? Have a feature request? #
                <a href=@{SupportR}>File a support ticket here
                . I'll look into it as soon as I can!
+            <p>Lookup server status on #
+              <a href=@{StatusR}>this page
+              .
             <p>&copy; #{extraCopyright $ appExtra $ settings master}
+            $if development
+              <p>
+                <i>Note: this instance of hajong is a development version.
 
         $maybe analytics <- extraAnalytics $ appExtra $ settings master
             <script>

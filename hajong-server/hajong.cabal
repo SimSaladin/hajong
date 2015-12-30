@@ -77,6 +77,8 @@ library
                      , text-binary
                      , time
                      , uuid                          >= 1.3.5      && < 2.0
+                     , monad-control
+                     , transformers-base
 
   default-extensions:  TemplateHaskell
                      , OverloadedStrings
@@ -90,6 +92,8 @@ library
                      , DeriveDataTypeable
                      , NoImplicitPrelude
                      , RecordWildCards
+                     , MultiParamTypeClasses
+                     , TypeFamilies
   default-language:    Haskell2010
   ghc-options:         -threaded -Wall
 

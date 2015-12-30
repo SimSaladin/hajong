@@ -10,9 +10,10 @@
 /game/#Int  GameR    GET POST
 /play       LobbyR   GET
 /play/#Int  PlayR    GET
-/token      AuthTokenR GET
-
+/view/#Text/#Text/#Int/#Int ViewR GET
 /support    SupportR GET POST
 /support/#Text SupportWithUuidR GET POST
-
 /status StatusR GET
+
+/token      AuthTokenR GET
+
