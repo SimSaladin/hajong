@@ -28,20 +28,21 @@ x = done, / = half done, ! = needs testing
 [x] add test: aka-dora are calculated from a called mentsu
 [x] add test: kokushi furiten
 [x] add test: chiitoi furiten
+[ ] shouting a aka-dora results in all tiles of the mentsu be aka-dora
 [ ] clear TODO's from code
-[ ] fix tests
 # client
-[ ] interface for viewing different kyoku states
-[x] Display concealed hands of other players
-[x] display aka-dora as red
+[ ] deal identifiers
 [ ] Display winning hand
-[ ] Display error prompts when receiving errors in elm
 [ ] sending messages
-[ ] agari-call deserialization has changed (agarichankan removed)
 [ ] Undisplay riichi when clicked
 [ ] Highlight corresponding tiles on shout hovers
 [ ] when a call is passed, update callable info to client. client should not show it
+[ ] interface for viewing different kyoku states
+[x] agari-call deserialization has changed (agarichankan removed)
+[x] Display concealed hands of other players
+[x] display aka-dora as red
 # site
+[ ] report bug button: game UUID
 [ ] Rework lobby
 [ ] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
       [ ] test facebook authentication
@@ -78,6 +79,7 @@ x = done, / = half done, ! = needs testing
 [ ] ryanhan-shibari
 [ ] (worker/game) available shouts when refreshing game
 [ ] sanchahou: disallow triple ron
+[ ] client: automatic discard/action rules
 
 # done
 [x] (game, elm) riichi

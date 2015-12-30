@@ -3,6 +3,7 @@ module Game where
 import Util exposing (..)
 import GameTypes exposing (..)
 
+import List
 import List exposing (map)
 import Array
 import Signal
@@ -22,20 +23,35 @@ called_off   = 600
 riichi_off   = 130
 
 -- {{{ Controls ------------------------------------------------------
-type alias Controls =
-   { hoveredTile : Maybe Tile }
+
+-- | UI-only data
+type alias Controls = { hoveredTileNth : Int }
 
 controls : Signal Controls
-controls = Signal.map Controls <| dropRepeats discardHover.signal
+controls = Signal.map Controls (dropRepeats tileHoverStatus.signal)
+
+tileHoverStatus = mailbox (-1) -- | Tiles are numbered from 1 onwards.
+
+-- }}}
+
+-- {{{ Upstream events ----------------------------------------------------
+events : Signal Event
+events = mergeMany
+   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard) `Signal.map` discard.signal
+   , maybe Noop (InGameAction << GameTurn << TurnTileDiscard) `Signal.map` riichi.signal
+   , maybe Noop (InGameAction << GameShout)                   `Signal.map` shout.signal
+   , maybe Noop (InGameAction << GameTurn << TurnAnkan)       `Signal.map` ankan.signal
+   , maybe Noop (InGameAction << GameTurn << TurnShouminkan)  `Signal.map` shouminkan.signal
+   , maybe Noop (\_ -> InGameAction <| GameTurn TurnTsumo)    `Signal.map` tsumo.signal
+   , (\x -> if x then InGameAction GameDontCare else Noop)    `Signal.map` nocare.signal
+   ]
 
 -- Maybe a tile to discard from my hand
 discard : Mailbox (Maybe Discard)
 discard = mailbox Nothing
+
 riichi = mailbox Nothing
 tsumo  = mailbox Nothing
-
-discardHover : Mailbox (Maybe Tile)
-discardHover = mailbox Nothing
 
 shout : Mailbox (Maybe Shout)
 shout = mailbox Nothing
@@ -53,23 +69,7 @@ shoutChooseTile : Mailbox (Maybe Tile)
 shoutChooseTile = mailbox Nothing
 -- }}}
 
--- {{{ Upstream events ----------------------------------------------------
-events : Signal Event
-events = mergeMany
-   [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard) `Signal.map` discard.signal
-   , maybe Noop (InGameAction << GameTurn << TurnTileDiscard) `Signal.map` riichi.signal
-   , maybe Noop (InGameAction << GameShout)                   `Signal.map` shout.signal
-   , maybe Noop (InGameAction << GameTurn << TurnAnkan)       `Signal.map` ankan.signal
-   , maybe Noop (InGameAction << GameTurn << TurnShouminkan)  `Signal.map` shouminkan.signal
-   , maybe Noop (\_ -> InGameAction <| GameTurn TurnTsumo)    `Signal.map` tsumo.signal
-   , (\x -> if x then InGameAction GameDontCare else Noop)    `Signal.map` nocare.signal
-   ]
-
-getShout : Maybe ShoutKind -> Maybe Shout
-getShout = maybe Nothing (\k -> Just <| Shout k Ton (Suited ManTile 1 False) [])
--- }}}
-
--- {{{ Display -------------------------------------------------------
+-- {{{ Display: main -------------------------------------------------
 display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
    Just rs -> flow down
@@ -95,7 +95,7 @@ display co gs = case gs.roundState of
    Nothing -> show "Hmm, roundState is Nothing but I should be in a game"
 -- }}}
 
--- {{{ Per-player ---------------------------------------------------
+-- {{{ Display: per-player -------------------------------------------
 dispDiscards : Controls -> GameState -> RoundState -> Form
 dispDiscards co gs rs = group <| map
    (\k -> Util.listFind k rs.hands
@@ -132,7 +132,7 @@ playerRiichi = toForm <| image 200 20 "/static/img/point1000.svg"
 
 -- }}}
 
--- {{{ Info block ----------------------------------------------------
+-- {{{ Display: info block in the center -----------------------------
 dispInfoBlock : Controls -> GameState -> RoundState -> Form
 dispInfoBlock co gs rs =
    toForm
@@ -149,12 +149,6 @@ dispInfoBlock co gs rs =
       ++ map (\k -> dispPlayerInfo rs k |> moveRotateKaze 95 rs.mypos k) [Ton, Nan, Shaa, Pei]
 
 dealAndRoundIndicator rs = toForm <| kazeImage (rs.round.kaze) `beside` centered (T.fromString (toString <| rs.round.round_rot))
-
-kazeImage kaze = fittedImage 28 38 <| case kaze of
-   Ton  -> "/static/img/Ton.jpg"
-   Nan  -> "/static/img/Nan.jpg"
-   Shaa -> "/static/img/Shaa.jpg"
-   Pei  -> "/static/img/Pei.jpg"
 
 turnIndicator : GameState -> Form
 turnIndicator gs =
@@ -182,7 +176,18 @@ dispPlayerInfo rs k =
       toForm <| kazeImage k `beside` spacer 5 5 `beside` (centered playerName `above` show points)
 -- }}}
 
--- {{{ Results
+-- {{{ Display: Utility ----------------------------------------------
+kazeImage kaze = fittedImage 28 38 <| case kaze of
+   Ton  -> "/static/img/Ton.jpg"
+   Nan  -> "/static/img/Nan.jpg"
+   Shaa -> "/static/img/Shaa.jpg"
+   Pei  -> "/static/img/Pei.jpg"
+
+titleText : String -> Element
+titleText txt = T.fromString txt |> T.height 40 |> centered
+-- }}}
+
+-- {{{ Display: Results ----------------------------------------------
 dispResults : RoundResult -> Form
 dispResults res =
    let (col, view) = case res of
@@ -205,13 +210,10 @@ dispResults res =
          <| container 700 300 middle
          <| flow down view
 
-titleText : String -> Element
-titleText txt = T.fromString txt |> T.height 40 |> centered
-
 dispWinner : Winner -> Element
-dispWinner {player_kaze, valuehand} =
+dispWinner {player_kaze, points, valuehand} =
    [ T.concat [ T.fromString (toString player_kaze)
-              , T.fromString (toString valuehand.value.points) |> T.append (T.fromString "+") |> T.color green
+              , T.fromString (toString points) |> T.append (T.fromString "+") |> T.color green
               ] |> centered
    , dispValued valuehand ]
    |> flow down
@@ -250,14 +252,25 @@ dispYaku {han, name} = T.concat
    |> centered
 -- }}}
 
--- {{{ Hands --------------------------------------------------------------
-dispHand k co hand = flow right
-   [ flow right <| map (dispTileClickable co) <| sortTiles hand.concealed
-   , spacer 10 10
-   , flow right <| map (pickedTile >> dispTileClickable co >> color lightGreen) hand.picks
-   , spacer 10 10
-   , flow right <| map (dispMentsu k) hand.called
-   ]
+-- {{{ Display: My hand ---------------------------------------------------
+
+dispHand : Kaze -> Controls -> Hand -> Element
+dispHand k co hand = flow right <|
+   List.map2 (dispTileInHand co) [1..14] (sortTiles hand.concealed)
+   ++ [ spacer 10 10 ]
+   ++ map (pickedTile >> dispTileInHand co (List.length hand.concealed + 1) >> color lightGreen) hand.picks
+   ++ [ spacer 10 10 ]
+   ++ map (dispMentsu k) hand.called
+
+dispTileInHand : Controls -> Int -> Tile -> Element
+dispTileInHand co n tile = dispTile tile
+   |> clickable (message discard.address (Just <| Discard tile Nothing False))
+   |> hoverable (\f -> message tileHoverStatus.address <| if f then n else -1 )
+   |> if co.hoveredTileNth == n then color red else identity
+
+-- }}}
+
+-- {{{ Display: Hand: Discards
 
 dispHandDiscards co h = h.discards
    |> List.filter (.to >> isNothing)
@@ -271,19 +284,22 @@ dispDiscard d = if d.riichi
    then collage (t_h+4) (t_w+4) [ rotate (degrees 90) <| toForm <| dispTile d.tile ]
    else dispTile d.tile
 
-dispPublicMentsu : Controls -> Kaze -> HandPublic -> Element
-dispPublicMentsu co k h = flow right <| map (dispMentsu k) h.called
+-- }}}
 
+-- {{{ Display: Hand: Others
+
+-- | Tiles hidden in other's hands. XXX: Doesn't show the picked tile.
 dispHiddenTiles : HandPublic -> Element
 dispHiddenTiles h =
    let num = 13 - 2 * List.length h.called
        in flow right <| List.repeat num tileHidden
 
-tileHidden : Element
-tileHidden = container 54 34 middle <| collage 54 34 [ rect 50 30 |> outlined defaultLine ]
-
 dispOthersHand : Controls -> Kaze -> HandPublic -> Element
 dispOthersHand co k h = dispHiddenTiles h `beside` dispPublicMentsu co k h
+
+-- }}}
+
+-- {{{ Display: Mentsu ----------------------------------------------------------------
 
 -- | The first argument tells who we are. We need to know in order to rotate the
 -- correct tile in a shouted mentsu.
@@ -291,6 +307,12 @@ dispMentsu : Kaze -> Mentsu -> Element
 dispMentsu k m = case m.from of
    Nothing -> dispMentsuConcealed m
    Just s  -> dispShout k m s
+
+dispMentsuConcealed : Mentsu -> Element
+dispMentsuConcealed m = flow right <| map dispTile <| m.tiles
+
+dispPublicMentsu : Controls -> Kaze -> HandPublic -> Element
+dispPublicMentsu co k h = flow right <| map (dispMentsu k) h.called
 
 dispShout : Kaze -> Mentsu -> Shout -> Element
 dispShout k m s =
@@ -306,14 +328,13 @@ dispShout k m s =
       2 -> List.take 1 myTiles ++ [shoutPos] ++ List.drop 1 myTiles
       _ -> shoutPos :: myTiles
 
-dispMentsuConcealed : Mentsu -> Element
-dispMentsuConcealed m = Debug.crash "TODO implement concealed mentsu display"
 -- }}}
 
--- {{{ Tiles -----------------------------------------------------------------------
+-- {{{ Display: Tiles --------------------------------------------------------------
+
 dispTile : Tile -> Element
 dispTile tile = container (t_w + 4) (t_h + 4) middle
-   <| hoverable (\h -> message discardHover.address <| if h then Just tile else Nothing)
+   -- <| hoverable (\h -> message discardHover.address <| if h then Just tile else Nothing)
    <| size t_w t_h
    <| layers [ tileImage tile, if isAka tile then akaIndicator else empty ]
 
@@ -322,9 +343,6 @@ akaIndicator = collage 20 20 [ oval 20 20 |> filled red ]
 
 dispWanpai : Controls -> RoundState -> Element
 dispWanpai co = .dora >> map dispTile >> flow right
-
-dispTileClickable : Controls -> Tile -> Element
-dispTileClickable co tile = dispTile tile |> clickable (message discard.address (Just <| Discard tile Nothing False))
 
 tileImage tile =
    let (row, col) = case tile of
@@ -335,10 +353,13 @@ tileImage tile =
                Honor (Sangenpai s) -> (707 + (sangenNth s) * 97, 356)
    in
       croppedImage (row, col) 62 82 "/static/img/Mahjong-tiles.jpg"
+
+tileHidden : Element
+tileHidden = container 54 34 middle <| collage 54 34 [ rect 50 30 |> outlined defaultLine ]
+
 -- }}}
 
--- {{{ Buttons 'n stuff --------------------------------------------------------
-
+-- {{{ Buttons -----------------------------------------------------------------
 shoutButton : Shout -> Element
 shoutButton s =
    clickable (message shout.address (Just s)) <| collage 80 40
@@ -362,6 +383,12 @@ nocareButton w str = case w of
    Just (w, _ :: _) -> clickable (message nocare.address True) <| buttonElem' str green
    _                -> empty
 
+buttonElem' str col = collage 80 40
+   [ oval 80 40 |> filled col
+   , T.fromString str |> centered |> toForm ]
+-- }}}
+
+-- {{{ Utility -----------------------------------------------------------------
 findFourTiles : RoundState -> Maybe Tile
 findFourTiles rs = counted 4 <| sortTiles <| rs.myhand.concealed ++ map pickedTile rs.myhand.picks
 
@@ -383,12 +410,15 @@ counted m ts =
       _       -> Nothing
    in go m ts
 
-buttonElem' str col = collage 80 40
-   [ oval 80 40 |> filled col
-   , T.fromString str |> centered |> toForm ]
+-- | TODO this discards aka-dora info 
+kantsu : Tile -> Mentsu
+kantsu t = Mentsu Kantsu [t, t, t, t] Nothing
+
+getShout : Maybe ShoutKind -> Maybe Shout
+getShout = maybe Nothing (\k -> Just <| Shout k Ton (Suited ManTile 1 False) [])
 -- }}}
 
--- {{{ Process GameEvents
+-- {{{ Modify state: GameEvents --------------------------------------
 processInGameEvent : GameEvent -> GameState -> GameState
 processInGameEvent event gs = case event of
    RoundPrivateStarts rs ->
@@ -431,8 +461,9 @@ processInGameEvent event gs = case event of
    RoundRiichi {player_kaze} -> setRiichi player_kaze gs
    RoundGamePoints {player_kaze,points} -> setPoints player_kaze points gs
    RoundFlippedDora {tile} -> flipDora tile gs
+-- }}}
 
--- {{{ Field modify boilerplate ----------------------------------------------
+-- {{{ Modify state: field modify boilerplate ---------------------------
 setMyHand hand gs = case gs.roundState of
    Just rs -> { gs | roundState = Just { rs | myhand = hand } }
    Nothing -> gs
@@ -469,7 +500,7 @@ setPoints p n gs = case gs.roundState of
 updateHand player hand = Util.listModify player (\_ -> hand)
 -- }}}
 
--- {{{ Turns ------------------------------------------------------------------
+-- {{{ Modify state: TurnActions ----------------------------------------------
 processTurnAction : Kaze -> TurnAction -> GameState -> GameState
 processTurnAction player action gs =
    case gs.roundState of
@@ -493,9 +524,4 @@ processTurnAction player action gs =
          TurnShouminkan tile -> gs
          TurnTsumo           -> gs
 
--- | TODO this discards aka-dora info 
-kantsu : Tile -> Mentsu
-kantsu t = Mentsu Kantsu [t, t, t, t] Nothing
-
--- }}}
 -- }}}
