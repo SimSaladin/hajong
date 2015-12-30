@@ -25,12 +25,17 @@ riichi_off   = 130
 -- {{{ Controls ------------------------------------------------------
 
 -- | UI-only data
-type alias Controls = { hoveredTileNth : Int }
+type alias Controls = { hoveredTileNth : Int
+                      , relatedToShout : List Int }
 
 controls : Signal Controls
-controls = Signal.map Controls (dropRepeats tileHoverStatus.signal)
+controls = Signal.map2 Controls (dropRepeats tileHoverStatus.signal)
+                                (dropRepeats <| Signal.map fst shoutHover.signal)
 
 tileHoverStatus = mailbox (-1) -- | Tiles are numbered from 1 onwards.
+
+shoutHover : Mailbox (List Int, Maybe Shout) -- (tiles activated, hovered shout)
+shoutHover = mailbox ([], Nothing)
 
 -- }}}
 
@@ -83,7 +88,7 @@ display co gs = case gs.roundState of
             ]
         , container 1000 40 midTop <| flow right
            <| (
-              maybe [] (map shoutButton << snd) (gs.waitShout)
+              maybe [] (snd >> displayShoutButtons co rs) (gs.waitShout)
                ++ shouminkanButtons rs "Shouminkan"
                ++ [ ankanButton rs "Ankan"
                   , nocareButton gs.waitShout "Pass" ]
@@ -93,6 +98,19 @@ display co gs = case gs.roundState of
         , container 1000 100 midTop <| dispHand rs.mypos co rs.myhand
         ]
    Nothing -> show "Hmm, roundState is Nothing but I should be in a game"
+
+displayShoutButtons : Controls -> RoundState -> List Shout -> List Element
+displayShoutButtons co rs = map <| \s -> shoutButton s
+   |> hoverable (\f -> message shoutHover.address <|
+         if f then (getTileIndices (sortTiles rs.myhand.concealed) s.shoutTo, Just s) else ([], Nothing))
+
+getTileIndices : List Tile -> List Tile -> List Int
+getTileIndices =
+   let go n xs is = case (xs, is) of
+            (x :: xs, i :: is) -> if x == i then n :: go (n + 1) xs is
+                                            else go (n + 1) xs (i :: is)
+            _                  -> []
+       in go 1
 -- }}}
 
 -- {{{ Display: per-player -------------------------------------------
@@ -270,7 +288,7 @@ dispTileInHand : Controls -> Int -> Tile -> Element
 dispTileInHand co n tile = dispTile tile
    |> clickable (message discard.address (Just <| Discard tile Nothing False))
    |> hoverable (\f -> message tileHoverStatus.address <| if f then n else -1 )
-   |> if co.hoveredTileNth == n then color red else identity
+   |> if co.hoveredTileNth == n || List.member n co.relatedToShout then color red else identity
 
 -- }}}
 
