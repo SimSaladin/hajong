@@ -207,6 +207,18 @@ gameFlowTests = testGroup "Game flow"
             autoEndTurn
 
       requireRight res $ \(_,(_,k)) -> k^..sHands.ix Nan .handCalled._head.to mentsuTiles.each.filtered isAka @?= ["s4", "s5"]
+
+  , testCase "After last has passed on a shout, the game continues immediately" $ do
+      kyoku <- testKyoku <&> sHands.each.handConcealed._Wrapped .~ []
+                         <&> sHands.ix Nan . handConcealed . _Wrapped .~ ["S3", "s4", "P5"]
+                         <&> sWall %~ cons "s5"
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "s5" Nothing False
+            stepped $ InpPass Nan
+
+      requireRight res $ \(_,(m,_)) -> m @?= CheckEndConditionsAfterDiscard
+      
   ]
 
 furitenTests :: TestTree

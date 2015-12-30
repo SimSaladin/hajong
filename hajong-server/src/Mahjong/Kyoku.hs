@@ -98,10 +98,15 @@ step (WaitingShouts couldShout winning shouts chankan) inp
             | InpAuto <- inp, Just xs <- winning = processShouts (map (shouts L.!!) xs) chankan
             | InpAuto <- inp                     = proceedWithoutShoutsAfterDiscard chankan
             | null couldShout                    = proceedWithoutShoutsAfterDiscard chankan
-            | InpPass pk <- inp                  = return $ WaitingShouts (deleteSet pk couldShout) winning shouts chankan
-            | InpShout pk _ <- inp, pk `onotElem` couldShout, elemOf (each._1) pk shouts = throwError "You have already called on that tile"
+
+            | InpPass pk <- inp, couldShout' <- deleteSet pk couldShout
+                                                 = if' (null couldShout') (flip step InpAuto) return $ WaitingShouts couldShout' winning shouts chankan
+
+            | InpShout pk _ <- inp, pk `onotElem` couldShout, elemOf (each._1) pk shouts
+                                                 = throwError "You have already called on that tile"
+
             | InpShout pk shout <- inp, Just i <- L.findIndex (== (pk, shout)) shouts
-            = do
+                                                 = do
                 res <- use pTurn >>= \tk -> case winning of
                     Just (j:js) -> case shoutPrecedence tk (shouts L.!! j) (pk, shout) of
                                        EQ -> return $ WaitingShouts (deleteSet pk couldShout) (Just (i:j:js)) shouts chankan -- new goes through with old ones

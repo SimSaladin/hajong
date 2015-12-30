@@ -1,5 +1,7 @@
 <h1>Game history
 
 <ul>
+  $if null games
+    <i>Oh noes.. nothing to show here
   $forall Entity _ v <- games
     <li>#{pastGameUuid v}
