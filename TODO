@@ -42,7 +42,7 @@ x = done, / = half done, ! = needs testing
 [x] Display concealed hands of other players
 [x] display aka-dora as red
 # site
-[ ] report bug button: game UUID
+[x] report bug button: game UUID
 [ ] Rework lobby
 [ ] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
       [ ] test facebook authentication

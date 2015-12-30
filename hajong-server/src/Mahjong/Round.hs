@@ -21,25 +21,28 @@ import           Mahjong.Kyoku
 import           Control.Monad.RWS
 import qualified Data.Map as Map
 import qualified Text.PrettyPrint.ANSI.Leijen as P
+import qualified Data.UUID as UUID
 ------------------------------------------------------------------------------
 
 -- * GameState
 
 -- | "GameState" records all information of a single game.
 data GameState playerID = GameState
-                   { _gamePlayers :: Map Player playerID
-                   , _gameName    :: Text
-                   , _gameDeal    :: Maybe Kyoku -- maybe in running game
-                   } deriving (Show, Read, Functor)
+                   { _gameDeal     :: Maybe Kyoku -- ^ Maybe initialized
+                   , _gamePlayers  :: Map Player playerID
+                   , _gameUUID     :: UUID.UUID
+                   , _gameSettings :: GameSettings
+                   } deriving (Show, Typeable, Read, Functor)
 
 instance P.Pretty p => P.Pretty (GameState p) where
-    pretty GameState{..} = P.pretty (unpack _gameName) P.<$$>
+    pretty GameState{..} = P.pretty (show _gameSettings) P.<$$>
+                           P.pretty (UUID.toString $ _gameUUID) P.<$$>
                            P.prettyList (Map.elems _gamePlayers) P.<$$>
                            P.pretty _gameDeal
 
 -- | Create a new GameState with the given label.
-newEmptyGS :: p -> Text -> GameState p
-newEmptyGS defPlayer name = GameState (Map.fromList $ zip fourPlayers $ repeat defPlayer) name Nothing
+newEmptyGS :: a -> UUID.UUID -> GameSettings -> GameState a
+newEmptyGS defPlayer = GameState Nothing (Map.fromList $ zip fourPlayers $ repeat defPlayer)
 
 -- ** Lenses
 

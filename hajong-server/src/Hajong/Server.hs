@@ -32,6 +32,7 @@ import           Data.SafeCopy
 import           Data.ReusableIdentifiers
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
+import qualified Data.UUID                  as UUID
 import           Data.Time.Clock (secondsToDiffTime)
 import           Network
 import           System.Log.FastLogger (LoggerSet, pushLogStr)
@@ -43,10 +44,8 @@ import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 -- * Types
 
 -- | Serialization of an on-going game.
-data Game = Game
-    { _gaSettings      :: GameSettings
-    , _gaState         :: GameState Int
-    } deriving (Show, Typeable)
+type Game = GameState Int
+--     } deriving (Show, Typeable)
 
 -- | A record of a client connected or previously connected.
 data ClientRecord = ClientRecord
@@ -102,7 +101,6 @@ newtype Server a = Server { unServer :: ReaderT ServerSt IO a }
 -- * Lenses
 
 --
-makeLenses ''Game
 makeLenses ''ClientRecord
 makeLenses ''RunningGame
 makeLenses ''ServerDB
@@ -139,7 +137,6 @@ $(deriveSafeCopy 0 'base ''Kaze)
 $(deriveSafeCopy 0 'base ''ValuedHand)
 $(deriveSafeCopy 0 'base ''Shout)
 $(deriveSafeCopy 0 'base ''GameEvent)
-$(deriveSafeCopy 0 'base ''Game)
 $(deriveSafeCopy 0 'base ''RiichiState)
 $(deriveSafeCopy 0 'base ''DrawState)
 $(deriveSafeCopy 0 'base ''FuritenState)
@@ -178,8 +175,8 @@ instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
     getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet 
 
 instance SafeCopy (GameState Int) where
-    putCopy (GameState a b c) = contain $ do safePut a; safePut b; safePut c
-    getCopy = contain $ GameState <$> safeGet <*> safeGet <*> safeGet
+    putCopy (GameState a b c d) = contain $ do safePut a; safePut b; safePut (UUID.toWords c); safePut d
+    getCopy = contain $ GameState <$> safeGet <*> safeGet <*> fmap (\(a,b,c,d) -> UUID.fromWords a b c d) safeGet <*> safeGet
 
 -- * Query
 
@@ -268,7 +265,7 @@ setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
 
 destroyGame :: Int -> Update ServerDB [ClientRecord]
 destroyGame gid = do seGameRecord %= freeId gid
-                     cs <- preuse (seGames.at gid._Just.gaState.gamePlayers)
+                     cs <- preuse (seGames.at gid._Just.gamePlayers)
                      seGames.at gid .= Nothing
                      rs <- forM (maybe [] (^..each) cs) $ \i -> do
                         seReserved.at i._Just.cInGame .= Nothing
@@ -357,8 +354,8 @@ startGame gid game = do
     createWorker game >>= forkWorker gid
 
 createWorker :: Game -> Server WorkerData
-createWorker game = WorkerData (game^.gaSettings)
-    <$> (liftIO . newTVarIO =<< attachClients (game^.gaState))
+createWorker game = WorkerData (game^.gameSettings)
+    <$> (liftIO . newTVarIO =<< attachClients game)
     <*> (liftIO $ newTVarIO $ NotBegun 5)
     <*> liftIO newEmptyTMVarIO
     <*> view seLoggerSet
@@ -476,11 +473,14 @@ multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
 -- | Send updated lounge to everyone there
 updateLounge :: Server ()
 updateLounge = do
-    il <- rview seLounge
-    lounge <- Lounge (il & mapMonotonic getNick) <$> (rview seWorkers <&> fmap f)
+    nicksInLounge <- rview seLounge <&> mapMonotonic getNick
+    games         <- query' GetGames
+    nicks         <- rview seWorkers <&> map (\x -> setFromList $ x^..gClients.folded.to getNick)
+
+    let gameInfos = intersectionWithMap (\g ns -> (g^.gameSettings, ns, g^.gameUUID.to UUID.toText)) games nicks
+        lounge    = Lounge nicksInLounge gameInfos
+
     forM_ il (`unicast` LoungeInfo lounge)
-    where
-        f x = (x^.gWorker.wSettings, x^.gClients^..folded & setFromList . map getNick)
 
 withInGame :: (Int -> Server ()) -> Server ()
 withInGame f = do
@@ -598,7 +598,8 @@ handleGameAction action = withInGame $ \n -> withRunningGame n $ \gr -> do
 
 createGame :: GameSettings -> Server ()
 createGame settings = do
-    let game = Game settings (newEmptyGS 0 "") -- TODO makes no sense
+    uuid <- liftIO randomIO
+    let game = newEmptyGS 0 uuid settings
     res <- update' (InsertGame game)
     case res of
         Left err -> uni $ InternalError err

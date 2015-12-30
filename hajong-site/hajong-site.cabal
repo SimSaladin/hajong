@@ -48,6 +48,7 @@ library
 
     build-depends: base                          >= 4          && < 5
                  , hajong
+                 , classy-prelude
                  , yesod                         >= 1.4.0      && < 1.6
                  , yesod-core                    >= 1.4.0      && < 1.6
                  , yesod-auth                    >= 1.4.0      && < 1.6

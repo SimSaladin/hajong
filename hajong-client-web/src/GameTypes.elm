@@ -14,6 +14,7 @@ type alias GameState =
    , lounge     : LoungeData
    , gameWait   : Maybe Int
    , updated    : Time
+   , supportURL : String
 
     -- In-Game
    , roundState     : Maybe RoundState
@@ -21,6 +22,7 @@ type alias GameState =
    , waitShout      : Maybe (WaitRecord, List Shout)
    , turnBegan      : Time
    , riichiWith     : List Tile
+   , gameUUID       : Maybe String
 
    -- Debug
    , logging    : List LogItem
@@ -138,6 +140,7 @@ type alias LoungeData =
 type alias GameInfo =
    { ident : Int
    , topic : String
+   , uuid  : String
    , players : Set String }
 
 defaultLounge = { idle = Set.empty, games = [] }

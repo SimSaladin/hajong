@@ -6,6 +6,7 @@ import Prelude
 import Yesod
 import Yesod.Static
 import Yesod.Auth
+import Data.Text (Text)
 import qualified Yesod.Auth.Account as Acc
 import Yesod.Auth.Facebook.ServerSide
 import qualified Facebook as FB

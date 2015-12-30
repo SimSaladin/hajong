@@ -84,7 +84,8 @@ lounge : Decoder LoungeData
 lounge = object2 (\i g -> { idle = i, games = g }) ("idle" := (map Set.fromList (list string))) ("games" := list gameInfo)
 
 gameInfo : Decoder GameInfo
-gameInfo = object3 (\i t p -> { ident = i, topic = t, players = p}) ("ident" := int) ("topic" := string) ("players" := set nick)
+gameInfo = object4 (\i t p u -> { ident = i, topic = t, uuid = u, players = p})
+   ("ident" := int) ("topic" := string) ("players" := set nick) ("uuid" := string)
 
 -- ** GameEvent
 

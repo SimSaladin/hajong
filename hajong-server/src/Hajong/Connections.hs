@@ -45,7 +45,7 @@ data Event = JoinServer Nick Int Text (Maybe Int) -- nick, ident, token, game to
            | Invalid Text
 
            | LoungeInfo Lounge
-           | GameCreated (Int, Text, [Nick]) -- id, name, nicks
+           | GameCreated (Int, Text, [Nick], Text) -- id, name, nicks, uuid
            | JoinGame Int Nick -- ^ game num, nick
            | PartGame Nick
            | ForceStart Int
@@ -81,16 +81,13 @@ instance WS.WebSocketsData InternalResult where
 
 instance B.Binary InternalEvent
 instance B.Binary InternalResult
+instance B.Binary GameSettings
 
 -- * Games and lounge
 
-data GameSettings = GameSettings { gameTitle :: Text }
-                  deriving (Show, Read, Typeable, Generic)
-instance B.Binary GameSettings
-
 data Lounge = Lounge
             { _loungeNicksIdle :: Set Nick
-            , _loungeGames     :: IntMap (GameSettings, Set Nick)
+            , _loungeGames     :: IntMap (GameSettings, Set Nick, Text) -- ^ (settings, nicks, uuid)
             } deriving (Show, Read)
 makeLenses ''Lounge
 
@@ -104,10 +101,11 @@ loungeJSON :: Lounge -> [Pair]
 loungeJSON (Lounge nicks games) = [ "idle" .= nicks
                                   , "games" .= map gamePairs (itoList games)]
 
-gamePairs :: (Int, (GameSettings, Set Nick)) -> A.Value
-gamePairs (i, (GameSettings t, nicks)) = object
+gamePairs :: (Int, (GameSettings, Set Nick, Text)) -> A.Value
+gamePairs (i, (GameSettings t, nicks, uuid)) = object
     [ "ident"   .= i
     , "topic"   .= t
+    , "uuid"    .= uuid
     , "players" .= nicks ]
 
 -- Instances -----------------------------------------------------------------
@@ -119,7 +117,7 @@ instance ToJSON Event where
     toJSON (Message sender cnt)    = atType "msg"          ["from"    .= sender, "content" .= cnt]
     toJSON (Invalid msg)           = atType "invalid"      ["content" .= msg]
     toJSON (LoungeInfo lounge)     = atType "lounge"       (loungeJSON lounge)
-    toJSON (GameCreated (i,t,n))   = atType "game-created" ["ident"   .= i,    "topic" .= t, "players" .= n]
+    toJSON (GameCreated (i,t,n,u)) = atType "game-created" ["ident"   .= i,    "topic" .= t, "players" .= n, "uuid" .= u]
     toJSON (JoinGame nth nick)     = atType "game-join"    ["nick"    .= nick, "ident" .= nth]
     toJSON (PartGame nick)         = atType "game-part"    ["nick"    .= nick] -- TODO client
     toJSON (InGamePrivateEvent x)  = atType "game-event"   ["events"  .= [x] ]
@@ -230,7 +228,7 @@ instance FromJSON Event where
             "join"         -> JoinServer         <$> o .: "nick" <*> o .: "ident" <*> o .: "token" <*> o .:? "game"
             "part"         -> PartServer         <$> o .: "nick"
             "msg"          -> Message            <$> o .: "from" <*> o .: "content"
-            "game-created" -> (\x y z -> GameCreated (x,y,z)) <$> o .: "ident" <*> o .: "topic" <*> o .: "players"
+            "game-created" -> (\x y z w -> GameCreated (x,y,z,w)) <$> o .: "ident" <*> o .: "topic" <*> o .: "players" <*> o .: "uuid"
             "game-join"    -> JoinGame           <$> o .: "ident" <*> o .: "nick"
             "game-secret"  -> fail "InGamePrivateEvent: This event is only sent from server and not received"
             "game-public"  -> fail "InGameEvents: This event is only sent from server and not received"

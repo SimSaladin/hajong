@@ -25,10 +25,8 @@ import Data.Default (def)
 import Yesod.Core.Types (loggerSet, Logger (Logger))
 
 import Control.Monad
-import Control.Exception
-import Control.Concurrent
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Lock
-import Control.Concurrent.MVar
 import qualified Hajong.Server as G
 import qualified Hajong.Connections as G
 import qualified Network.WebSockets as WS

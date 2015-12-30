@@ -1,11 +1,3 @@
-
-<p>
-  $maybe user <- mauth
-    Playing as <b>#{user}</b>
-  $nothing
-    <i>Playing anonymously
-
 <div id="alerted" hidden>
 <div id="wait">Connecting...
 <div id="game" style="height:100%">
-

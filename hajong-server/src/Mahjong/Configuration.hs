@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 ------------------------------------------------------------------------------
 -- | 
 -- Module         : Mahjong.Configuration
@@ -12,6 +13,9 @@ module Mahjong.Configuration where
 ------------------------------------------------------------------------------
 import           Import
 ------------------------------------------------------------------------------
+
+data GameSettings = GameSettings { gameTitle :: Text }
+                  deriving (Show, Read, Typeable, Generic)
 
 -- | Numerical identifier for players (@[0..3]@). Note that we use 'Kaze'
 -- to specifify players in-game (so the logic is simpler), and use `Player'

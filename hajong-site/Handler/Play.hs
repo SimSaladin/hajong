@@ -13,6 +13,7 @@ module Handler.Play where
 import           Import
 import qualified GameServer   as G
 import qualified Hajong.Connections as G
+import qualified Mahjong      as G
 
 import           Data.Time (getCurrentTime)
 import qualified Data.Text    as T
@@ -49,7 +50,6 @@ getNewGameR  = do
         $(widgetFile "new-game")
 
 postNewGameR = do
-    -- uuid <- T.pack . UUID.toString <$> liftIO UUID.nextRandom
     ((FormSuccess settings,_), _) <- runFormPost newGameForm
     G.InternalGameCreated gid <- goGame $ G.InternalNewGame settings
     redirect $ PlayR gid

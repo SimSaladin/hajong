@@ -41,8 +41,10 @@ newState = { status     = InLounge
            , lounge     = defaultLounge
            , gameWait   = Nothing
            , updated    = 0
+           , supportURL = "/support/"
 
            , roundState = Nothing
+           , gameUUID   = Nothing
            , waitTurnAction = Nothing
            , waitShout  = Nothing
            , turnBegan  = 0
@@ -115,10 +117,9 @@ stepEvent event gameState = case event of
    GameCreated {game}  -> { gameState | lounge = addGame game gameState.lounge }
    JoinGame {nick, ident} ->
        { gameState | lounge   = addJoinedGame ident nick gameState.lounge
-                   , gameWait =
-                       if gameState.mynick == nick
-                           then Just ident
-                           else gameState.gameWait
+                   , gameWait = if gameState.mynick == nick then Just ident
+                                                            else gameState.gameWait
+                   , gameUUID = Maybe.map .uuid <| lookupGameInfo gameState ident
        }
    InGameEvents events -> List.foldl Game.processInGameEvent gameState events
    _ -> gameState

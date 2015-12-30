@@ -14,8 +14,11 @@ getHomeR = do
 
 getSupportR, postSupportR :: Handler Html
 getSupportR  = postSupportR
-postSupportR = do
-    ((res, widget), enctype) <- runFormPost ticketForm
+postSupportR = supportWithUuidR Nothing
+
+supportWithUuidR :: Maybe Text -> Handler Html
+supportWithUuidR maybeUuid = do
+    ((res, widget), enctype) <- runFormPost $ ticketForm maybeUuid
 
     submitted <- case res of
         FormSuccess ticket -> do
@@ -23,11 +26,25 @@ postSupportR = do
             return (Just tid)
         _ -> return Nothing
 
+    -- TODO: send email to me
     defaultLayout $ do
         setTitle "Support"
         $(widgetFile "support")
 
-ticketForm :: Form Ticket
-ticketForm = renderBootstrap3 BootstrapBasicForm $ Ticket
+getSupportWithUuidR, postSupportWithUuidR :: Text -> Handler Html
+getSupportWithUuidR  = postSupportWithUuidR
+postSupportWithUuidR = supportWithUuidR . Just 
+
+ticketForm :: Maybe Text -> Form Ticket
+ticketForm maybeUuid = renderBootstrap3 BootstrapBasicForm $ Ticket
     <$> areq emailField "Your email address" Nothing
-    <*> fmap unTextarea (areq textareaField "Description" Nothing)
+    <*> fmap unTextarea (areq textareaField "Description" { fsAttrs = [("rows", "17")] } $ Just $ ticketTemplate maybeUuid)
+
+ticketTemplate :: Maybe Text -> Textarea
+ticketTemplate uuid = Textarea $ unlines
+    [ "This report is related to a game: " ++ maybe "(none)" ("game identifier: " ++) uuid
+    , ""
+    , "What you did?\n"
+    , "What you expected to happen?\n"
+    , "What happened instead?\n"
+    ]
