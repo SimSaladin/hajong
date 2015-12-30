@@ -57,6 +57,14 @@ data ClientRecord = ClientRecord
     , _cInGame         :: Maybe Int
     } deriving (Show, Typeable)
 
+-- | A record of a past game.
+data PastGame = PastGame
+    { _pgResults       :: Either Text FinalPoints
+    , _pgSettings      :: GameSettings
+    , _pgGameState     :: GameState Int
+    , _pgLastMachine   :: Machine
+    } deriving (Show, Typeable)
+
 -- | This is the root ACID type.
 --
 -- Players are identified with unique Ints. When joining the server, they
@@ -68,9 +76,13 @@ data ServerDB = ServerDB
     , _seNicks         :: Map Nick Int        -- ^ Reserved nicks
     , _seGameRecord    :: Record              -- ^ Game identifiers
     , _seGames         :: IntMap Game         -- ^ Games identified by @seGameRecord@
+    , _seHistory       :: [PastGame]          -- ^ History of run workers
     } deriving (Show, Typeable)
 
-$(deriveSafeCopy 1 'base ''ClientRecord)
+$(deriveSafeCopy 0 'base ''FinalPoints)
+$(deriveSafeCopy 0 'base ''Machine)
+$(deriveSafeCopy 0 'base ''ClientRecord)
+$(deriveSafeCopy 0 'base ''PastGame)
 $(deriveSafeCopy 0 'base ''ServerDB)
 
 -- | Server logic Reader value.
@@ -120,6 +132,7 @@ instance MonadLogger Server where
 
 -- * Safecopy
 
+-- | TODO: Move these instances and data types to corresponding .Types modules
 $(deriveSafeCopy 0 'base ''Player)
 $(deriveSafeCopy 0 'base ''Wanpai)
 $(deriveSafeCopy 0 'base ''GameSettings)
@@ -147,6 +160,11 @@ $(deriveSafeCopy 0 'base ''RiichiState)
 $(deriveSafeCopy 0 'base ''DrawState)
 $(deriveSafeCopy 0 'base ''FuritenState)
 $(deriveSafeCopy 0 'base ''HandFlag)
+$(deriveSafeCopy 0 'base ''GameState)
+
+-- Not our data types
+$(deriveSafeCopy 0 'base ''Identity)
+$(deriveSafeCopy 0 'base ''UUID.UUID)
 
 -- SafeCopy instances for indexed types
 
@@ -157,10 +175,10 @@ instance (SafeCopy (m (Set HandFlag)), SafeCopy (m Bool), SafeCopy (m [Tile]), S
 
 instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
     version = 0
-    putCopy (FromWall t) = contain $ do safePut (0 :: Word8); safePut t
-    putCopy (FromWanpai t) = contain $ do safePut (1 :: Word8); safePut t
-    putCopy (AgariTsumo t) = contain $ do safePut (2 :: Word8); safePut t
-    putCopy (AgariCall s) = contain $ do safePut (3 :: Word8); safePut s
+    putCopy (FromWall t)         = contain $ do safePut (0 :: Word8); safePut t
+    putCopy (FromWanpai t)       = contain $ do safePut (1 :: Word8); safePut t
+    putCopy (AgariTsumo t)       = contain $ do safePut (2 :: Word8); safePut t
+    putCopy (AgariCall s)        = contain $ do safePut (3 :: Word8); safePut s
     putCopy (AgariTsumoWanpai t) = contain $ do safePut (4 :: Word8); safePut t
     getCopy = contain $ do tag <- safeGet
                            case tag :: Word8 of
@@ -171,18 +189,10 @@ instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
                                4 -> AgariTsumoWanpai <$> safeGet
                                _ -> fail $ "Couldn't identify tag " ++ show tag
 
-instance SafeCopy a => SafeCopy (Identity a) where
-    putCopy (Identity a) = contain $ safePut a
-    getCopy = contain $ Identity <$> safeGet
-
 instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
     version = 0
     putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pTurn; safePut _pFlags; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _pDeals; safePut _sEvents; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
     getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet 
-
-instance SafeCopy (GameState Int) where
-    putCopy (GameState a b c d) = contain $ do safePut a; safePut b; safePut (UUID.toWords c); safePut d
-    getCopy = contain $ GameState <$> safeGet <*> safeGet <*> fmap (\(a,b,c,d) -> UUID.fromWords a b c d) safeGet <*> safeGet
 
 -- * Query
 
@@ -287,12 +297,22 @@ insertGame game = do
                                return (Right gid)
         Nothing -> return (Left "Server's Game capacity reached")
 
+logWorkerResult :: PastGame -> Update ServerDB ()
+logWorkerResult pg = seHistory %= cons pg
+
+flushWorkerLog :: Update ServerDB ()
+flushWorkerLog = seHistory .= []
+
+getWorkerResultLog :: Query ServerDB [PastGame]
+getWorkerResultLog = view seHistory
+
 -- * ACID interface
 $(makeAcidic ''ServerDB [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB
                         , 'connectClient, 'partClient
                         , 'registerAnonymousPlayer, 'registerLoggedInPlayer
                         , 'setPlayerGame
                         , 'insertGame, 'destroyGame
+                        , 'logWorkerResult, 'getWorkerResultLog, 'flushWorkerLog
                         ])
 
 ------------------------------------------------------------------------------
@@ -334,7 +354,7 @@ initServer lgr = do
         <*> newTVarIO mempty
 
 emptyDB :: ServerDB
-emptyDB = ServerDB (newRecord 1024) mempty mempty (newRecord 256) mempty
+emptyDB = ServerDB (newRecord 1024) mempty mempty (newRecord 256) mempty mempty
 
 -- * Run Servers
 
@@ -443,14 +463,27 @@ workerDied gid res = do
         Right x  -> $logInfo  $ "Game " ++ tshow gid ++ " finished. " ++ tshow x
     _ <- update' $ DestroyGame gid -- TODO EventResult: should it be checked?
 
+    -- atomic
     ss <- ask
-    clients <- atomically $ do
-        ws <- readTVar (ss^.seWorkers)
-        let clientSet = ws ^?! at gid._Just.gClients ^.. folded & setFromList
+    (pg, clients) <- atomically $ do
+
+        rg           <- readTVar (ss^.seWorkers) <&> (^?! at gid._Just)
+        let wd        = rg^.gWorker
+        state        <- readTVar (wd^.wGame) <&> map getIdent
+        machine      <- readTVar (wd^.wMachine)
+        let clientSet = rg^..gClients.folded & setFromList
+            pg        = PastGame (_Left %~ tshow $ res) (wd^.wSettings) state machine
+
         modifyTVar' (ss^.seWorkers) (at gid .~ Nothing)
         modifyTVar' (ss^.seLounge) (union clientSet)
-        return clientSet
+
+        return (pg, clientSet)
+
+    -- Send part events
     forM_ clients $ \c -> unicast c (PartGame (getNick c))
+
+    -- Log the game
+    update' $ LogWorkerResult pg
 
 ------------------------------------------------------------------------------
 

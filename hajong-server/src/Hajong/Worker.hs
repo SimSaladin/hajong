@@ -20,7 +20,7 @@
 --
 ------------------------------------------------------------------------------
 module Hajong.Worker
-    ( WorkerData(..), wGame, wSettings, wInput, wLogger
+    ( WorkerData(..), wGame, wSettings, wMachine, wInput, wLogger
     , WorkerInput(..), WorkerResult
     , startWorker
     ) where

@@ -29,9 +29,8 @@ x = done, / = half done, ! = needs testing
 [x] add test: kokushi furiten
 [x] add test: chiitoi furiten
 [x] shouting a aka-dora results in all tiles of the mentsu be aka-dora
-[ ] clear TODO's from code
+[ ] go through the TODO's in the code
 # client
-[ ] deal identifiers
 [ ] Display winning hand
 [ ] sending messages
 [ ] Undisplay riichi when clicked

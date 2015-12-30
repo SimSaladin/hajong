@@ -27,3 +27,11 @@
 <ul>
   $forall (i, g) <- IM.toList _seGames
     <li>#{i} &mdash; #{show g}
+
+<h2>Inactive games
+<ul>
+  $forall pg <- _seHistory
+    <li>#{tshow $ _pgResults pg} &mdash;
+        #{tshow $ _pgSettings pg} &mdash;
+        #{tshow $ _pgGameState pg} &mdash;
+        #{tshow $ _pgLastMachine pg}

@@ -17,6 +17,7 @@ import Data.Acid
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 
+-- | This view is mostly for debugging only.
 getStatusR :: Handler Html
 getStatusR = do
     ServerDB{..} <- G.getAcid >>= liftIO . (`query` G.DumpDB)
