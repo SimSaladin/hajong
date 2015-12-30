@@ -92,25 +92,12 @@ display co gs = case gs.roundState of
                ++ shouminkanButtons rs "Shouminkan"
                ++ [ ankanButton rs "Ankan"
                   , nocareButton gs.waitShout "Pass" ]
-               ++ riichiButtons gs.riichiWith
+               ++ riichiButtons rs gs.riichiWith
                ++ [ tsumoButton rs.myhand.canTsumo ]
                )
         , container 1000 100 midTop <| dispHand rs.mypos co rs.myhand
         ]
    Nothing -> show "Hmm, roundState is Nothing but I should be in a game"
-
-displayShoutButtons : Controls -> RoundState -> List Shout -> List Element
-displayShoutButtons co rs = map <| \s -> shoutButton s
-   |> hoverable (\f -> message shoutHover.address <|
-         if f then (getTileIndices (sortTiles rs.myhand.concealed) s.shoutTo, Just s) else ([], Nothing))
-
-getTileIndices : List Tile -> List Tile -> List Int
-getTileIndices =
-   let go n xs is = case (xs, is) of
-            (x :: xs, i :: is) -> if x == i then n :: go (n + 1) xs is
-                                            else go (n + 1) xs (i :: is)
-            _                  -> []
-       in go 1
 -- }}}
 
 -- {{{ Display: per-player -------------------------------------------
@@ -382,6 +369,17 @@ tileHidden = container 54 34 middle <| collage 54 34 [ rect 50 30 |> outlined de
 -- }}}
 
 -- {{{ Buttons -----------------------------------------------------------------
+
+displayShoutButtons : Controls -> RoundState -> List Shout -> List Element
+displayShoutButtons co rs = map <| \s -> shoutButton s
+   |> hoverable (\f -> message shoutHover.address <|
+         if f then (getTileIndices (sortTiles rs.myhand.concealed) s.shoutTo, Just s) else ([], Nothing))
+
+riichiButtons : RoundState -> List Tile -> List Element
+riichiButtons rs = map <| \t -> buttonElem' "Riichi" red
+   |> hoverable (\f -> message shoutHover.address (if f then getTileIndices (sortTiles rs.myhand.concealed) [t] else [], Nothing))
+   |> clickable (message riichi.address (Just <| Discard t Nothing True))
+
 shoutButton : Shout -> Element
 shoutButton s =
    clickable (message shout.address (Just s)) <| collage 80 40
@@ -391,8 +389,6 @@ shoutButton s =
 
 shouminkanButtons rs str = findShouminkan rs.myhand
    |> map (\t -> clickable (message shouminkan.address (Just t)) <| buttonElem' str blue)
-
-riichiButtons = map (\t -> clickable (message riichi.address (Just <| Discard t Nothing True)) (buttonElem' "Riichi" red))
 
 ankanButton rs str = case findFourTiles rs of
    Just t  -> clickable (message ankan.address (Just t)) (buttonElem' str green)
@@ -408,6 +404,7 @@ nocareButton w str = case w of
 buttonElem' str col = collage 80 40
    [ oval 80 40 |> filled col
    , T.fromString str |> centered |> toForm ]
+
 -- }}}
 
 -- {{{ Utility -----------------------------------------------------------------
@@ -438,6 +435,14 @@ kantsu t = Mentsu Kantsu [t, t, t, t] Nothing
 
 getShout : Maybe ShoutKind -> Maybe Shout
 getShout = maybe Nothing (\k -> Just <| Shout k Ton (Suited ManTile 1 False) [])
+
+getTileIndices : List Tile -> List Tile -> List Int
+getTileIndices =
+   let go n xs is = case (xs, is) of
+            (x :: xs, i :: is) -> if x == i then n :: go (n + 1) xs is
+                                            else go (n + 1) xs (i :: is)
+            _                  -> []
+       in go 1
 -- }}}
 
 -- {{{ Modify state: GameEvents --------------------------------------

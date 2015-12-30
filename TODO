@@ -32,8 +32,8 @@ x = done, / = half done, ! = needs testing
 [ ] go through the TODO's in the code
 # client
 [ ] sending messages
-[ ] Highlight corresponding tiles on shout hovers
 [ ] interface for viewing different kyoku states
+[x] Highlight corresponding tiles on shout hovers
 [x] Display hands of tenpai players on ryuukyoku
 [x] when a call is passed, update callable info to client. client should not show it
 [x] Display winning hand
