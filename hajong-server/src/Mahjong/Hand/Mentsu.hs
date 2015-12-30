@@ -134,10 +134,12 @@ isKantsu  = (== Kantsu)  . mentsuKind
 -- On shouts
 
 possibleShouts :: Tile -> [(MentsuKind, [Tile])]
-possibleShouts x = (Koutsu, [x, x]) : (Kantsu, [x, x, x]) : (Jantou, [x]) : catMaybes
-    [ succMay x >>= \y -> succMay y >>= \z -> return (Shuntsu, [y, z]) --  x . .
-    , predMay x >>= \y -> succMay x >>= \z -> return (Shuntsu, [y, z]) --  . x .
-    , predMay x >>= \y -> predMay y >>= \z -> return (Shuntsu, [y, z])] --  . . x
+possibleShouts x = (Koutsu, [x, x]) : (Kantsu, [x, x, x]) : (Jantou, [x]) : if' (isSuited x) shuntsuShouts []
+  where
+    shuntsuShouts = catMaybes
+        [ succMay x >>= \y -> succMay y >>= \z -> return (Shuntsu, [y, z]) --  x . .
+        , predMay x >>= \y -> succMay x >>= \z -> return (Shuntsu, [y, z]) --  . x .
+        , predMay x >>= \y -> predMay y >>= \z -> return (Shuntsu, [y, z])] --  . . x
 
 -- | Which shout takes precedence. Can be EQ.
 --

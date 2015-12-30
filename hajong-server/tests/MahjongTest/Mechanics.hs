@@ -196,6 +196,17 @@ gameFlowTests = testGroup "Game flow"
       kyoku <- testKyoku <&> pResults .~ Just (DealTsumo [(Nan, 3000, error "not needed")] [])
                          <&> pRound .~ (Ton, 1, 2)
       nextRound kyoku @?= (Ton, 2, 0)
+
+  , testCase "Shouting an aka-dora results in a set where only the shouted tile is aka" $ do
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed . _Wrapped .~ ["S3", "s4", "P5"]
+                         <&> sWall %~ cons "s5"
+
+      let res = runKyokuState kyoku $ do
+            autoAndDiscard Ton $ Discard "s5" Nothing False
+            stepped $ InpShout Nan $ Shout Chi Ton "s5" ["s4", "S3"]
+            autoEndTurn
+
+      requireRight res $ \(_,(_,k)) -> k^..sHands.ix Nan .handCalled._head.to mentsuTiles.each.filtered isAka @?= ["s4", "s5"]
   ]
 
 furitenTests :: TestTree

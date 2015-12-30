@@ -186,7 +186,8 @@ meldTo shout mentsu hand -- TODO why must the shout be passed separetely?
     tilesFromHand               = shoutTo shout
     concealedTiles              = hand^.handConcealed._Wrapped
     correctConcealedTilesInHand = length concealedTiles == length (concealedTiles L.\\ tilesFromHand) + length tilesFromHand
-    moveFromConcealed           = over handCalled (|> mentsu) . over (handConcealed._Wrapped) (L.\\ tilesFromHand)
+    moveFromConcealed           = over handCalled (|> mentsu) . over (handConcealed._Wrapped) removeTiles
+    removeTiles ih              = let (aka, notaka) = partition isAka ih in (aka ++ notaka) L.\\ tilesFromHand -- XXX: this is needed because Eq on Tile is warped
 
 shoutFromHand :: CanError m => Kaze -> Shout -> HandA -> m (Mentsu, HandA)
 shoutFromHand sk shout hand
@@ -209,15 +210,17 @@ shoutsOn :: Kaze -- ^ Shout from (player in turn)
          -> HandA -- ^ shouter's
          -> [Shout]
 shoutsOn np t p hand
-    | np == p   = [] -- You're not shouting the thing you just discarded from yourself, right?
+    | np == p                  = [] -- You're not shouting the thing you just discarded from yourself, right?
     | Just x <- kokushiAgari (hand^.handConcealed._Wrapped)
     , either (== t) (elem t) x = [Shout Ron np t []]
-    | otherwise = concatMap toShout $ possibleShouts t
+    | otherwise                = concatMap toShout $ possibleShouts t
   where
     normalShuntsu     = nextKaze np == p
     ih                = sort (runIdentity $ _handConcealed hand) -- NOTE: sort
+    aka               = filter isAka ih
     toShout (mk, xs)  = do
         guard $ xs `isSubListOf` ih
+        let tiles = map (\x -> if x `elem` aka then setAka x else x) xs -- XXX: Prioritize aka tiles
         s <- case mk of
                 Jantou  -> [Ron]
                 Kantsu  -> [Kan]
@@ -226,9 +229,9 @@ shoutsOn np t p hand
         when (s == Chi) $ guard normalShuntsu
         when (hand^.handRiichi /= NoRiichi) $ guard (s == Ron)
         guard $ if s == Ron
-            then complete ( toMentsu mk t xs : (hand^.handCalled), hand^.handConcealed._Wrapped L.\\ xs)
+            then complete ( toMentsu mk t tiles : (hand^.handCalled), hand^.handConcealed._Wrapped L.\\ tiles)
             else mk /= Jantou
-        return $ Shout s np t xs
+        return $ Shout s np t tiles
 
 -- | Tiles the hand can discard for a riichi.
 handCanRiichiWith :: HandA -> [Tile]

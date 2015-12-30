@@ -44,17 +44,23 @@ $newline never
 
         <div class="footer-container">
           <footer class="wrapper">
+
             <h3>About
+
             <p>Funjong is work of #
                <a href="http://funktionaali.com">Samuli Thomasson
                .
+
             <p>Having problems? Found a bug? Have a feature request? #
                <a href=@{SupportR}>File a support ticket here
                . I'll look into it as soon as I can!
+
             <p>Lookup server status on #
               <a href=@{StatusR}>this page
               .
+
             <p>&copy; #{extraCopyright $ appExtra $ settings master}
+
             $if development
               <p>
                 <i>Note: this instance of hajong is a development version.

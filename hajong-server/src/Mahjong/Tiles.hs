@@ -187,9 +187,12 @@ class CircularOrd a where
     (==~) :: CircularOrd a => a -> a -> Bool
     default (==~) :: Eq a => a -> a -> Bool
     (==~) = (==)
+
     succCirc :: CircularOrd a => a -> a
     default succCirc :: (Eq a, Bounded a, Enum a) => a -> a
     succCirc x = if x == maxBound then minBound else succ x
+
+    succMay, predMay :: CircularOrd a => a -> Maybe a
 
 instance CircularOrd Number
 instance CircularOrd Kaze
@@ -206,17 +209,14 @@ instance CircularOrd Tile where
     succCirc (Honor (Kazehai k)) = Honor $ Kazehai $ succCirc k
     succCirc (Honor (Sangenpai s)) = Honor $ Sangenpai $ succCirc s
 
+    succMay (Suited k n _) = Suited k (succ n) False <$ guard (n /= maxBound)
+    succMay _              = Nothing -- TODO implement succession of honors here
+
+    predMay (Suited k n _) = Suited k (pred n) False <$ guard (n /= minBound)
+    predMay _              = Nothing
+
 -- | Next or previous kaze. Wraps around.
 nextKaze, prevKaze :: Kaze -> Kaze
 nextKaze = toEnum . (`mod` 4) . (+ 1) . fromEnum
 {-# DEPRECATED nextKaze "use succCirc" #-}
 prevKaze = toEnum . (`mod` 4) . (\i -> i - 1) . fromEnum
-
--- | Like @succ@ and @pred@, but fail as nothing if the succession wouldn't make sense
--- (i.e the input or output would not be a (defined) suited tile).
-succMay, predMay :: Tile -> Maybe Tile
-succMay (Suited k n a) = Suited k (succ n) a <$ guard (n /= maxBound)
-succMay _              = Nothing
-
-predMay (Suited k n a) = Suited k (pred n) a <$ guard (n /= minBound)
-predMay _              = Nothing
