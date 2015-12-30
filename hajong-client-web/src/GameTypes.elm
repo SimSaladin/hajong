@@ -65,8 +65,9 @@ type alias Round = { kaze : Kaze, round_rot : Int, round_honba : Int }
 
 type RoundResult = DealTsumo { winners : List Winner, payers : List Payer }
                  | DealRon   { winners : List Winner, payers : List Payer }
-                 | DealDraw  { tenpai  : List Payer,  nooten : List Payer }
+                 | DealDraw  { tenpai  : List Tenpai, nooten : List Payer }
 
+type alias Tenpai = { player_kaze : Kaze, points : Points, mentsu : List Mentsu, tiles : List Tile }
 type alias Winner = { player_kaze : Kaze, points : Points, valuehand : Valued }
 type alias Payer  = { player_kaze : Kaze, points : Points }
 

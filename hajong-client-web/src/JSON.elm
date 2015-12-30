@@ -249,14 +249,17 @@ resultsOfType : String -> Decoder RoundResult
 resultsOfType t = case t of
    "dealtsumo" -> object2 (\w p -> DealTsumo { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
    "dealron"   -> object2 (\w p -> DealRon   { winners = w, payers = p }) ("winners" := list winner) ("payers" := list payer)
-   "dealdraw"  -> object2 (\w p -> DealDraw  { tenpai  = w, nooten = p }) ("tenpais" := list payer)  ("nooten" := list payer)
+   "dealdraw"  -> object2 (\w p -> DealDraw  { tenpai  = w, nooten = p }) ("tenpais" := list tenpai)  ("nooten" := list payer)
    _           -> Debug.crash <| "Couldn't deserialize results type `" ++ t ++ "'"
 
 winner : Decoder Winner
-winner = tuple3 (\p points h -> Winner p points h) kaze int valuedHand
+winner = tuple3 Winner kaze int valuedHand
 
 payer : Decoder Payer
-payer = tuple2 (\p v -> Payer p v) kaze int
+payer = tuple2 Payer kaze int
+
+tenpai : Decoder Tenpai
+tenpai = tuple4 Tenpai kaze int (list mentsu) (list tile)
 -- }}}
 
 -- {{{ * Value

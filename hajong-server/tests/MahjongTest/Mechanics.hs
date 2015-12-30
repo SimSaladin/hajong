@@ -185,7 +185,7 @@ gameFlowTests = testGroup "Game flow"
       nextRound kyoku @?= (Ton, 2, 1)
 
   , testCase "When oja tenpai, round kaze doesn't rotate" $ do
-      kyoku <- testKyoku <&> pResults .~ Just (DealDraw [(Ton, 3000)] [])
+      kyoku <- testKyoku <&> pResults .~ Just (DealDraw [(Ton, 3000, error "not needed", error "not needed")] [])
       nextRound kyoku @?= (Ton, 1, 1)
 
   , testCase "When oja wins, round kaze doesn't rotate" $ do

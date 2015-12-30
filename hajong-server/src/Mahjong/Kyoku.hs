@@ -100,7 +100,9 @@ step (WaitingShouts couldShout winning shouts chankan) inp
             | null couldShout                    = proceedWithoutShoutsAfterDiscard chankan
 
             | InpPass pk <- inp, couldShout' <- deleteSet pk couldShout
-                                                 = if' (null couldShout') (flip step InpAuto) return $ WaitingShouts couldShout' winning shouts chankan
+                                                 = do p <- kazeToPlayer pk
+                                                      tellEvent $ DealWaitForShout (p, pk, 0, [])
+                                                      if' (null couldShout') (flip step InpAuto) return $ WaitingShouts couldShout' winning shouts chankan
 
             | InpShout pk _ <- inp, pk `onotElem` couldShout, elemOf (each._1) pk shouts
                                                  = throwError "You have already called on that tile"
@@ -113,6 +115,9 @@ step (WaitingShouts couldShout winning shouts chankan) inp
                                        GT -> return $ WaitingShouts couldShout                (Just (j:js))   shouts chankan -- old takes precedence (XXX: this branch should never even be reached
                                        LT -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i]) shouts chankan -- new takes precedence
                     Nothing     ->           return $ WaitingShouts (deleteSet pk couldShout) (Just [i]) shouts chankan
+
+                p <- kazeToPlayer pk
+                tellEvent $ DealWaitForShout (p, pk, 0, [])
                 case res of
                     WaitingShouts couldShout _ _ _ | null couldShout -> step res InpAuto
                     _ -> return res
@@ -481,10 +486,10 @@ endTsumo winner = do
 endDraw :: InKyoku m => m KyokuResults
 endDraw = do
     hands <- use sHands
-    let x@(tp, np) = both.each %~ fst $ partition (tenpai . snd) $ itoList hands
-    let (r, p) | null tp || null np = (0, 0)
-               | otherwise          = x & both %~ div 3000 . fromIntegral . length
-    dealEnds $ DealDraw (map (,r) tp) (map (,-p) np)
+    let x@(tenpaiHands, nootenHands) = partition (tenpai.snd) (itoList hands) -- & both.each %~ fst
+        (receive, pay) | null tenpaiHands || null nootenHands = (0, 0)
+                       | otherwise                            = x & both %~ div 3000.fromIntegral.length
+    dealEnds $ DealDraw (map (\(k,h) -> (k,receive,h^.handCalled,h^.handConcealed._Wrapped)) tenpaiHands) (map ((,-pay) . fst) nootenHands)
 
 endRon :: InKyoku m => [Kaze] -> Kaze -> m KyokuResults
 endRon winners payer = do
@@ -524,7 +529,7 @@ getValuedHand pk = do
 payPoints :: KyokuResults -> [GameEvent]
 payPoints res = case res of
     DealAbort{}  -> []
-    DealDraw{..} -> map (uncurry GamePoints) $ dTenpais ++ dNooten
+    DealDraw{..} -> map (uncurry GamePoints) $ map (\x -> (x^._1,x^._2)) dTenpais ++ dNooten
     _            -> map f (dWinners res) ++ map (uncurry GamePoints) (dPayers res)
   where f (p, v, _) = GamePoints p v
 

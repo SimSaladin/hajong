@@ -127,7 +127,7 @@ newtype FinalPoints = FinalPoints PointsStatus deriving (Show, Read)
 
 data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                   | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
-                  | DealDraw  { dTenpais :: [Payer], dNooten :: [Payer] }
+                  | DealDraw  { dTenpais :: [Tenpai], dNooten :: [Payer] }
                   | DealAbort { dReason :: AbortiveDraw }
                   deriving (Eq, Show, Read, Typeable)
 
@@ -139,6 +139,7 @@ data AbortiveDraw = KuushuuKyuuhai -- ^ Nine unrelated tiles in initial hand
                   deriving (Eq, Show, Read, Typeable)
 
 type Winner = (Kaze, Points, ValuedHand)
+type Tenpai = (Kaze, Points, [Mentsu], [Tile])
 type Payer  = (Kaze, Points)
 
 -- ** Hand value

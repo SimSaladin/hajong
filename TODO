@@ -31,12 +31,12 @@ x = done, / = half done, ! = needs testing
 [ ] go through usages of (==~) to see if any is not ok; where comparing shouts from client-side in particular
 [ ] go through the TODO's in the code
 # client
-[ ] Display winning hand
 [ ] sending messages
-[ ] Undisplay riichi when clicked
 [ ] Highlight corresponding tiles on shout hovers
-[ ] when a call is passed, update callable info to client. client should not show it
 [ ] interface for viewing different kyoku states
+[x] Display hands of tenpai players on ryuukyoku
+[x] when a call is passed, update callable info to client. client should not show it
+[x] Display winning hand
 [x] agari-call deserialization has changed (agarichankan removed)
 [x] Display concealed hands of other players
 [x] display aka-dora as red

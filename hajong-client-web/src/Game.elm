@@ -107,28 +107,17 @@ dispDiscards co gs rs = group <| map
 dispOthersHands : Controls -> GameState -> RoundState -> Form
 dispOthersHands co gs rs = [Ton, Nan, Shaa, Pei]
    |> List.filter (\x -> x /= rs.mypos)
-   |> map (
-      \k -> Util.listFind k rs.hands
-         |> dispOthersHand co k
-         |> toForm
-         |> moveRotateKaze called_off rs.mypos k
+   |> map (\k ->
+      let maybeTenpai = rs.results `Maybe.andThen` (\res -> case res of
+            DealDraw{tenpai} -> Just tenpai
+            _                -> Nothing) `Maybe.andThen` Util.listFindWith .player_kaze k
+
+      in (case maybeTenpai of
+            Just {mentsu,tiles} -> flow right <| map dispTile tiles ++ map (dispMentsu k) mentsu
+            Nothing             -> Util.listFind k rs.hands |> dispOthersHand co k
+         ) |> toForm |> moveRotateKaze called_off rs.mypos k
       )
    |> group
-
--- | `movRotateKaze off me him this` rotates a form 'this' of 'him' to correct direction
--- when looked from 'me', and applies an offset of 'off' pixels in his direction.
--- think: Discard pools, etc.
-moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
-moveRotateKaze off mypos pos =
-   case (kazeNth pos - kazeNth mypos) % 4 of
-      0 -> moveY (-off)
-      1 -> moveX off    << rotate (degrees 90) 
-      2 -> moveY off    << rotate (degrees 180)
-      _ -> moveX (-off) << rotate (degrees 270)
-
--- | Riichi stick, not rotated.
-playerRiichi : Form
-playerRiichi = toForm <| image 200 20 "/static/img/point1000.svg"
 
 -- }}}
 
@@ -185,6 +174,21 @@ kazeImage kaze = fittedImage 28 38 <| case kaze of
 
 titleText : String -> Element
 titleText txt = T.fromString txt |> T.height 40 |> centered
+
+-- | `movRotateKaze off me him this` rotates a form 'this' of 'him' to correct direction
+-- when looked from 'me', and applies an offset of 'off' pixels in his direction.
+-- think: Discard pools, etc.
+moveRotateKaze : Float -> Kaze -> Kaze -> Form -> Form
+moveRotateKaze off mypos pos =
+   case (kazeNth pos - kazeNth mypos) % 4 of
+      0 -> moveY (-off)
+      1 -> moveX off    << rotate (degrees 90) 
+      2 -> moveY off    << rotate (degrees 180)
+      _ -> moveX (-off) << rotate (degrees 270)
+
+-- | Riichi stick, not rotated.
+playerRiichi : Form
+playerRiichi = toForm <| image 200 20 "/static/img/point1000.svg"
 -- }}}
 
 -- {{{ Display: Results ----------------------------------------------
@@ -224,7 +228,7 @@ dispPayer {player_kaze, points} = T.concat
    , T.fromString (toString points) |> T.append (T.fromString "-") |> T.color red ]
    |> centered
 
-dispTenpai : Payer -> Element
+dispTenpai : Tenpai -> Element
 dispTenpai {player_kaze, points} = T.concat
    [ T.fromString (toString player_kaze), T.fromString "        "
    , T.fromString (toString points) |> T.append (T.fromString "+") |> T.color green ]

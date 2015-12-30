@@ -36,6 +36,11 @@ listFind k xs = case xs of
                                else listFind k xs
    [] -> Debug.crash <| "Key " ++ toString k ++ " not found in " ++ toString xs
 
+listFindWith : (a -> k) -> k -> List a -> Maybe a
+listFindWith f k xs = case xs of
+   y :: ys -> if f y == k then Just y else listFindWith f k ys
+   []      -> Nothing
+
 fromJust : Maybe a -> a
 fromJust x = case x of
    Nothing -> Debug.crash "fromJust: Nothing"
