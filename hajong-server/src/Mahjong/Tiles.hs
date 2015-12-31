@@ -26,15 +26,27 @@ import qualified Data.List as L
 data Tile = Suited TileKind Number Aka
           | Honor Honor
 
--- | A wrapped tile, with Eq and Ord via (==~).
+-- | A wrapped tile, with Eq and Ord via (==~), e.g. semantic equality.
+-- Discards flags like aka-dora info.
 newtype TileEq = TileEq Tile deriving (Show, Read, CircularOrd)
 
 instance Eq TileEq where a == b = a ==~ b
 instance Ord TileEq where
-    TileEq (Suited tk n a) <= TileEq (Suited tk' n' a') = (tk, n, a) <= (tk', n', a')
-    TileEq Suited{} <= TileEq Honor{}                   = True
-    TileEq (Honor h) <= TileEq (Honor h')               = h <= h'
-    _ <= _                                              = False
+    TileEq (Honor h) <= TileEq (Honor h')              = h <= h'
+    TileEq (Suited tk n _) <= TileEq (Suited tk' n' _) = (tk, n) <= (tk', n')
+    TileEq Suited{} <= TileEq Honor{}                  = True
+    _ <= _                                             = False
+
+-- | XXX: The derived, "real" Eq instance would be useful for Tile in e.g.
+-- when working with calls and mentsu. But then the Algo-module would
+-- break. Should perhaps refactor things where the semantic equality is
+-- important to use the @TileEq@ wrapper, and derive the Tile instances.
+instance Eq Tile where (==) = (==~)
+instance Ord Tile where
+    Honor h <= Honor h'              = h <= h'
+    Suited tk n _ <= Suited tk' n' _ = (tk, n) <= (tk', n')
+    Suited{} <= Honor{}              = True
+    _ <= _                           = False
 
 data TileKind = ManTile | PinTile | SouTile | HonorTile
               deriving (Show, Read, Eq, Ord)
@@ -96,7 +108,7 @@ instance Pretty Tile where
 instance Show Tile where showsPrec _ = displayS . renderCompact . dquotes . pretty
 instance Read Tile where
     readsPrec _ = \s -> case lex s of
-        ('"':xs, s) : []  -> [(fromString (initEx xs), s)]
+        ('"':xs, str) : []  -> [(fromString (initEx xs), str)]
         ([t],'!':s') : [] -> [(fromString [t,'!'], s')]
         (t,s') : [] -> [(fromString t, s')]
         _ -> []
@@ -185,14 +197,19 @@ terminal t = case tileNumber t of
 -- | @CircularOrd@ models the succession of tiles, dragons and winds.
 class CircularOrd a where
     (==~) :: CircularOrd a => a -> a -> Bool
-    default (==~) :: Eq a => a -> a -> Bool
-    (==~) = (==)
-
-    succCirc :: CircularOrd a => a -> a
-    default succCirc :: (Eq a, Bounded a, Enum a) => a -> a
-    succCirc x = if x == maxBound then minBound else succ x
-
+    succCirc, predCirc :: CircularOrd a => a -> a
     succMay, predMay :: CircularOrd a => a -> Maybe a
+
+    default (==~) :: Eq a => a -> a -> Bool
+    default succCirc :: (Eq a, Bounded a, Enum a) => a -> a
+    default predCirc :: (Eq a, Bounded a, Enum a) => a -> a
+    default succMay :: (Eq a, Bounded a, Enum a) => a -> Maybe a
+    default predMay :: (Eq a, Bounded a, Enum a) => a -> Maybe a
+    (==~)      = (==)
+    succCirc x = if x == maxBound then minBound else succ x
+    predCirc x = if x == minBound then maxBound else pred x
+    succMay x  = if x == maxBound then Nothing else Just (succ x)
+    predMay x  = if x == minBound then Nothing else Just (pred x)
 
 instance CircularOrd Number
 instance CircularOrd Kaze
@@ -209,14 +226,12 @@ instance CircularOrd Tile where
     succCirc (Honor (Kazehai k)) = Honor $ Kazehai $ succCirc k
     succCirc (Honor (Sangenpai s)) = Honor $ Sangenpai $ succCirc s
 
+    predCirc (Suited k n _) = Suited k (predCirc n) False
+    predCirc (Honor (Kazehai k)) = Honor $ Kazehai $ predCirc k
+    predCirc (Honor (Sangenpai s)) = Honor $ Sangenpai $ predCirc s
+
     succMay (Suited k n _) = Suited k (succ n) False <$ guard (n /= maxBound)
     succMay _              = Nothing -- TODO implement succession of honors here
 
     predMay (Suited k n _) = Suited k (pred n) False <$ guard (n /= minBound)
     predMay _              = Nothing
-
--- | Next or previous kaze. Wraps around.
-nextKaze, prevKaze :: Kaze -> Kaze
-nextKaze = toEnum . (`mod` 4) . (+ 1) . fromEnum
-{-# DEPRECATED nextKaze "use succCirc" #-}
-prevKaze = toEnum . (`mod` 4) . (\i -> i - 1) . fromEnum

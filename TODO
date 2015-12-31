@@ -28,8 +28,8 @@ x = done, / = half done, ! = needs testing
 [x] add test: kokushi furiten
 [x] add test: chiitoi furiten
 [x] shouting a aka-dora results in all tiles of the mentsu be aka-dora
-[ ] go through usages of (==~) to see if any is not ok; where comparing shouts from client-side in particular
-[ ] go through the TODO's in the code
+[ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
+[ ] attempt compiling with -Wall -Werror and fix until we compile
 # client
 [ ] sending messages
 [ ] interface for viewing different kyoku states
@@ -41,16 +41,19 @@ x = done, / = half done, ! = needs testing
 [x] Display concealed hands of other players
 [x] display aka-dora as red
 # site
-[x] report bug button: game UUID
+[ ] In the settings page, encourage making feature requests via the support form
+[ ] test and make the support form email functionality work
 [ ] Rework lobby
 [ ] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
       [ ] test facebook authentication
-[ ] Save game results to relational database
 [ ] Set up logging from workers to a file.
+[x] report bug button: game UUID
 [x] The yesod binary doesn't reconnect to hajong-server automatically. Make it shut down on disconnect.
 
 
 # someday/maybe
+[ ] add tests: riichi-transfers on multi-ron
+[ ] Save game results to relational database
 [ ] inspect test failure:
       TileGroupings of tiles of 'tileGroup' .<-- [ tileGroup ]:                    FAIL (0.34s)
               *** Gave up! Passed only 98 tests.

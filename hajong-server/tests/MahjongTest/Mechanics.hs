@@ -331,7 +331,7 @@ riichiTests = testGroup "Riichi tests"
           k ^?! pPlayers . ix Ton . _2 @?= 24000
           k ^?! pPlayers . ix Nan . _2 @?= 24000
 
-  , testCase "Riichi points from table are transferred to winner on ron" $ do
+  , testCase "Riichi points from table are removed on ron" $ do
       kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5Pinfu
                          <&> pRiichi .~ 2000
                          <&> sWall %~ (["P3", "P5"] ++)

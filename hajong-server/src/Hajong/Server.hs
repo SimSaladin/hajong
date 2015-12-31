@@ -468,10 +468,10 @@ workerDied gid res = do
 
         rg           <- readTVar (ss^.seWorkers) <&> (^?! at gid._Just)
         let wd        = rg^.gWorker
-        state        <- readTVar (wd^.wGame) <&> map getIdent
+        gs           <- readTVar (wd^.wGame) <&> map getIdent
         machine      <- readTVar (wd^.wMachine)
         let clientSet = rg^..gClients.folded & setFromList
-            pg        = PastGame (_Left %~ tshow $ res) (wd^.wSettings) state machine
+            pg        = PastGame (_Left %~ tshow $ res) (wd^.wSettings) gs machine
 
         modifyTVar' (ss^.seWorkers) (at gid .~ Nothing)
         modifyTVar' (ss^.seLounge) (union clientSet)

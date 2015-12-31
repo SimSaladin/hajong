@@ -67,6 +67,9 @@ data Machine = NotBegun Int -- Seconds to wait before continuing. Waiting is not
              | WaitingDraw Kaze Bool
              | WaitingDiscard Kaze
              | WaitingShouts (Set Kaze) (Maybe [Int]) [(Kaze, Shout)] Bool -- ^ set of players who could shout but have not (passed), index of now winning shout(s), flag: chankan? (to continue with discard)
+                -- TODO the Maybe [Int] could be replaced with just [Int],
+                -- [] representing the Nothing-case. Must take note of the
+                -- safecopy instances, though.
              | KyokuEnded KyokuResults
              deriving (Eq, Show, Read)
 
@@ -110,16 +113,17 @@ step (WaitingShouts couldShout winning shouts chankan) inp
             | InpShout pk shout <- inp, Just i <- L.findIndex (== (pk, shout)) shouts
                                                  = do
                 res <- use pTurn >>= \tk -> case winning of
-                    Just (j:js) -> case shoutPrecedence tk (shouts L.!! j) (pk, shout) of
-                                       EQ -> return $ WaitingShouts (deleteSet pk couldShout) (Just (i:j:js)) shouts chankan -- new goes through with old ones
-                                       GT -> return $ WaitingShouts couldShout                (Just (j:js))   shouts chankan -- old takes precedence (XXX: this branch should never even be reached
-                                       LT -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i]) shouts chankan -- new takes precedence
-                    Nothing     ->           return $ WaitingShouts (deleteSet pk couldShout) (Just [i]) shouts chankan
+                    Just (j:js) -> case shoutPrecedence tk (shouts L.!! j) (pk, shout) of -- XXX: Would be prettier with a view-pattern
+                        EQ      -> return $ WaitingShouts (deleteSet pk couldShout) (Just (i:j:js)) shouts chankan -- new goes through with old ones
+                        GT      -> return $ WaitingShouts couldShout                (Just (j:js))   shouts chankan -- old takes precedence (XXX: this branch should never even be reached
+                        LT      -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i])      shouts chankan -- new takes precedence
+                    Just []     -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i])      shouts chankan
+                    Nothing     -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i])      shouts chankan
 
                 p <- kazeToPlayer pk
                 tellEvent $ DealWaitForShout (p, pk, 0, [])
                 case res of
-                    WaitingShouts couldShout _ _ _ | null couldShout -> step res InpAuto
+                    WaitingShouts couldShout' _ _ _ | null couldShout' -> step res InpAuto
                     _ -> return res
             | otherwise = throwError "No such call is possible"
 
@@ -182,7 +186,7 @@ dealTurnAction p ta = mconcat $ case ta of
     TurnTileDiscard dc ->
         [ Endo $ sHands.ix p.handDiscards %~ (|> dc) ]
 
-    TurnTileDraw w _ ->
+    TurnTileDraw _w _ ->
         [ Endo $ pWallTilesLeft -~ 1 ]
 
     TurnAnkan _ ->
@@ -210,14 +214,14 @@ maybeGameResults kyoku@Kyoku{..}
     score = finalPoints $ mapFromList $ _pPlayers ^.. each.to (\(p,ps,_) -> (p, ps))
 
 nextRound :: Kyoku -> Round
-nextRound Kyoku{..}
+nextRound Kyoku{..} -- XXX: with GHC 7.10.2, this produces a non-exhaustiveness error.. not sure why.
     | Just DealAbort{..} <- _pResults = _pRound & _3 +~ 1
     | Just DealDraw{..}  <- _pResults = _pRound & if elemOf (each._1) Ton dTenpais then _3 +~ 1 else set _3 (_pRound^._3 + 1) . roundRotates
     | Just DealRon{..}   <- _pResults = _pRound & if elemOf (each._1) Ton dWinners then _3 +~ 1 else roundRotates
     | Just DealTsumo{..} <- _pResults = _pRound & if elemOf (each._1) Ton dWinners then _3 +~ 1 else roundRotates
     | Nothing            <- _pResults = _pRound
   where
-    roundRotates (k, 4, _) = (nextKaze k, 1, 0)
+    roundRotates (k, 4, _) = (succCirc k, 1, 0)
     roundRotates (k, r, _) = (k, r + 1, 0)
 
 -- | Advance the game to next deal, or end it.
@@ -249,7 +253,7 @@ nextDeal kyoku = do tiles <- shuffleTiles
     nextOja       = kyoku ^?! pPlayers.ix Nan . _1 :: Player
 
 rotatePlayers :: Map Kaze a -> Map Kaze a
-rotatePlayers = mapFromList . map (_1 %~ prevKaze) . mapToList
+rotatePlayers = mapFromList . map (_1 %~ predCirc) . mapToList
 
 nagashiOrDraw :: InKyoku m => m Machine
 nagashiOrDraw = do
@@ -397,7 +401,7 @@ updateTempFuritens = do
 -- | Next player who draws a tile
 advanceTurn :: InKyoku m => m Kaze
 advanceTurn = do
-    pk <- use pTurn <&> nextKaze
+    pk <- use pTurn <&> succCirc
     updateHand pk . set handState DrawFromWall =<< handOf' pk
     tellEvent $ DealTurnBegins pk
     return pk
@@ -446,7 +450,8 @@ askForTurnAction n = do
 --
 -- Multiple shouts are allowed only when they go out
 processShouts :: InKyoku m => [(Kaze, Shout)] -> Bool -> m Machine
-processShouts shouts@((fsk,fs):_) chank = do
+processShouts []                  _      = return $ CheckEndConditionsAfterDiscard
+processShouts shouts@((fsk,fs):_) _chank = do
     tk <- use pTurn
     th <- handOf' tk
 
@@ -497,11 +502,12 @@ endRon winners payer = do
     honba       <- use pHonba
     riichi      <- use pRiichi
 
-    let pointsForHonba  = honba * 300
-        pointsFromPayer = map (+ pointsForHonba) $ zipWith valuedHandPointsForRon winners valuedHands
-        winEntries      = zip3 winners pointsFromPayer valuedHands
+    let pointsFromPayer = zipWith valuedHandPointsForRon winners valuedHands
+        pointsExtra     = sum [riichi, honba * 300]
+        Just extraGoesTo = payer ^.. iterated succCirc & find (`elem` winners) -- Iterate every kaze, so one must be an element. unless no one won.
+        winEntries      = map (\x -> if x^._1 == extraGoesTo then x & _2 +~ pointsExtra else x) $ zip3 winners pointsFromPayer valuedHands
 
-    dealEnds $ DealRon winEntries [(payer, negate $ sum pointsFromPayer)]
+    dealEnds $ DealRon winEntries [(payer, negate $ pointsExtra + sum pointsFromPayer)]
 
 -- *** Helpers
 
@@ -622,11 +628,8 @@ buildPlayerState deal pk = flip appEndo (deal { _sHands = imap (\k -> if pk == k
 updateHand :: InKyoku m => Kaze -> HandA -> m ()
 updateHand pk new = do
     p   <- kazeToPlayer pk
-    old <- handOf' pk
     sHands.at pk .= Just new
-    {- when (old /= new) $ -}
     tellEvent (DealPrivateHandChanged p pk new)
-    {- when (maskPublicHand old /= maskPublicHand new) $ -}
     tellEvent (DealPublicHandChanged pk $ maskPublicHand new)
 
 tellEvent :: InKyoku m => GameEvent -> m ()
@@ -679,9 +682,11 @@ getShouts chankan dt = do
         if' lastTile (filter $ (== Ron) . shoutKind . snd) id -- when there are no tiles, only go-out shouts are allowed
         shouts
 
+yakuNotExtra :: Yaku -> Bool
 yakuNotExtra Yaku{}      = True
 yakuNotExtra YakuExtra{} = False
 
+toChankan :: Shout -> Shout
 toChankan s = s { shoutKind = Chankan }
 
 -- | The shout wouldn't result in a 0-yaku mahjong call

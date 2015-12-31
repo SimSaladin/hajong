@@ -51,8 +51,7 @@ data WorkerData = WorkerData
                 } deriving (Typeable)
 
 -- | Result from a dying worker thread.
-type WorkerResult = Either SomeException FinalPoints
-                    -- ^ Left only on an unexpected event, a bug.
+type WorkerResult = Either SomeException FinalPoints -- ^ Left only on an unexpected event, a bug.
 
 data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
                  | WorkerPartPlayer Client (GameState Client -> IO ())
@@ -67,7 +66,6 @@ instance MonadBaseControl IO Worker where
     type StM Worker a = a
     liftBaseWith f    = Worker $ liftBaseWith $ \q -> f (q . runWorker)
     restoreM          = Worker . restoreM
-
 
 -- | When a worker exits gracefully it spits out @FinalPoints@.
 type WCont = Worker FinalPoints
@@ -92,40 +90,27 @@ runWCont :: WorkerData -> Worker a -> IO a
 runWCont st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
     where logger loc src level = pushLogStr (st^.wLogger) . defaultLogStr loc src level
 
-roundM :: RoundM a -> Worker (Either Text (a, Worker ()))
-roundM ma = do
-        gs <- rview wGame
-        return $ do (res, kyoku, events) <- runRoundM ma gs
-                    return (res, rmodify wGame (gameDeal .~ Just kyoku) >> sendGameEvents events)
-
-unsafeRoundM :: RoundM a -> Worker a
-unsafeRoundM = roundM >=> either failed go
-  where failed e  = error $ "unsafeRoundM: unexpected Left: " <> unpack e
-        go (a, m) = m >> return a
-
 -- * Update state and emit events
 
 -- | Send to everyone in game.
 multicast :: Event -> Worker ()
 multicast ev = do gs <- rview wGame
-                  mapM_ (`safeUnicast` ev) (gs^.gamePlayers^..each)
+                  mapM_ (`safeUnicast` ev) (gs^..gamePlayers.each)
 
--- | Hide sensitive info per player
+-- | Send private events individually and public events in bulk.
 sendGameEvents :: [GameEvent] -> Worker ()
 sendGameEvents events = do
     gs <- rview wGame
-    public <- filterM (f gs) events
+    public <- filterM (sendPrivates gs) events
     multicast $ InGameEvents public
   where
-    f gs e@(DealStarts p _ _)                = sendPrivate gs p e
-    f gs e@(DealWaitForShout (p,_,_,_))      = sendPrivate gs p e
-    f gs e@(DealWaitForTurnAction (p,_,_,_)) = sendPrivate gs p e
-    f gs e@(DealPrivateHandChanged p _ _)    = sendPrivate gs p e
-    f _ _                                    = return True
+    sendPrivates gs e@(DealStarts p _ _)                = f gs p e
+    sendPrivates gs e@(DealWaitForShout (p,_,_,_))      = f gs p e
+    sendPrivates gs e@(DealWaitForTurnAction (p,_,_,_)) = f gs p e
+    sendPrivates gs e@(DealPrivateHandChanged p _ _)    = f gs p e
+    sendPrivates _ _                                    = return True
 
-    sendPrivate gs p e = do
-        maybe (return ()) (`safeUnicast` InGamePrivateEvent e) (playerToClient gs p)
-        return False
+    f gs p e = maybe (return ()) (`safeUnicast` InGamePrivateEvent e) (playerToClient gs p) $> False
 
 -- * Input layer
 
@@ -133,32 +118,24 @@ sendGameEvents events = do
 takeInput :: Worker WorkerInput
 takeInput = liftIO . atomically . takeTMVar =<< view wInput
 
--- | Process input. If a WorkerGameAction would succeed, return
--- corresponding MachineInput.
+-- | This monster is called when the worker is ready to take next input
+-- either from a client or server (both come in to the same TMVar).
+--
+-- In case of a WorkerGameAction: If it would be valid in the kyoku,
+-- return the action which applies the action and the corresponding
+-- continuation state.
 processInput :: WorkerInput -> Worker (Maybe (Machine, Worker ()))
 processInput (WorkerAddPlayer client callback)  = addPlayer client callback >> return Nothing
 processInput (WorkerPartPlayer client callback) = partPlayer client callback >> return Nothing
-processInput (WorkerGameAction c ga)            = do
-        gs <- rview wGame
-        case clientToPlayer c gs of
-            Nothing -> unicastError c "You are not playing in this game" >> return Nothing
-            Just p  -> do
-                k  <- unsafeRoundM $ playerToKaze p
-                let inp = case ga of
-                        GameTurn ta -> InpTurnAction k ta
-                        GameShout sh -> InpShout k sh
-                        GameDontCare -> InpPass k
-                res <- safeStep inp
-                case res of
-                    Left err                           -> unicastError c err >> return Nothing
-                    -- TODO Correct here would be to see if m and previous machine
-                    -- constructors match; if they do, apply and return Nothing.
-                    -- otherwise yield (m,a)
-                    Right (m, a) | GameDontCare <- ga -> a >> rswap wMachine m >> return Nothing -- XXX: This transaction, a >> rswap,  is possibly racy
-                                 | otherwise          -> return $ Just (m, a)
-processInput WorkerForceStart                   = rmodify wGame (over (gamePlayers.each) (\c -> c { isReady = True })) >> return Nothing
+
+processInput (WorkerGameAction c ga)            = fmap (clientToPlayer c) (rview wGame) >>= \case
+    Just p  -> gameActionToKyokuInput p ga >>= safeStep >>= either (\e -> unicastError c e >> return Nothing) (return . Just)
+    Nothing -> unicastError c "You are not playing in this game" >> return Nothing
+
+processInput WorkerForceStart                   = rmodify wGame (gamePlayers.each %~ \c -> c { isReady = True }) >> return Nothing
+
 processInput (WorkerReplaceKyoku machine kyoku) = do rmodify wGame (gameDeal .~ kyoku)
-                                                     _ <- rswap wMachine machine
+                                                     void $ rswap wMachine machine
                                                      $logInfo "Game state was replaced successfully"
                                                      return Nothing
 
@@ -187,12 +164,13 @@ beginGame gs = do
 -- | Monitor the kyoku machine and perhaps do something in there.
 processMachine :: Machine -> WCont
 processMachine (NotBegun s)                   = workerWait s >> processKyokuStarts
-processMachine CheckEndConditionsAfterDiscard = unsafeStep InpAuto    >>= processMachine
+processMachine CheckEndConditionsAfterDiscard = unsafeStep InpAuto    >>= processMachine -- auto check
 processMachine WaitingDraw{}                  = unsafeStep InpAuto    >>= processMachine -- auto draw
 processMachine WaitingDiscard{}               = stepByClientOrTimeout >>= processMachine
 processMachine WaitingShouts{}                = stepByClientOrTimeout >>= processMachine
 processMachine (KyokuEnded res)               = processKyokuEnded res
 
+-- | As a precondition, the gamestate must be present in the workerdata.
 processKyokuStarts :: WCont
 processKyokuStarts = do
     Just k <- rview wGame <&> _gameDeal
@@ -204,7 +182,7 @@ processKyokuEnded :: KyokuResults -> WCont
 processKyokuEnded results = do
     $logInfo $ "Kyoku ended: " <> tshow results
     rmodify wGame (gameDeal._Just.pResults.~Just results)
-    _ <- rswap wMachine (NotBegun 15)
+    void $ rswap wMachine (NotBegun 15)
     processMachine =<< rview wMachine
 
 -- * Managing connected players 
@@ -215,16 +193,13 @@ partPlayer :: Client -> (GameState Client -> IO ()) -> Worker ()
 partPlayer client callback = do
     $logInfo $ "Client leaving: " <> tshow client
     gsv <- view wGame
-
     mgs <- atomically $ do
         gs <- readTVar gsv
         case clientToPlayer client gs of
             Just p  -> do
                 let gs' = setClient (dummyClient $ getNick client ++ " (n/a)") p gs
-                writeTVar gsv gs'
-                return (Just gs')
-            Nothing ->
-                return Nothing
+                writeTVar gsv gs' $> Just gs'
+            Nothing -> return Nothing
 
     maybe ($logError $ "Parting client " ++ getNick client ++ ", but it doesn't exist.")
           (liftIO . callback) mgs
@@ -244,12 +219,12 @@ addPlayer client callback = do
 
     clientEither client e_gs $ \gs -> do
         when (gs^.gameDeal.to isJust) $ do
-            let p = fromJust $ clientToPlayer client gs
-            unsafeRoundM $ updatePlayerNick p (getNick client)
+            let p = fromJust $ clientToPlayer client gs -- We check in above transaction the client really is there
+            unsafeRoundM $ updatePlayerNick p (getNick client) -- XXX: cannot be in the same transaction because the kyoku machinery wouldn't update until the resulting events are applied, so the state would be out-of-date in the second acation
             unsafeRoundM $ tellPlayerState p
         liftIO $ callback gs
 
--- * Helper combinators
+-- * Racing
 
 -- | "workerRace n ma b" races between actions "ma" and "threadDelay n >> return b".
 workerRace :: Int -> Worker a -> a -> Worker a
@@ -261,29 +236,48 @@ workerRace secs ma b = do
 workerWait :: Int -> Worker ()
 workerWait n = liftIO $ threadDelay (n * 1000000)
 
+-- * Gameplay-related
+
+-- | See what would happen if the given round action was executed.
+roundM :: RoundM a -> Worker (Either Text (a, Worker ()))
+roundM ma = do
+        gs <- rview wGame
+        return $ do (res, kyoku, events) <- runRoundM ma gs
+                    return (res, rmodify wGame (gameDeal .~ Just kyoku) >> sendGameEvents events)
+
+-- | Just execute the action - if it fails the worker dies! Use with care.
+unsafeRoundM :: RoundM a -> Worker a
+unsafeRoundM = roundM >=> either failed go
+  where failed e  = error $ "unsafeRoundM: unexpected Left: " <> unpack e
+        go (a, m) = m >> return a
+
+-- | Argument player *must* be present in the game.
+gameActionToKyokuInput :: Player -> GameAction -> Worker MachineInput
+gameActionToKyokuInput p ga = do
+    k <- unsafeRoundM (playerToKaze p)
+    return $ case ga of
+        GameTurn ta  -> InpTurnAction k ta
+        GameShout sh -> InpShout k sh
+        GameDontCare -> InpPass k
+
 -- | Safe kyoku step. Checks whether the step is valid, but does not do
 -- any relevant modifications to the worker state. The modifications can be
 -- done by running the @Worker@ action of the result.
 safeStep :: MachineInput -> Worker (Either Text (Machine, Worker ()))
-safeStep inp = do
-    m  <- rview wMachine
-    roundM (step m inp)
+safeStep inp = rview wMachine >>= roundM . flip step inp
 
--- | Takes an unsafe step in the kyoku machine.
--- Use with care, it may crash the worker on a logic bug!
+-- | See @unsafeRoundM@.
 unsafeStep :: MachineInput -> Worker Machine
 unsafeStep inp = do
-    m  <- rview wMachine
-    m' <- unsafeRoundM (step m inp)
-    _  <- rswap wMachine m'
-    return m'
+    m <- rview wMachine >>= unsafeRoundM . flip step inp
+    rswap wMachine m $> m
 
 -- | Wait until someone inputs a valid action to the kyoku machine
 -- (@stepByClient@) or a timeout is reached. After timeout we continue with
 -- an @InpAuto@.
 stepByClientOrTimeout :: Worker Machine
 stepByClientOrTimeout = do
-    let secs = 15
+    let secs = 15 -- TODO hard-coded limit
     join $ workerRace secs stepByClient
          $ do $logDebug "Time-out, proceeding automatically."
               unsafeStep InpAuto
@@ -292,8 +286,4 @@ stepByClientOrTimeout = do
 -- machine.
 stepByClient :: Worker (Worker Machine)
 stepByClient = go
-    where go = do inp <- takeInput
-                  res <- processInput inp
-                  case res of
-                      Nothing -> go
-                      Just (m, a) -> return $ a >> rswap wMachine m >> return m
+    where go = takeInput >>= processInput >>= maybe go (\(m, a) -> return $ a >> rswap wMachine m $> m)

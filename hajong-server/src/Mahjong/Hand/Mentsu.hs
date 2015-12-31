@@ -17,7 +17,7 @@ module Mahjong.Hand.Mentsu
     shuntsuWith, fromShout, promoteToKantsu,
 
     -- * Functions
-    mentsuTiles, mentsuShouted,
+    mentsuShouted,
     isJantou, isShuntsu, isKoutsu, isKantsu,
 
     -- * Shouts
@@ -38,7 +38,7 @@ data Mentsu = Mentsu
     { mentsuKind :: MentsuKind
     , mentsuTiles :: [Tile] -- always in order
     , mentsuShout :: Maybe Shout
-    } deriving (Show, Read {-, Eq, Ord -})
+    } deriving (Show, Read, Eq, Ord)
 
 data MentsuKind = Shuntsu -- ^ 3 Tile straight
                 | Koutsu -- ^ Triplet
@@ -61,7 +61,7 @@ data Shout = Shout
            , shoutFrom :: Kaze
            , shoutTile :: Tile
            , shoutTo :: [Tile]
-           } deriving (Show, Read)
+           } deriving (Show, Read, Eq, Ord)
 
 -- | Note: Ord instance is used to determine calling order.
 data ShoutKind = Chi | Kan | Pon | Ron | Chankan
@@ -107,7 +107,7 @@ fromShout s@Shout{..} = Mentsu mk (sortOn TileEq $ shoutTile : shoutTo) (Just s)
                -- Ron and Chankan:
                _ | [_]    <- shoutTo                           -> Jantou
                  | [x, y] <- shoutTo, x ==~ y                  -> Koutsu
-                 | Just m <- shuntsuWith (shoutTile : shoutTo) -> Shuntsu
+                 | Just _ <- shuntsuWith (shoutTile : shoutTo) -> Shuntsu
                  | otherwise                                   -> error "fromShout: malformed shout"
 
 -- | @shuntsuWith tiles@ attempts to build a shuntsu from `tiles`. Note
@@ -150,10 +150,10 @@ shoutPrecedence :: Kaze -- ^ shout from
                 -> Ordering
 shoutPrecedence dk (k, s) (k', s') = case comparing shoutKind s s' of
     EQ | shoutKind s `elem` [Ron, Chankan] -> EQ -- all winning shouts are equal
-       | nextKaze dk == k                  -> GT -- a right after target
-       | nextKaze dk == k'                 -> LT -- b right after target
-       | prevKaze dk == k                  -> LT -- a before target
-       | prevKaze dk == k'                 -> GT -- b before target
+       | succCirc dk == k                  -> GT -- a right after target
+       | succCirc dk == k'                 -> LT -- b right after target
+       | predCirc dk == k                  -> LT -- a before target
+       | predCirc dk == k'                 -> GT -- b before target
        | otherwise                         -> EQ -- a == b
     other                                  -> other
 

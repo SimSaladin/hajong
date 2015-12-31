@@ -332,7 +332,7 @@ tenhouOrChiihou = do
 renhou :: YakuCheck Yaku
 renhou = do
     requireFlag FirstRoundUninterrupted
-    undefined -- TODO This is not implemented yet.
+    error "Not implemented" -- TODO This is not implemented yet.
 
 countingDora :: YakuCheck Yaku
 countingDora = do

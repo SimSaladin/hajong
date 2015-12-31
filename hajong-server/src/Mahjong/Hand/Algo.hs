@@ -53,17 +53,6 @@ type Shanten = Maybe Int
 -- | A single grouping variant.
 type Grouping = [TileGroup]
 
--- To ease our lifes, we derive orphan instances for this module only.
--- TODO: These are actually useful when comparing shouts coming from the
--- client-side..
-instance Eq Tile where (==) = (==~)
-deriving instance Ord Tile
-deriving instance Eq Mentsu
-deriving instance Ord Mentsu
-deriving instance Eq Shout
-deriving instance Ord Shout
-
-
 -- | Data type used to describe some group of tiles.
 data TileGroup = GroupWait MentsuKind [Tile] [Tile]
                 -- ^ A @MentsuWait kind Inhand waits@ describes a wait on

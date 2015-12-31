@@ -215,7 +215,7 @@ shoutsOn np t p hand
     , either (== t) (elem t) x = [Shout Ron np t []]
     | otherwise                = concatMap toShout $ possibleShouts t
   where
-    normalShuntsu     = nextKaze np == p
+    normalShuntsu     = succCirc np == p
     ih                = sort (runIdentity $ _handConcealed hand) -- NOTE: sort
     aka               = filter isAka ih
     toShout (mk, xs)  = do
