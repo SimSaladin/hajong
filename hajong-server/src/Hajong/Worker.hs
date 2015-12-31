@@ -163,12 +163,15 @@ beginGame gs = do
 
 -- | Monitor the kyoku machine and perhaps do something in there.
 processMachine :: Machine -> WCont
-processMachine (NotBegun s)                   = workerWait s >> processKyokuStarts
-processMachine CheckEndConditionsAfterDiscard = unsafeStep InpAuto    >>= processMachine -- auto check
-processMachine WaitingDraw{}                  = unsafeStep InpAuto    >>= processMachine -- auto draw
-processMachine WaitingDiscard{}               = stepByClientOrTimeout >>= processMachine
-processMachine WaitingShouts{}                = stepByClientOrTimeout >>= processMachine
-processMachine (KyokuEnded res)               = processKyokuEnded res
+processMachine m@(NotBegun s)                   = logMachine m >> workerWait s >> processKyokuStarts
+processMachine m@CheckEndConditionsAfterDiscard = logMachine m >> unsafeStep InpAuto    >>= processMachine -- auto check
+processMachine m@WaitingDraw{}                  = logMachine m >> unsafeStep InpAuto    >>= processMachine -- auto draw
+processMachine m@WaitingDiscard{}               = logMachine m >> stepByClientOrTimeout >>= processMachine
+processMachine m@WaitingShouts{}                = logMachine m >> stepByClientOrTimeout >>= processMachine
+processMachine m@(KyokuEnded res)               = logMachine m >> processKyokuEnded res
+
+logMachine :: Machine -> Worker ()
+logMachine m = logDebugN $ "Game transation to state " ++ tshow m
 
 -- | As a precondition, the gamestate must be present in the workerdata.
 processKyokuStarts :: WCont
