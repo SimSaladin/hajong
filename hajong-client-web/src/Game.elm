@@ -15,9 +15,11 @@ import Color exposing (..)
 import Text as T
 import Time exposing (inSeconds)
 
--- TODO: hard-coded tile widths; some other measures are also hard-coded
+-- | These are exactly the size in the tile source image, so don't touch. 
 t_w = 62
 t_h = 82
+
+-- TODO: hard-coded tile widths; some other measures are also hard-coded
 discards_off = 330
 called_off   = 600
 riichi_off   = 130
@@ -40,6 +42,7 @@ shoutHover = mailbox ([], Nothing)
 -- }}}
 
 -- {{{ Upstream events ----------------------------------------------------
+
 events : Signal Event
 events = mergeMany
    [ maybe Noop (InGameAction << GameTurn << TurnTileDiscard) `Signal.map` discard.signal
@@ -72,9 +75,11 @@ nocare = mailbox False
 
 shoutChooseTile : Mailbox (Maybe Tile)
 shoutChooseTile = mailbox Nothing
+
 -- }}}
 
 -- {{{ Display: main -------------------------------------------------
+
 display : Controls -> GameState -> Element
 display co gs = case gs.roundState of
    Just rs -> flow down
@@ -98,16 +103,10 @@ display co gs = case gs.roundState of
         , container 1000 100 midTop <| dispHand rs.mypos co rs.myhand
         ]
    Nothing -> show "Hmm, roundState is Nothing but I should be in a game"
+
 -- }}}
 
 -- {{{ Display: per-player -------------------------------------------
-dispDiscards : Controls -> GameState -> RoundState -> Form
-dispDiscards co gs rs = group <| map
-   (\k -> Util.listFind k rs.hands
-       |> dispHandDiscards co
-       |> toForm
-       |> moveRotateKaze discards_off rs.mypos k)
-   [Ton, Nan, Shaa, Pei]
 
 dispOthersHands : Controls -> GameState -> RoundState -> Form
 dispOthersHands co gs rs = [Ton, Nan, Shaa, Pei]
@@ -123,6 +122,14 @@ dispOthersHands co gs rs = [Ton, Nan, Shaa, Pei]
          ) |> toForm |> moveRotateKaze called_off rs.mypos k
       )
    |> group
+
+dispDiscards : Controls -> GameState -> RoundState -> Form
+dispDiscards co gs rs = group <| map
+   (\k -> Util.listFind k rs.hands
+       |> dispHandDiscards co
+       |> toForm
+       |> moveRotateKaze discards_off rs.mypos k)
+   [Ton, Nan, Shaa, Pei]
 
 -- }}}
 
@@ -343,7 +350,6 @@ dispShout k m s =
 
 dispTile : Tile -> Element
 dispTile tile = container (t_w + 4) (t_h + 4) middle
-   -- <| hoverable (\h -> message discardHover.address <| if h then Just tile else Nothing)
    <| size t_w t_h
    <| layers [ tileImage tile, if isAka tile then akaIndicator else empty ]
 

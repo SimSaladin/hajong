@@ -25,11 +25,13 @@ port downstream : Signal String
 eventInput : Signal Event
 eventInput = decodeEvent `map` downstream
 
--- upstream signal (further handled from JS)
+-- upstream signal: to server. Further handled from JS.
 port upstream : Signal String
 port upstream = encodeEvent `map` mergeMany
     [ Lounge.events
     , Game.events
+    , Signal.map (\msg -> if msg == "" then Noop else Message { from = "", content = msg })
+                 MsgDialog.eventMessage
     ]
 -- }}}
 
@@ -140,10 +142,10 @@ deleteNick n l =
 -- }}}
 
 -- {{{ Display ------------------------------------------------
-display : GameState -> Element -> Element
-display game view = flow down
+display : Field.Content -> GameState -> Element -> Element
+display userinput game view = flow down
    [ view
-   , MsgDialog.dialog (500, 200) game
+   , MsgDialog.dialog (500, 200) userinput game
    ]
 
 mainView = mergeMany
@@ -155,4 +157,4 @@ mainView = mergeMany
 -- }}}
 
 -- main -------------------------------------------------------
-main = map2 display gameState mainView
+main = map3 display (.signal MsgDialog.userTextInput) gameState mainView

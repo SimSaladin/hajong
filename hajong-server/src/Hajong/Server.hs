@@ -46,7 +46,6 @@ import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 
 -- | Serialization of an on-going game.
 type Game = GameState Int
---     } deriving (Show, Typeable)
 
 -- | A record of a client connected or previously connected.
 data ClientRecord = ClientRecord
@@ -595,10 +594,12 @@ handleEventOf :: Client -> Event -> Server ()
 handleEventOf c event = case event of
     JoinServer{}      -> uniError "Already joined (and nick change not implemented)"
     PartServer reason -> liftIO $ throwIO $ PartedException reason
-    Message _ msg     -> putLounge $ Message (getNick c) msg -- TODO this should go to current game or lounge if in no game
     JoinGame n _      -> joinGame n
     ForceStart n      -> forceStart n
     InGameAction a    -> handleGameAction a
+    Message _ msg     -> do mgid <- query' (GetClientRecord $ getIdent c) <&> (>>= _cInGame)
+                            let m = Message (getNick c) msg
+                            maybe (putLounge m) (flip withRunningGame $ mapM_ (flip safeUnicast m) . _gClients) mgid
     _                 -> uniError $ "Event not allowed or not implemented (" <> tshow event <> ")"
 
 -- ** Actions

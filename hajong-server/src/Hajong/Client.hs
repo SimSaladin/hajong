@@ -20,9 +20,9 @@ import qualified Network.WebSockets as WS
 
 data Client = Client
             { getNick  :: Nick
-            , getIdent :: Int -- ^ 0 if none set
-            , isReal   :: Bool
-            , isReady  :: Bool
+            , getIdent :: Int  -- ^ 0 if none set
+            , isReal   :: Bool -- ^ False for bots server-side
+            , isReady  :: Bool -- ^ Ready to start a game(?)
             , unicast  :: forall e m. (WS.WebSocketsData e, MonadIO m) => e -> m ()
             , receive  :: forall e m. (WS.WebSocketsData e, MonadIO m) => m e
             }
