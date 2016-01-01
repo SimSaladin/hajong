@@ -5,6 +5,6 @@
 <ul>
 $forall Entity k st <- res
   <li>
-    <a href="javascript:open(#{fromSqlKey k})">#{show $ savedRoundStateCreated st}
+    <a href="?id=#{fromSqlKey k}">#{show $ savedRoundStateCreated st}
 
 <div#game>

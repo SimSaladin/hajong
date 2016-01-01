@@ -10,14 +10,31 @@ function getParameterByName(name) {
     return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
 }
 
+function findGame(key) {
+  return games.find(function(game){ return (game.id === key) });
+}
+
 function open(key) {
-  x = games.find(function(game){
-    return (game.id === key)
-  });
+  x = findGame(key);
   console.log(x);
 
   view = Elm.embed(Elm.ViewingGame, viewDiv,
     { downstream : x.content });
+}
+
+/* content is JSON-object */
+function save(content) {
+  $.post("@{SaveViewR}", JSON.stringify(content), function(x) {
+    console.log(x);
+  });
+}
+
+function update(obj) {
+  view.ports.downstream.send(JSON.stringify(obj));
+}
+
+function decode(key) {
+  return JSON.parse(findGame(key).content);
 }
 
 $(function(){
