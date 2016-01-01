@@ -10,13 +10,9 @@ set -e
 
 cd $(dirname $0)
 
-mkdir -p dist/config
-
 hajong-client-web/build.sh
+
 stack build
 
 BIN_LOCATION=$(stack path --local-install-root | cut -d\  -f 2)
-cp -R $BIN_LOCATION/bin dist/bin
-cp -RL ./hajong-site/static/ dist/static
-cp -R ./hajong-site/config/{settings.yml,sqlite.yml,robots.txt,favicon.ico} dist/config
-
+rsync -a $BIN_LOCATION/bin/ dist/bin

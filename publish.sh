@@ -6,7 +6,20 @@
 # License:       See LICENSE file
 #-----------------------------------------------------------------------------
 
-DEST=hajong:/opt/hajong
+DEST_BIN=hajong:/opt/hajong/bin/hajong-server.new
+DEST_KETER=hajong:/opt/keter/incoming
 set -e
 cd $(dirname $0)
-rsync -av ./dist/ $DEST
+
+echo "Creating keter bundle..."
+cd hajong-site
+stack exec yesod -- keter --nobuild
+mv hajong-site.keter ../dist/
+cd ..
+
+echo "Uploading keter bundle..."
+scp -C ./dist/hajong-site.keter $DEST_KETER
+
+echo "Uploading worker binary..."
+scp -C ./dist/bin/hajong-server $DEST_BIN
+

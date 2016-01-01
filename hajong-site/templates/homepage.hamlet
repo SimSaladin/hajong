@@ -22,21 +22,15 @@
        rather complex game.
 
 <aside>
-  <h1>Play
-  <div#controls>
-
-    $maybe user <- muser
-
-      <!-- logged in and registered -->
-      <P>Logged in as #{user}.
+  $maybe (_, Entity _ user) <- muser
+    <h1>Play
+    <div>
+      <P>Logged in as #{userDisplayName user}.
       <a.btn.btn-full href=@{LobbyR}>Browse public games
       <a.btn.btn-full href=@{NewGameR}>Create a new game
       <a.btn.btn-full href=@{AuthR LogoutR}>Log out
 
-    $nothing
-
-      <!-- not logged in -->
-      <p>Login or create an account.
-      <a.btn.btn-full href=@{AuthR LoginR}>Log in
-      <a.btn.btn-full href=@{AuthR facebookLogin}>Log in via Facebook
-      <a.btn.btn-full href=@{AuthR newAccountR}>Create new account
+  $nothing
+    <h1>Log in
+    <!-- not logged in -->
+    ^{myLoginWidget}

@@ -1,13 +1,14 @@
 module Handler.Home where
 
 import Import
+import Data.FileEmbed (embedFile)
 import Yesod.Auth.Account
 import Yesod.Form.Bootstrap3
     ( BootstrapFormLayout (..), renderBootstrap3, withSmallInput )
 
 getHomeR :: Handler Html
 getHomeR = do
-    muser <- maybeAuthId
+    muser <- maybeAuthPair
     defaultLayout $ do
         setTitle "Funjong"
         $(widgetFile "homepage")
@@ -49,3 +50,15 @@ ticketTemplate uuid = Textarea $ unlines
     , "What you expected to happen?\n"
     , "What happened instead?\n"
     ]
+
+
+-- These handlers embed files in the executable at compile time to avoid a
+-- runtime dependency, and for efficiency.
+
+getFaviconR :: Handler TypedContent
+getFaviconR = return $ TypedContent "image/x-icon"
+                     $ toContent $(embedFile "config/favicon.ico")
+
+getRobotsR :: Handler TypedContent
+getRobotsR = return $ TypedContent typePlain
+                    $ toContent $(embedFile "config/robots.txt")

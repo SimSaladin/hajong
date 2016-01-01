@@ -29,10 +29,9 @@ x = done, / = half done, ! = needs testing
 [x] add test: chiitoi furiten
 [x] shouting a aka-dora results in all tiles of the mentsu be aka-dora
 [ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
-[ ] attempt compiling with -Wall -Werror and fix until we compile
 # client
-[ ] sending messages
-[ ] interface for viewing different kyoku states
+[x] sending messages
+[x] interface for viewing different kyoku states
 [x] Highlight corresponding tiles on shout hovers
 [x] Display hands of tenpai players on ryuukyoku
 [x] when a call is passed, update callable info to client. client should not show it

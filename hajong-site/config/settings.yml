@@ -1,38 +1,43 @@
-Default: &defaults
+static-dir:     "_env:STATIC_DIR:static"
+host:           "_env:HOST:*4" # any IPv4 host
+port:           "_env:PORT:3000" # NB: The port `yesod devel` uses is distinct from this value. Set the `yesod devel` port from the command line.
+approot:        "_env:APPROOT:http://localhost:3000"
+ip-from-header: "_env:IP_FROM_HEADER:false"
 
-  # web server settings
-  host: "*4" # any IPv4 host
-  port: 3000
-  approot: "http://localhost:3000"
+#analytics: code
 
-  # hajong server settings
-  server_ws: "ws://localhost:8001"
-  server_binary: "hajong-server" # in path or absolute
-  server_args:
-     - "--verbose"
-  server_log: "game-devel.log"
+copyright: "2016 Samuli Thomasson"
 
-  copyright: "2014 Samuli Thomasson"
-  #analytics: UA-YOURCODE
+# hajong server settings
+server_ws:     "_env:SERVER_WS:ws://localhost:8001"
+server_binary: "_env:SERVER_BINARY:hajong-server" # in path or absolute
+server_socket: "_env:SERVER_SOCKET:/tmp/hajong.socket"
+server_log:    "_env:SERVER_LOG:game-devel.log"
+server_args:
+  - "--verbose"
 
-  fb:
-   name: ""
-   id: ""
-   secret: ""
+# Database
+postgres_database:
+   user:     "_env:PGUSER:hajong-site"
+   password: "_env:PGPASS:hajong-site"
+   host:     "_env:PGHOST:localhost"
+   port:     "_env:PGPORT:5432"
+   database: "_env:PGDATABASE:hajong-site"
+   poolsize: "_env:PGPOOLSIZE:10"
 
-Development:
-  <<: *defaults
+# FB api credentials
+facebook_credentials:
+   name:   "_env:FB_NAME:appname"
+   id:     "_env:FB_ID:appid"
+   secret: "_env:FB_SECRET:appsecret"
 
-Testing:
-   port: 80
-   approot: "http://hajong-test.funktionaali.com"
 
-   server_ws: "ws://hajong-test.funktionaali.com:8001"
-   <<: *defaults
-
-Staging:
-  <<: *defaults
-
-Production:
-  #approot: "http://www.example.com"
-  <<: *defaults
+# Optional values with the following production defaults.
+# In development, they default to the inverse.
+#
+# development: false
+# detailed-logging: false
+# should-log-all: false
+# reload-templates: false
+# mutable-static: false
+# skip-combining: false

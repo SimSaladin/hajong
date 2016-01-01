@@ -1,86 +1,84 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 module Foundation where
 
-import Prelude
-import Yesod
-import Yesod.Static
-import Yesod.Auth
-import Data.Text (Text)
+import Import.NoFoundation
+import Database.Persist.Sql (ConnectionPool, runSqlPool)
+import Text.Hamlet          (hamletFile)
+import Text.Jasmine         (minifym)
+import Yesod.Auth.BrowserId (authBrowserId)
+import Yesod.Auth.Message   (AuthMessage (InvalidLogin))
+import Yesod.Default.Util   (addStaticContentExternal)
+import Yesod.Core.Types     (Logger)
+import qualified Yesod.Core.Unsafe as Unsafe
+import qualified Data.CaseInsensitive as CI
+import qualified Data.Text.Encoding as TE
+
+import Yesod.Auth.Message as Msg
 import qualified Yesod.Auth.Account as Acc
+import qualified Yesod.Auth.Account.Message as AccMsg
 import Yesod.Auth.Facebook.ServerSide
 import qualified Facebook as FB
 import qualified Yesod.Facebook as YF
-import Yesod.Default.Config
-import Yesod.Default.Util (addStaticContentExternal)
-import Network.HTTP.Client.Conduit (Manager, HasHttpManager (getHttpManager))
-import qualified Settings
-import Settings.Development (development)
-import qualified Database.Persist
-import Database.Persist.Sql (SqlBackend)
-import Settings.StaticFiles
-import Settings (widgetFile, Extra (..))
-import Model
-import Text.Jasmine (minifym)
-import Text.Hamlet (hamletFile)
-import Yesod.Core.Types (Logger)
+
 import Data.Acid
 import qualified Hajong.Server as G
 import qualified Hajong.Connections as G
 import Control.Concurrent.Lock
-import Control.Concurrent.MVar
 import qualified Network.WebSockets as WS
 
--- | The site argument for your application. This can be a good place to
+-- | The foundation datatype for your application. This can be a good place to
 -- keep settings and values requiring initialization before your application
 -- starts running, such as database connections. Every handler will have
 -- access to the data present here.
 data App = App
-    { settings :: AppConfig DefaultEnv Extra
-    , getStatic :: Static -- ^ Settings for static file serving.
-    , connPool :: Database.Persist.PersistConfigPool Settings.PersistConf -- ^ Database connection pool.
-    , httpManager :: Manager
-    , persistConfig :: Settings.PersistConf
-    , appLogger :: Logger
-    , appGameState :: AcidState G.ServerDB
-    , appGameLock :: Lock
-    , gameIn :: MVar G.InternalEvent
-    , gameOut :: MVar G.InternalResult
+    { appSettings    :: AppSettings
+    , appStatic      :: Static -- ^ Settings for static file serving.
+    , appConnPool    :: ConnectionPool -- ^ Database connection pool.
+    , appHttpManager :: Manager
+    , appLogger      :: Logger
+    , appGameState   :: AcidState G.ServerDB
+    , appGameLock    :: Lock
+    , appGameIn      :: MVar G.InternalEvent
+    , appGameOut     :: MVar G.InternalResult
     }
 
-instance HasHttpManager App where
-    getHttpManager = httpManager
-
--- Set up i18n messages. See the message folder.
-mkMessage "App" "messages" "en"
-
--- This is where we define all of the routes in our application. For a full
--- explanation of the syntax, please see:
--- http://www.yesodweb.com/book/routing-and-handlers
---
--- Note that this is really half the story; in Application.hs, mkYesodDispatch
--- generates the rest of the code. Please see the linked documentation for an
--- explanation for this split.
 mkYesodData "App" $(parseRoutesFile "config/routes")
 
 type Form x = Html -> MForm (HandlerT App IO) (FormResult x, Widget)
 
--- Please see the documentation for the Yesod typeclass. There are a number
--- of settings which can be configured by overriding methods here.
 instance Yesod App where
-    approot = ApprootMaster $ appRoot . settings
+    -- Controls the base of generated URLs. For more information on modifying,
+    -- see: https://github.com/yesodweb/yesod/wiki/Overriding-approot
+    approot = ApprootMaster $ appRoot . appSettings
 
     -- Store session data on the client in encrypted cookies,
     -- default session idle timeout is 120 minutes
-    makeSessionBackend _ = fmap Just $ defaultClientSessionBackend
-        480    -- timeout in minutes
+    makeSessionBackend _ = Just <$> defaultClientSessionBackend
+        120    -- timeout in minutes
         "config/client_session_key.aes"
+
+    -- Yesod Middleware allows you to run code before and after each handler function.
+    -- The defaultYesodMiddleware adds the response header "Vary: Accept, Accept-Language" and performs authorization checks.
+    -- The defaultCsrfMiddleware:
+    --   a) Sets a cookie with a CSRF token in it.
+    --   b) Validates that incoming write requests include that token in either a header or POST parameter.
+    -- For details, see the CSRF documentation in the Yesod.Core.Handler module of the yesod-core package.
+    yesodMiddleware = defaultCsrfMiddleware . defaultYesodMiddleware
 
     defaultLayout widget = do
         master <- getYesod
         mmsg <- getMessage
         route <- getCurrentRoute
         muser <- maybeAuthId
+
+        let development =
+#if DEVELOPMENT
+                True
+#else
+                False
+#endif
 
         pc <- widgetToPageContent $ do
             addStylesheet $ StaticR css_normalize_css
@@ -90,10 +88,6 @@ instance Yesod App where
             $(widgetFile "default-layout")
         withUrlRenderer $(hamletFile "templates/default-layout-wrapper.hamlet")
 
-    urlRenderOverride y (StaticR s) =
-        Just $ uncurry (joinPath y (Settings.staticRoot $ settings y)) $ renderRoute s
-    urlRenderOverride _ _ = Nothing
-
     authRoute _ = Just $ AuthR LoginR
 
     -- Routes not requiring authentication.
@@ -101,64 +95,136 @@ instance Yesod App where
     isAuthorized FaviconR _ = return Authorized
     isAuthorized RobotsR _ = return Authorized
     isAuthorized HomeR _ = return Authorized
+    isAuthorized SupportR _ = return Authorized
     isAuthorized _ _ = requireAuthId >> return Authorized
 
-    addStaticContent =
-        addStaticContentExternal (if development then Right else minifym) genFileName Settings.staticDir (StaticR . flip StaticRoute [])
+    -- This function creates static content files in the static folder
+    -- and names them based on a hash of their content. This allows
+    -- expiration dates to be set far in the future without worry of
+    -- users receiving stale content.
+    addStaticContent ext mime content = do
+        master <- getYesod
+        let staticDir = appStaticDir $ appSettings master
+        addStaticContentExternal
+            minifym
+            genFileName
+            staticDir
+            (StaticR . flip StaticRoute [])
+            ext
+            mime
+            content
       where
         -- Generate a unique filename based on the content itself
-        genFileName lbs
-            | development = "autogen-" ++ base64md5 lbs
-            | otherwise   = base64md5 lbs
+        genFileName lbs = "autogen-" ++ base64md5 lbs
 
-    jsLoader _ = BottomOfBody
-
-    shouldLog _ _source level =
-        development || level == LevelWarn || level == LevelError
+    -- What messages should be logged. The following includes all messages when
+    -- in development, and warnings and errors in production.
+    shouldLog app _source level =
+        appShouldLogAll (appSettings app)
+            || level == LevelWarn
+            || level == LevelError
 
     makeLogger = return . appLogger
+    jsLoader _ = BottomOfBody
+
+	--  TODO
+    -- urlRenderOverride y (StaticR s) =
+    --     Just $ uncurry (joinPath y (Settings.staticRoot $ settings y)) $ renderRoute s
+    -- urlRenderOverride _ _ = Nothing
 
 instance YesodPersist App where
     type YesodPersistBackend App = SqlBackend
-    runDB = defaultRunDB persistConfig connPool
+    runDB = defaultRunDB (appDatabaseConf . appSettings) appConnPool
 instance YesodPersistRunner App where
-    getDBRunner = defaultGetDBRunner connPool
+    getDBRunner = defaultGetDBRunner appConnPool
 
 instance YesodAuth App where
     type AuthId App = Acc.Username -- :: Text
     getAuthId (Creds "account" username _) = return (Just username)
-    getAuthId (Creds "fb" _ _) = lookupSession "username"
-    loginDest _ = HomeR
-    logoutDest _ = HomeR
-    authPlugins _ = [authFacebook ["email"], Acc.accountPlugin]
-    authHttpManager _ = error "No manager needed"
-    onLogin = do
-        -- setMessageI NowLoggedIn
+    getAuthId c@(Creds "fb" cId cExtra) = do
 
-        -- If via fb: create the User persist entry if it doesn't exist.
+        -- create the User persist entry if it doesn't exist.
         -- If it exists, update fbUserId <-- TODO
-        -- Set session key "username"
         token <- getUserAccessToken
         case token of
-            Nothing -> return ()
+            Nothing    -> return Nothing
             Just token -> do
-                fbUser <- YF.runYesodFbT $ FB.getUser "me" [] (Just token)
-                let Just userEmail = FB.userEmail fbUser
-                    uid = FB.idCode $ FB.userId fbUser
 
-                mUserInDB <- runDB $ getBy $ UniqueUserEmail userEmail
+                fbUser <- YF.runYesodFbT $ FB.getUser "me" [("fields", "name,email")] (Just token)
+
+                let fbUserId    = FB.idCode $ FB.userId fbUser
+                    fbUserEmail = maybe (fbUserId `mappend` "@facebook.com") id $ FB.userEmail fbUser
+                    displayName = maybe fbUserId id $ FB.userName fbUser
+
+                mUserInDB <- runDB $ selectFirst [UserFbUserId ==. Just fbUserId] []
+
                 userInDB <- case mUserInDB of
-                    Nothing -> let newUser = User uid "" userEmail (Just uid) True "" ""
+                    Nothing -> let newUser = (Acc.userCreate displayName fbUserEmail "" "")
+                                        { userUsername = fbUserId
+                                        , userVerified = True
+                                        , userFbUserId = Just fbUserId }
                                    in runDB (insert newUser) >> return newUser
                     Just (Entity _ v) -> return v
-                setSession "username" (userUsername userInDB)
+                return $ Just (userUsername userInDB)
 
-        return ()
+    loginDest _ = HomeR
+    logoutDest _ = HomeR
+    authPlugins _ = [ myFacebookPlugin { apLogin = myFacebookLoginWidget }
+                    , Acc.accountPlugin { apLogin = myAccountLoginWidget }]
+      where
+        myFacebookPlugin = authFacebook ["email"]
+        myFacebookLoginWidget tm = do
+            [whamlet|
+<div.login-facebook>^{apLogin myFacebookPlugin tm}
+|]
+            -- toWidget [lucius|a {} |]
+
+        myAccountLoginWidget tm = do
+            ((_,widget), enctype) <- liftHandlerT $ runFormPost $ renderDivs Acc.loginForm
+            [whamlet|
+<div .login-account>
+  <form method=post enctype=#{enctype} action=@{tm Acc.loginFormPostTargetR}>
+    ^{widget}
+    <input.btn-full type=submit value=_{LoginTitle}>
+    <p>
+        <a.btn.btn-alt.btn-half href="@{tm Acc.newAccountR}">_{Msg.RegisterLong}
+        <a.btn.btn-alt.btn-half href="@{tm Acc.resetPasswordR}">_{AccMsg.MsgForgotPassword}
+|]
+
+    loginHandler = lift . authLayout $ myLoginWidget
+
+    authHttpManager _ = error "No manager needed"
+
+    -- onLogin = setMessageI NowLoggedIn
     maybeAuthId = lookupSession credsKey
 
 instance YesodAuthPersist App where
     type AuthEntity App = Entity User
     getAuthEntity = runDB . getBy . UniqueUsername
+
+-- This instance is required to use forms. You can modify renderMessage to
+-- achieve customized and internationalized form validation messages.
+instance RenderMessage App FormMessage where
+    renderMessage _ _ = defaultFormMessage
+
+-- Useful when writing code that is re-usable outside of the Handler context.
+-- An example is background jobs that send email.
+-- This can also be useful for writing code that works across multiple Yesod applications.
+instance HasHttpManager App where
+    getHttpManager = appHttpManager
+
+unsafeHandler :: App -> Handler a -> IO a
+unsafeHandler = Unsafe.fakeHandlerGetLogger appLogger
+
+-- Note: Some functionality previously present in the scaffolding has been
+-- moved to documentation in the Wiki. Following are some hopefully helpful
+-- links:
+--
+-- https://github.com/yesodweb/yesod/wiki/Sending-email
+-- https://github.com/yesodweb/yesod/wiki/Serve-static-files-from-a-separate-domain
+-- https://github.com/yesodweb/yesod/wiki/i18n-messages-in-the-scaffolding
+
+-- * Extra authentication stuff
 
 requireUserId :: Handler UserId
 requireUserId = fmap (entityKey . snd) requireAuthPair
@@ -169,24 +235,29 @@ instance Acc.YesodAuthAccount (Acc.AccountPersistDB App User) App where
 instance Acc.AccountSendEmail App
 
 instance YF.YesodFacebook App where
-    fbCredentials = extraFbCredentials . appExtra . settings
-    fbHttpManager = httpManager
+    fbCredentials = appFacebookCredentials . appSettings
+    fbHttpManager = getHttpManager
 
--- This instance is required to use forms. You can modify renderMessage to
--- achieve customized and internationalized form validation messages.
-instance RenderMessage App FormMessage where
-    renderMessage _ _ = defaultFormMessage
+myLoginWidget :: Widget
+myLoginWidget = do
+        setTitleI Msg.LoginTitle
+        master <- getYesod
+        let [fb, acc] = map (flip apLogin AuthR) $ authPlugins master
+        [whamlet|
+<div.login-options>
+    ^{fb}
+    <hr>
+    ^{acc}
+|]
 
--- | Get the 'Extra' value, used to hold data from the settings.yml file.
-getExtra :: Handler Extra
-getExtra = fmap (appExtra . settings) getYesod
+-- * Extra utilities
 
 goGame :: G.InternalEvent -> Handler G.InternalResult
 goGame ev = do
     App{..} <- getYesod
     liftIO $ with appGameLock $ do
-        putMVar gameIn ev
-        takeMVar gameOut
+        putMVar appGameIn ev
+        takeMVar appGameOut
 
 -- | Used to higlight navigation links
 isNavOf :: Text -> Maybe (Route App) -> Bool

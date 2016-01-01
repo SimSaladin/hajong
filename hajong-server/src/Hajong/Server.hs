@@ -87,6 +87,7 @@ $(deriveSafeCopy 0 'base ''ServerDB)
 -- | Server logic Reader value.
 data ServerSt = ServerSt
     { _db              :: AcidState ServerDB
+    , _seWsPort        :: Int
     , _seConnections   :: TVar (IntMap Client)      -- ^ Everyone connected
     , _seLounge        :: TVar (Set Client)         -- ^ Lounge
     , _seWatcher       :: TChan (Int, WorkerResult) -- ^ Worker watcher, **broadcast chan**.
@@ -323,7 +324,7 @@ runServerMain :: ServerSt -> IO ()
 runServerMain st = do
     runServer st restartGames
     void . forkIO $ runServer st workerWatcher
-    WS.runServer "0.0.0.0" 8001 $ wsApp st
+    WS.runServer "0.0.0.0" (_seWsPort st) $ wsApp st
 
 -- | Returns the finalizer
 forkServerAcidRemote :: ServerSt -> PortID -> IO (IO ())
@@ -340,11 +341,11 @@ openServerDB = openRemoteState skipAuthenticationPerform "127.0.0.1"
 
 -- * Initialize state
 
-initServer :: LoggerSet -> IO ServerSt
-initServer lgr = do
+initServer :: Int -> LoggerSet -> IO ServerSt
+initServer port lgr = do
     sdb <- openLocalState emptyDB
     chan <- newBroadcastTChanIO
-    ServerSt sdb
+    ServerSt sdb port
         <$> newTVarIO mempty -- no-one is connected
         <*> newTVarIO mempty -- in lounge either
         <*> pure chan

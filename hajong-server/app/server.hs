@@ -14,10 +14,17 @@ import Control.Concurrent (forkIO)
 import Control.Exception (finally)
 import System.Log.FastLogger
 import Network
+import System.Environment (getArgs)
 
 main :: IO ()
 main = do
-    st  <- initServer =<< newStderrLoggerSet defaultBufSize
+    args <- getArgs
+    let (port, file) = case args of
+            []   -> (8001, "/tmp/hajong.socket")
+            [x]  -> (8001, x)
+            [x,y] -> (read x, y)
+
+    st  <- initServer port =<< newStderrLoggerSet defaultBufSize
     _   <- forkIO $ runServerMain st
-    fin <- forkServerAcidRemote st (UnixSocket "/tmp/hajong.socket")
+    fin <- forkServerAcidRemote st (UnixSocket file)
     runServer st serverDebugger `finally` fin

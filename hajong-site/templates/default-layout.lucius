@@ -17,9 +17,11 @@ a:hover {
 .footer-container a {
    color:rgb(249, 220, 155);
 }
-.btn, input[type="submit"] {
+/* {{{ Buttons */
+.btn, input[type="submit"],
+.login-facebook a {
    display:inline-block;
-   background:rgb(226,236,0);
+   background:rgb(247, 255, 76);
    color:black;
    margin:1em 0;
    padding:0.7em 1em;
@@ -27,12 +29,20 @@ a:hover {
    text-decoration:none;
    text-align:center;
 }
-.btn:hover, input[type="submit"]:hover {
-   background:rgb(200,216,0);
-}
 .btn-full {
    width:100%;
 }
+.btn:hover, input[type="submit"]:hover {
+   background:rgb(242, 222, 79);
+}
+.btn-alt {
+   background:#CEE5A8;
+}
+.btn-alt:hover {
+  background:rgb(173, 208, 134);
+}
+/* }}} */
+
 .title {
     text-shadow:2px 2px 2px #555;
 }
@@ -43,6 +53,7 @@ nav a.active {
    background: #ce9814;
 }
 
+/* {{{ forms general */
 .form {
    padding:0.5em;
    input[type=email], input[type=text], textarea {
@@ -64,11 +75,6 @@ nav a.active {
    padding-left:13em;
 }
 
-.loginDiv, .newaccountDiv {
-  width:30em;
-  margin:0 auto;
-}
-
 form > div {
   margin-top:1em;
 }
@@ -78,7 +84,37 @@ label {
   min-width:8em;
 }
 
-/* Game only */
+input[type=text], input[type=password] {
+  padding:0.4em 0.3em;
+}
+/* }}} */
+
+/* {{{ login */
+.login-facebook a {
+  color: white;
+  background: #3b5998;
+  width:100%;
+}
+.login-options {
+  max-width:30em;
+  margin:0 auto;
+}
+.login-account, .newaccountDiv {
+  max-width:30em;
+  margin:0 auto;
+}
+.login-account input {
+  width: 100%;
+}
+.btn-half {
+  width:49.5%;
+}
+aside .btn-half {
+  width:100%;
+}
+/* }}} */
+
+/* {{{ Game view only */
 #alerted {
   padding:1em;
   margin:1em;
@@ -105,3 +141,5 @@ label {
 .msg { padding:0 5px; line-height:1.2em; }
 .msg-debug { color:gray; }
 .msg-error { background:red; }
+
+/* }}} */

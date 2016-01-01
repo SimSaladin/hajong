@@ -15,6 +15,10 @@ Requires elm 0.15
 
 compile with `hajong-client-web/build.sh`
 
+# `hajong-site`
+
+    sudo -u postgres createuser hajong-site
+    sudo -u postgres createdb -O hajong-site hajong-site
 
 # Technical notes
 

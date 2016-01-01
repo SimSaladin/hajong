@@ -1,12 +1,14 @@
 User
     username Text
+    displayName Text
     password ByteString
     emailAddress Text
-    fbUserId Text Maybe
+    fbUserId Text Maybe -- note: fb app-specific!
     verified Bool
     verifyKey Text
     resetPasswordKey Text
-    UniqueUsername username -- unique nicks
+    UniqueUsername username -- unique log in user names
+    UniqueDisplayName displayName -- unique nicks
     UniqueUserEmail emailAddress -- one email per user
     deriving Show Typeable
 

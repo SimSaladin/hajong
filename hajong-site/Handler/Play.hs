@@ -32,7 +32,7 @@ getLobbyR = playLayout Nothing
 playLayout :: Maybe Int -> Handler Html
 playLayout mgid = do
     mauth <- maybeAuthId
-    websocketURI <- extraServerWs <$> getExtra
+    websocketURI <- appServerWs . appSettings <$> getYesod
     defaultLayout $ do
         setTitle "Playing"
         addScript $ StaticR js_howler_min_js

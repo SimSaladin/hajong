@@ -1,13 +1,9 @@
 module Model where
 
-import Yesod
-import Yesod.Auth.Account
-import Data.Text (Text)
-import Data.Time (UTCTime)
-import Data.ByteString (ByteString)
+import ClassyPrelude.Yesod
 import Database.Persist.Quasi
-import Data.Typeable (Typeable)
-import Prelude
+
+import Yesod.Auth.Account (PersistUserCredentials(..))
 
 -- You can define all of your database entities in the entities file.
 -- You can find more information on persistent and how to declare entities
@@ -25,4 +21,4 @@ instance PersistUserCredentials User where
     userResetPwdKeyF = UserResetPasswordKey
     uniqueUsername = UniqueUsername
 
-    userCreate name email key pwd = User name pwd email Nothing False key ""
+    userCreate name email key pwd = User name name pwd email Nothing False key ""
