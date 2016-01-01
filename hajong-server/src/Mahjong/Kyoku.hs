@@ -205,10 +205,11 @@ dealTurnAction p ta = mconcat $ case ta of
 -- someone is winning (over 30000 points).
 maybeGameResults :: Kyoku -> Maybe FinalPoints
 maybeGameResults kyoku@Kyoku{..}
-    | minimumOf (traversed._2) _pPlayers < Just 0 = return score
+    | minimumOf (traversed._2) _pPlayers < Just 0 = return score -- if anyone below zero end immediately
     | otherwise = do
-        guard (nextRound kyoku ^. _1 >= Shaa)
-        guard (maximumOf (traversed._2) _pPlayers > Just 30000)
+        guard (nextRound kyoku ^. _1 > Nan) -- Don't end before *last* south deal
+        unless (nextRound kyoku ^. _1 > Shaa) $ -- Require point-difference, unless last deal of an extra-round ended
+            guard (maximumOf (traversed._2) _pPlayers > Just 30000)
         return score
   where
     score = finalPoints $ mapFromList $ _pPlayers ^.. each.to (\(p,ps,_) -> (p, ps))
