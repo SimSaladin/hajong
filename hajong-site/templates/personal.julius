@@ -3,6 +3,13 @@ var games = #{toJSON res};
 var view;
 var viewDiv = document.getElementById('game');
 
+function getParameterByName(name) {
+    name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+        results = regex.exec(location.search);
+    return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+
 function open(key) {
   x = games.find(function(game){
     return (game.id === key)
@@ -12,3 +19,8 @@ function open(key) {
   view = Elm.embed(Elm.ViewingGame, viewDiv,
     { downstream : x.content });
 }
+
+$(function(){
+  key = getParameterByName("id");
+  if (key) open(Number(key));
+});
