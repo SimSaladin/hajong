@@ -1,0 +1,9 @@
+
+var game;
+var round = { kaze: #{toJSON k}, round: #{toJSON n}, honba: #{toJSON h} }
+var data  = #{rawJS $ pastGameData $ entityVal game};
+var mainDiv = document.getElementById('game');
+
+$(function(){
+  game = Elm.embed(Elm.ViewingGame, mainDiv, { downstream : { state: data, round: round } });
+})

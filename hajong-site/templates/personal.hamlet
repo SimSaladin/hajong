@@ -1,0 +1,10 @@
+<h1>
+
+<h1>Saved game states
+
+<ul>
+$forall Entity k st <- res
+  <li>
+    <a href="javascript:open(#{fromSqlKey k})">#{show $ savedRoundStateCreated st}
+
+<div#game>

@@ -5,14 +5,24 @@
 /robots.txt RobotsR GET
 
 /           HomeR    GET
+
 /new-game   NewGameR GET POST
 /games      GamesR   GET
 /game/#Int  GameR    GET POST
+
 /play       LobbyR   GET
 /play/#Int  PlayR    GET
-/view/#Text/#Text/#Int/#Int ViewR GET
+
+/view/#Text/#Text/#Int/#Int ViewR     GET
+
+/get-views                   ListViewsR  GET
+/save-view                   SaveViewR   POST
+
+/personal  PersonalR GET
+
 /support    SupportR GET POST
 /support/#Text SupportWithUuidR GET POST
+
 /status StatusR GET
 
 /token      AuthTokenR GET

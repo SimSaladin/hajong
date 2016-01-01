@@ -6,7 +6,7 @@ import Game
 import Events
 import Util exposing (..)
 import GameTypes exposing (..)
-import JSON exposing (decodeEvent, encodeEvent)
+import JSON exposing (decodeEvent, encodeEvent, encodeRoundState)
 
 import Set
 import Mouse
@@ -33,6 +33,15 @@ port upstream = encodeEvent `map` mergeMany
     , Signal.map (\msg -> if msg == "" then Noop else Message { from = "", content = msg })
                  MsgDialog.eventMessage
     ]
+
+-- A port exposed out of elm which json-encodes current @roundState@
+port spyRoundState : Signal String
+port spyRoundState =
+   let f {roundState} = case roundState of
+         Just r  -> encodeRoundState r
+         Nothing -> ""
+   in Signal.map f gameState
+
 -- }}}
 
 -- {{{ Default state ------------------------------------------

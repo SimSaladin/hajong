@@ -156,6 +156,13 @@ instance YesodAuth App where
         return ()
     maybeAuthId = lookupSession credsKey
 
+instance YesodAuthPersist App where
+    type AuthEntity App = Entity User
+    getAuthEntity = runDB . getBy . UniqueUsername
+
+requireUserId :: Handler UserId
+requireUserId = fmap (entityKey . snd) requireAuthPair
+
 instance Acc.YesodAuthAccount (Acc.AccountPersistDB App User) App where
     runAccountDB = Acc.runAccountPersistDB
 
@@ -185,8 +192,13 @@ goGame ev = do
 isNavOf :: Text -> Maybe (Route App) -> Bool
 isNavOf "game" (Just LobbyR) = True
 isNavOf "game" (Just (PlayR _))  = True
+
 isNavOf "support" (Just SupportR) = True
 isNavOf "support" (Just (SupportWithUuidR _)) = True
+
 isNavOf "history" (Just GamesR) = True
 isNavOf "history" (Just (ViewR _ _ _ _)) = True
+
+isNavOf "personal" (Just PersonalR) = True
+
 isNavOf _ _ = False

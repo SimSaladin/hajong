@@ -1,5 +1,6 @@
 /* {{{ globals */
 var game;
+var currentRoundState = "";
 var debug = localStorage.getItem("debug"); // set to true to debug events
 var debugEVS = []; // DEBUG: list of events
 var socket;
@@ -8,6 +9,13 @@ var waitDiv = document.getElementById('wait');
 var alertedDiv = document.getElementById('alerted');
 
 /* }}} */
+
+function processCommand(x){
+  console.log("command", x);
+  if (x.startsWith("save")) {
+    $.post("@{SaveViewR}", currentRoundState);
+  }
+}
 
 /* {{{ Sounds */
 var sounds = {
@@ -39,8 +47,14 @@ function startGame(doJoin) {
     game.ports.upstream.subscribe(function(e) {
       var d = JSON.parse(e);
       if (debug) console.log("out", d);
-      if (d.type !== "noop") socket.send(e);
+      if (d.type === "msg" && d.content.startsWith("/")) {
+        processCommand(d.content.slice(1));
+      } else {
+        if (d.type !== "noop") socket.send(e);
+      }
     });
+
+    game.ports.spyRoundState.subscribe(function(x) { currentRoundState = x });
 
     socket.onclose = function () {
       game.dispose();

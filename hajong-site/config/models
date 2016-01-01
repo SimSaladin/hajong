@@ -6,9 +6,14 @@ User
     verified Bool
     verifyKey Text
     resetPasswordKey Text
-    UniqueUsername username
-    UniqueUserEmail emailAddress
+    UniqueUsername username -- unique nicks
+    UniqueUserEmail emailAddress -- one email per user
     deriving Show Typeable
+
+SavedRoundState json
+   created UTCTime
+   user UserId
+   content Text -- JSON-serialized RoundState
 
 PastGame
    uuid Text

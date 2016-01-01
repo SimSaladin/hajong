@@ -1,0 +1,14 @@
+var games = #{toJSON res};
+
+var view;
+var viewDiv = document.getElementById('game');
+
+function open(key) {
+  x = games.find(function(game){
+    return (game.id === key)
+  });
+  console.log(x);
+
+  view = Elm.embed(Elm.ViewingGame, viewDiv,
+    { downstream : x.content });
+}

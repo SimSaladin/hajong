@@ -1,5 +1,6 @@
 module JSON where
 
+import Util
 import GameTypes exposing (..)
 
 import Dict
@@ -293,6 +294,9 @@ turnActionOfType taType = case taType of
 encodeEvent : Event -> String
 encodeEvent = Encode.encode 0 << toJSON_Event
 
+encodeRoundState : RoundState -> String
+encodeRoundState = Encode.encode 0 << toJSON_RoundState
+
 toJSON_Event : Event -> Value
 toJSON_Event ev = case ev of
     JoinServer {nick,ident} -> atType "join" [("nick", Encode.string nick), ("ident", Encode.int ident)]
@@ -304,6 +308,152 @@ toJSON_Event ev = case ev of
     InGameAction action   -> atType "game-action" <| toJSON_GameAction action
     Noop                  -> atType "noop" []
     _                     -> Debug.crash <| "Couldn't serialize event type, not all are yet implemented!"
+
+toJSON_RoundState : RoundState -> Value
+toJSON_RoundState rs = Encode.object
+   [("mypos", toJSON_Kaze rs.mypos)
+   ,("round", toJSON_Round rs.round)
+   ,("turn", toJSON_Kaze rs.turn)
+   ,("player", Encode.int rs.player)
+   ,("oja", Encode.int rs.oja)
+   ,("first-oja", Encode.int rs.firstoja)
+   ,("tiles-left", Encode.int rs.tilesleft)
+   ,("dora", Encode.list <| List.map toJSON_Tile rs.dora)
+   ,("hands", Encode.list <| List.map toJSON_HandPublic rs.hands)
+   ,("players", Encode.list <| List.map toJSON_player rs.players)
+   ,("myhand", toJSON_Hand rs.myhand)
+   ,("results", Util.maybe Encode.null toJSON_Results rs.results)
+   ,("honba", Encode.int rs.honba)
+   ,("in-table", Encode.int rs.inTable)
+   ,("prev-deals", Encode.list <| List.map toJSON_Round rs.prevDeals)
+   ]
+
+toJSON_Kaze : Kaze -> Value
+toJSON_Kaze k = Encode.string <| toString k
+
+toJSON_Round : Round -> Value
+toJSON_Round r = Encode.list [ toJSON_Kaze r.kaze, Encode.int r.round_rot, Encode.int r.round_honba ]
+
+toJSON_player : (Kaze, (Player, Int, String)) -> Value
+toJSON_player (k, (p, x, n)) =
+   Encode.list [ toJSON_Kaze k
+               , Encode.list [ Encode.int p, Encode.int x, Encode.string n ]
+               ]
+
+toJSON_Hand : Hand -> Value
+toJSON_Hand hand = Encode.object <| toObject_HandPublic hand ++ toObject_HandPrivate hand
+
+toJSON_HandPublic : (Kaze, HandPublic' a) -> Value
+toJSON_HandPublic (kaze, hand) = Encode.list [ toJSON_Kaze kaze
+                                             , Encode.object <| toObject_HandPublic hand ]
+
+toObject_HandPrivate : Hand -> List (String, Value)
+toObject_HandPrivate x =
+   [ ("concealed", Encode.list <| List.map toJSON_Tile x.concealed)
+   , ("picks"    , Encode.list <| List.map toJSON_PickedTile x.picks)
+   , ("furiten"  , toJSON_FuritenState x.furiten)
+   , ("can-tsumo", Encode.bool x.canTsumo) ]
+
+toObject_HandPublic : HandPublic' a -> List (String, Value)
+toObject_HandPublic x =
+   [ ("state",    toJSON_DrawState x.state)
+   , ("called",   Encode.list <| List.map toJSON_Mentsu x.called)
+   , ("discards", Encode.list <| List.map toJSON_Discard x.discards)
+   , ("riichi",   toJSON_RiichiState x.riichiState)
+   , ("ippatsu",  Encode.bool x.ippatsu) ]
+
+toJSON_DrawState : DrawState -> Value
+toJSON_DrawState ds = case ds of
+   DrawFromWanpai -> Encode.string "drawfromwanpai"
+   DrawFromWall   -> Encode.string "drawfromwall"  
+   DrawNone       -> Encode.string "drawnone"      
+
+
+toJSON_PickedTile : PickedTile -> Value
+toJSON_PickedTile pt = case pt of
+    FromWall mtile        -> Encode.object [("type", Encode.string "from-wall"), ("tile", Util.maybe Encode.null toJSON_Tile mtile)]
+    FromWanpai mtile      -> Encode.object [("type", Encode.string "from-wanpai"), ("tile", Util.maybe Encode.null toJSON_Tile mtile)]
+    AgariTsumo tile       -> Encode.object [("type", Encode.string "agari-tsumo"), ("tile", toJSON_Tile tile)]
+    AgariCall shout       -> Encode.object [("type", Encode.string "agari-call"), ("shout", toJSON_Shout shout)]
+    AgariTsumoWanpai tile -> Encode.object [("type", Encode.string "agari-tsumo-wanpai"), ("tile", toJSON_Tile tile)]
+
+toJSON_Discard : Discard -> Value
+toJSON_Discard {tile,to,riichi} = Encode.object
+   [ ("tile", toJSON_Tile tile)
+   , ("to", Util.maybe Encode.null toJSON_Kaze to)
+   , ("riichi", Encode.bool riichi) ]
+
+toJSON_Results : RoundResult -> Value
+toJSON_Results r = case r of
+   DealTsumo {winners, payers} -> Encode.object [("type", Encode.string "dealtsumo")
+       , ("winners", Encode.list <| List.map toJSON_Winner winners)
+       , ("payers", Encode.list <| List.map toJSON_Payer payers) ]
+
+   DealRon {winners, payers}   -> Encode.object [("type", Encode.string "dealron")
+       ,("winners", Encode.list <| List.map toJSON_Winner winners)
+       , ("payers", Encode.list <| List.map toJSON_Payer payers) ]
+
+   DealDraw {tenpai, nooten}   -> Encode.object [("type", Encode.string "dealdraw")
+       , ("tenpai", Encode.list <| List.map toJSON_Tenpai tenpai)
+       , ("nooten", Encode.list <| List.map toJSON_Payer nooten) ]
+
+toJSON_Payer : Payer -> Value
+toJSON_Payer {player_kaze, points} =
+   Encode.list [toJSON_Kaze player_kaze, Encode.int points]
+
+toJSON_Winner : Winner -> Value
+toJSON_Winner {player_kaze, points, valuehand} =
+   Encode.list [toJSON_Kaze player_kaze, Encode.int points, toJSON_Valued valuehand]
+
+toJSON_Tenpai : Tenpai -> Value
+toJSON_Tenpai {player_kaze, points, mentsu, tiles} =
+   Encode.list [toJSON_Kaze player_kaze, Encode.int points, Encode.list <| List.map toJSON_Mentsu mentsu
+               , Encode.list <| List.map toJSON_Tile tiles ]
+
+toJSON_Valued : Valued -> Value
+toJSON_Valued {mentsu, tiles, value} = Encode.object
+   [("mentsu", Encode.list <| List.map toJSON_Mentsu mentsu)
+   ,("tiles", Encode.list <| List.map toJSON_Tile tiles)
+   ,("value", toJSON_HandValue value)]
+
+toJSON_HandValue : HandValue -> Value
+toJSON_HandValue {yaku,fu,han,points,named} = Encode.object
+   [("yaku", Encode.list <| List.map toJSON_Yaku yaku)
+   ,("fu", Encode.int fu)
+   ,("han", Encode.int han)
+   ,("points", Encode.int points)
+   ,("named", Util.maybe Encode.null Encode.string named)]
+
+toJSON_Yaku : Yaku -> Value
+toJSON_Yaku {han, name} = Encode.object [("han", Encode.int han) ,("name", Encode.string name)]
+
+toJSON_Mentsu : Mentsu -> Value
+toJSON_Mentsu {mentsuKind, tiles, from} = Encode.object
+   [("kind", toJSON_MentsuKind mentsuKind)
+   ,("tiles", Encode.list <| List.map toJSON_Tile tiles)
+   ,("shout", Util.maybe Encode.null toJSON_Shout from)]
+
+toJSON_Shout : Shout -> Value
+toJSON_Shout s = Encode.object
+   [("kind", toJSON_ShoutKind s.shoutKind)
+   ,("from", toJSON_Kaze s.shoutFrom)
+   ,("tile", toJSON_Tile s.shoutTile)
+   ,("to", Encode.list <| List.map toJSON_Tile s.shoutTo)]
+
+toJSON_MentsuKind : MentsuKind -> Value
+toJSON_MentsuKind = toString >> Encode.string
+
+toJSON_FuritenState : FuritenState -> Value
+toJSON_FuritenState fs = case fs of
+   NotFuriten  -> Encode.string "notfuriten"
+   Furiten     -> Encode.string "furiten"
+   TempFuriten -> Encode.string "tempfuriten"
+
+toJSON_RiichiState : RiichiState -> Value
+toJSON_RiichiState rs = case rs of
+   NoRiichi     -> Encode.string "noriichi"
+   Riichi       -> Encode.string "riichi"
+   DoubleRiichi -> Encode.string "doubleriichi"
 
 toJSON_GameAction : GameAction -> List (String, Value)
 toJSON_GameAction a = case a of

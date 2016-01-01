@@ -34,7 +34,7 @@ $newline never
                 <li>
                   <a href=@{GamesR} :isNavOf "history" route:.active>Stats
                 <li>
-                  <a href>My Profile
+                  <a href=@{PersonalR} :isNavOf "personal" route:.active>Me
                 <li>
                   <a href=@{SupportR} :isNavOf "support" route:.active>Support
 

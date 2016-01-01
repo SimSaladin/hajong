@@ -171,7 +171,7 @@ processMachine m@WaitingShouts{}                = logMachine m >> stepByClientOr
 processMachine m@(KyokuEnded res)               = logMachine m >> processKyokuEnded res
 
 logMachine :: Machine -> Worker ()
-logMachine m = logDebugN $ "Game transation to state " ++ tshow m
+logMachine m = logDebugN $ "Transsation to state " ++ tshow m
 
 -- | As a precondition, the gamestate must be present in the workerdata.
 processKyokuStarts :: WCont
