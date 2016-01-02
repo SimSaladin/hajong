@@ -118,5 +118,10 @@ removeClient client gs = do
 playerToClient :: GameState p -> Player -> Maybe p
 playerToClient gs p = gs^.gamePlayers.at p
 
-clientToPlayer :: Eq p => p -> GameState p -> Maybe Player
-clientToPlayer c gs = gs^.gamePlayers & ifind (\_ x -> x == c) <&> view _1
+-- | Given a client, find either its old place, or assign it to an empty
+-- seat.
+clientToPlayer :: IsPlayer p => p -> GameState p -> Maybe Player
+clientToPlayer c gs =  fmap (^._1) $
+    (gs^.gamePlayers & ifind (\_ x -> x == c))
+    `mplus`
+    (gs^.gamePlayers & ifind (\p c' -> isBot c' && playerNick c' == playerNick c ++ " (n/a"))

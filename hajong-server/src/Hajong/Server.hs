@@ -624,7 +624,8 @@ handleJoinGame gid rg = do
         multicast gs (JoinGame gid nick)
         runServer ss $ do
             update' (SetPlayerGame gid (getIdent c))
-            atomically $ modifyTVar' (ss^.seLounge) (deleteSet c)
+            atomically $ do modifyTVar' (ss^.seLounge) (deleteSet c)
+                            modifyTVar' (ss^.seWorkers) (ix gid.gClients.at (getIdent c) .~ Just c)
             putLounge (JoinGame gid nick)
 
 -- | Force the specfied game to start even if there are not enough players.

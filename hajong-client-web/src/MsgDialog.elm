@@ -53,5 +53,6 @@ eventToDebugMsg ev = case ev of
     Invalid {content}      -> Just <| LogError {msg = content}
     LoungeInfo {lounge}    -> Just <| LogDebug {msg = "Lounge updated"}
     GameCreated {game}     -> Just <| LogDebug {msg = "Game `" ++ game.topic ++ "' (" ++ toString (game.ident) ++ ") created"}
+    JoinGame{nick,ident}   -> Just <| LogDebug {msg = nick ++ " joined game " ++ toString ident }
     InGameEvents _         -> Nothing
     _                      -> Nothing
