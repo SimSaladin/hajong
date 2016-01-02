@@ -7,6 +7,7 @@
 /           HomeR    GET
 
 /new-game   NewGameR GET POST
+
 /games      GamesR   GET
 /game/#Int  GameR    GET POST
 
@@ -20,7 +21,7 @@
 
 /personal  PersonalR GET
 
-/support    SupportR GET POST
+/support       SupportR         GET POST
 /support/#Text SupportWithUuidR GET POST
 
 /status StatusR GET

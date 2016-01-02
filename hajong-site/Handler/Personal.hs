@@ -15,8 +15,8 @@ import           Import
 -- | User's pages
 getPersonalR :: Handler Html
 getPersonalR = do
-    uid <- requireUserId
-    res <- runDB $ selectList [SavedRoundStateUser ==. uid] [Desc SavedRoundStateCreated]
+    (_uid, Entity userId User{..}) <- requireAuthPair
+    res <- runDB $ selectList [SavedRoundStateUser ==. userId] [Desc SavedRoundStateCreated]
     defaultLayout $ do
         setTitle "Me"
         addScript $ StaticR js_elm_js

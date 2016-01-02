@@ -1,5 +1,7 @@
 <h1>Game history
 
+<p>List of all games played on this server. On-going or abandoned games are not listed.
+
 <ul>
   $if null games
     <i>Oh noes.. nothing to show here

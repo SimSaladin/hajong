@@ -22,6 +22,7 @@ import Yesod.Auth.Facebook.ServerSide
 import qualified Facebook as FB
 import qualified Yesod.Facebook as YF
 
+import Language.Haskell.TH (runIO, litE, stringL)
 import Data.Acid
 import qualified Hajong.Server as G
 import qualified Hajong.Connections as G
@@ -251,6 +252,9 @@ myLoginWidget = do
 |]
 
 -- * Extra utilities
+
+compileTime :: Text
+compileTime = $(runIO getCurrentTime >>= litE . stringL . show)
 
 goGame :: G.InternalEvent -> Handler G.InternalResult
 goGame ev = do

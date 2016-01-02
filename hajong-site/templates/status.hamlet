@@ -1,5 +1,7 @@
 <h1>Status
 
+<p>The site was compiled #{compileTime}.
+
 <h2>Active players
 <i>id - (nick) - registered? - connected? 
 <ul>

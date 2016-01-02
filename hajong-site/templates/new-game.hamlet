@@ -1,6 +1,21 @@
 
-<h1>New game
-<p>
+<section.game-settings-dialog>
+  <h1>Create new game
   <form#newgameform method=POST enctype=#{formEnctype} action=@{NewGameR}>
     ^{formWidget}
     <input.btn.btn-full type=submit value=Create>
+  <p>
+    Sadly, at the moment there are no configurable settings. The
+    ruleset follows the olded EMA rules, with kuitan ari and some
+    other more rare exceptions. The plan is to allow extensive control
+    over the rules and even game mechanics &mdash; if you have cool
+    ideas in mind please tell about them via
+    <a href=@{SupportR}>this form
+    or the #
+    <a href="https://github.com/SimSaladin/hajong/issues">github issue tracker#
+    \. You can also get in touch via email if you so please (address
+    can be found on my github profile).
+  <p>
+    I also welcome all development help: if you need help getting
+    started, open an issue on github and I can elaborate on the
+    specifics of the thing you would like to contribute.

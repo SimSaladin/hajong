@@ -2,10 +2,14 @@
 
   $maybe tid <- submitted
     <h1>Thank you!
-    <p>Your support ticket \##{fromSqlKey tid} has been opened.
+    <p>Your submission \##{fromSqlKey tid} has been received. I'll get in touch soon.
 
   $nothing
-    <h1>Support request
+    <h1>Contact Form
+    <p>
+      If you forgot how you logged in, think you found a bug or have anything
+      else to say about this site or project, you may do so with the below
+      form. I'll get back to you via email.
 
     <form.form method=post enctype=#{enctype} action=@{SupportR}>
       ^{widget}

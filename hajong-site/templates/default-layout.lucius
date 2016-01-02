@@ -52,6 +52,10 @@ nav a {
 nav a.active {
    background: #ce9814;
 }
+.game-settings-dialog {
+  max-width:30em;
+  margin:0 auto;
+}
 
 /* {{{ forms general */
 .form {
@@ -84,7 +88,7 @@ label {
   min-width:8em;
 }
 
-input[type=text], input[type=password] {
+input[type=text], input[type=password], input[type=email], textarea {
   padding:0.4em 0.3em;
 }
 /* }}} */

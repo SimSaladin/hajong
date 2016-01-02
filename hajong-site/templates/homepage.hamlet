@@ -1,25 +1,40 @@
 
 <article>
   <section>
-    <h2>Online Riichi Mahjong 
-    <p>Riichi Mahjong is the Japanese multiplayer Mahjong variant usually played with #
-       four players and physical mahjong tiles.
+    <h1>Riichi Mahjong Online
+    <p>
+      Riichi (Japanese) Mahjong is a four-player game played with the probably
+      all-familiar mahjong tiles. For an overview of the game please see for
+      example the <a href="http://arcturus.su/wiki/Rules_overview">arcturus.su</a>
+      wiki.
 
   <section>
-    <h2>In the browser
-    <p><b>Funjong</b> is an implementation of the game in Haskell and Elm. #
-       The only other multiplayer implementation I am aware of is the Japanese Tenhou.net. #
-
-  <section>
-    <h2>With your friends
-    <p>Just create a new game on the right, share the link with your friends and play!
+    <h2>Play
+    <p>
+      To play on Funjong.org, you need to be logged in. You can use social
+      login or register a separate username. An email address is required,
+      because it's the only decently reliable identifier across different
+      authentication providers. Don't worry, I won't spam you. I don't like
+      spam myself either.
+    <p>
+      It wouldn't be too hard to allow anonymous playing, but it's not a high
+      priority item for me. If you really want that, let me know and I'll
+      possibly start working on it.
 
   <section>
     <h2>Open source
-    <p>Funjong is licensed under the MIT license. #
-       \<a href="https://github.com/SimSaladin/hajong">See on GitHub</a>.
-       As far as I know, this is the only open source implementation of the
-       rather complex game.
+    <p>
+      Funjong.org is completely open source. The game engine (<code>hajong-server</code>)
+      is written in Haskell. The game client and some other parts of this
+      website use Elm, and this website itself is powered by the Yesod web
+      framework.
+    <p>
+      The hajong project is licensed under the MIT license.
+      \<a href="https://github.com/SimSaladin/hajong">See on GitHub</a>.
+    <p>
+      The only other multiplayer implementation I am aware of is the Japanese
+      Tenhou.net, which is in Japanese and uses Flash in its game. That's one
+      of the reasons I wanted to give a try on rolling my own software.
 
 <aside>
   $maybe (_, Entity _ user) <- muser

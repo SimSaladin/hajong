@@ -1,10 +1,18 @@
-<h1>
+<h1>Account information
+<div>
+  <i>Display name: #{userDisplayName}
+  <br>
+  <i>username: #{userUsername}
+  <br>
+  <i>email: #{userEmailAddress}
 
 <h1>Saved game states
-
-<ul>
-$forall Entity k st <- res
-  <li>
-    <a href="?id=#{fromSqlKey k}">#{show $ savedRoundStateCreated st}
+$if null res
+  <p>Nothing to show here...
+$else
+  <ul>
+  $forall Entity k st <- res
+    <li>
+      <a href="?id=#{fromSqlKey k}">#{show $ savedRoundStateCreated st}
 
 <div#game>
