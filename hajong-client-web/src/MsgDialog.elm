@@ -9,6 +9,7 @@ import Text
 import Maybe
 import Signal
 import Keyboard
+import Task exposing (Task)
 import Graphics.Input.Field as Field
 import Graphics.Element as Element
 import Graphics.Element exposing (Element)
@@ -27,6 +28,10 @@ eventMessage = Signal.sampleOn
    (Signal.filter identity False Keyboard.enter)
    (Signal.map .string userTextInput.signal)
 
+userTextInputClear : Signal (Task x ())
+userTextInputClear = Signal.sampleOn eventMessage
+   (Signal.constant <| Signal.send userTextInput.address Field.noContent)
+
 userTextInput : Signal.Mailbox Field.Content
 userTextInput = Signal.mailbox Field.noContent
 
@@ -40,7 +45,8 @@ reportBugLink gs = span [ id "report-bug" ]
 
 dialogObject : LogItem -> Html
 dialogObject item = case item of
-   LogMsg {player_nick, msg} -> div [ class "msg msg-player" ] [ text (toString player_nick), text msg ]
+   LogMsg {player_nick, msg} -> div [ class "msg msg-player" ] [ text <|
+   player_nick ++ ": ", text msg ]
    LogDebug {msg}            -> div [ class "msg msg-debug" ] [ text msg ]
    LogError {msg}            -> div [ class "msg msg-error" ] [ text msg ]
 

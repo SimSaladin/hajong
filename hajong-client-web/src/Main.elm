@@ -12,6 +12,7 @@ import Set
 import Mouse
 import Text
 import Time
+import Task exposing (Task)
 import Json.Decode exposing (Value)
 import Graphics.Input.Field as Field
 import Graphics.Element exposing (..)
@@ -24,6 +25,9 @@ port downstream : Signal String
 
 eventInput : Signal Event
 eventInput = decodeEvent `map` downstream
+
+port runner : Signal (Task x ())
+port runner = MsgDialog.userTextInputClear
 
 -- upstream signal: to server. Further handled from JS.
 port upstream : Signal String
