@@ -23,16 +23,22 @@ import Signal exposing (..)
 import Window
 import Debug
 
--- {{{ Server IO ----------------------------------------------
-
--- Events from server (handled in javascript)
-port downstream : Signal String
-
-eventInput : Signal Event
-eventInput = decodeEvent `map` downstream
-
+-- | Tasks in this app
 port runner : Signal (Task x ())
 port runner = MsgDialog.tasks
+
+-- A port exposed out of elm which json-encodes current @roundState@
+port spyRoundState : Signal String
+port spyRoundState =
+   let f {roundState} = case roundState of
+         Just r  -> encodeRoundState r
+         Nothing -> ""
+   in Signal.map f gameState
+
+-- {{{ Server IO ----------------------------------------------
+
+-- Events from server via ws (supplied in js)
+port downstream : Signal String
 
 -- upstream signal: to server. Further handled from JS.
 port upstream : Signal String
@@ -43,15 +49,22 @@ port upstream = encodeEvent `map` mergeMany
                  MsgDialog.eventMessage
     ]
 
--- A port exposed out of elm which json-encodes current @roundState@
-port spyRoundState : Signal String
-port spyRoundState =
-   let f {roundState} = case roundState of
-         Just r  -> encodeRoundState r
-         Nothing -> ""
-   in Signal.map f gameState
-
 -- }}}
+
+-- {{{ Profile pictures
+port profilePicturesInput : Signal (List (String, String))
+
+port profilePicturesRequest : Signal (List String)
+port profilePicturesRequest =
+   let allNicks gs  = gs.mynick `Set.insert` gs.lounge.idle
+           `Set.union`
+            List.foldr (\a b -> Set.union a.players b) Set.empty gs.lounge.games
+       f gs (fetched, _) = let nicks = allNicks gs
+                               in (Set.union fetched nicks,
+                                   Set.toList <| Set.diff nicks fetched)
+      in Signal.foldp f (Set.empty, []) gameState
+         |> Signal.dropRepeats
+         |> Signal.map snd
 
 -- {{{ Default state ------------------------------------------
 newState : GameState
@@ -88,15 +101,18 @@ type Input = AnEvent Event
            | MsgDialogInput MsgDialog.UserInput 
            | Dimensions (Int, Int)
            | TimeDelta Time.Time
+           | ReceivedProfilePictures ProfilePictures 
 
 input : Signal Input
 input = mergeMany
-   [ AnEvent `map` eventInput
-   , GameInput `map` Game.controls
-   , LoungeInput `map` Lounge.userInput
-   , MsgDialogInput `map` MsgDialog.userInput
-   , minDimensions >> Dimensions  `map` Window.dimensions
-   , TimeDelta `map` Time.every Time.second ]
+   [ decodeEvent >> AnEvent                   `map` downstream
+   , GameInput                                `map` Game.controls
+   , LoungeInput                              `map` Lounge.userInput
+   , MsgDialogInput                           `map` MsgDialog.userInput
+   , minDimensions >> Dimensions              `map` Window.dimensions
+   , TimeDelta                                `map` Time.every Time.second
+   , Dict.fromList >> ReceivedProfilePictures `map` profilePicturesInput
+   ]
 
 minDimensions : (Int, Int) -> (Int, Int)
 minDimensions (x, y) = (max x 360, max x 360)
@@ -139,8 +155,9 @@ stepGame x gs = case x of
    LoungeInput inp    -> Lounge.stepUserInput inp gs
    MsgDialogInput inp -> MsgDialog.stepUserInput inp gs
    Dimensions x       -> { gs | dimensions = x }
-   TimeDelta time     -> { gs | updated = time
-                         , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
+   ReceivedProfilePictures pics -> { gs | profilePictures = pics }
+   TimeDelta time     -> { gs | updated   = time
+                              , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
                          }
 
 -- | Apply an Event to the GameState.

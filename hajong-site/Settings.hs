@@ -62,6 +62,7 @@ data AppSettings = AppSettings
     , appSES                    :: SES
     }
 
+-- TODO This should be in Hajong.Configuration
 data HajongConf = HajongConf
     { hajongWs     :: Text
     , hajongBinary :: FilePath

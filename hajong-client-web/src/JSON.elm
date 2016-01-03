@@ -114,7 +114,7 @@ gameEventOfType eventType = case eventType of
     _              -> Debug.crash <| "Couldn't deserialize game event type `" ++ eventType ++ "'"
 
 finalPoints : Decoder (Player, Int)
-finalPoints = object2 (,) ("player" := int) ("points" := int)
+finalPoints = tuple2 (,) int int
 
 -- ** Hand
 

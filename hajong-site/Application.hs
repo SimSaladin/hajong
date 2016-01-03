@@ -70,16 +70,18 @@ makeFoundation appSettings = do
 
     -- hajong-server: game states via ACID
     putStrLn "Opening hajong-server ACID connection..."
-    let socket = appServerSocket appSettings
-        wsport = read $ tail $ dropWhile (/= ':') $ dropWhile (/= '/') $ unpack $ appServerWs appSettings
-    appGameState <- G.openServerDB (UnixSocket socket) 
+    let HajongConf{..} = appHajong appSettings
+    appGameState <- G.openServerDB (UnixSocket hajongSocket) 
     putStrLn "ACID connection established."
 
     -- site communicates with hajong-server via this local websocket.
-    _threadId <- forkIO $ runHajongInternalControl wsport appGameIn appGameOut `finally`
+    let wsport  = read $ tail $ dropWhile (/= ':') $ dropWhile (/= '/') $ unpack hajongWs
+        runCtrl = runHajongInternalControl wsport hajongCtrlSecret appGameIn appGameOut
+
+    _threadId <- forkIO $ runCtrl `finally`
         do putStrLn "Internal hajong-server WS control channel lost. Reconnecting in 1s..."
            threadDelay 1000000
-           runHajongInternalControl wsport appGameIn appGameOut
+           runCtrl
 
     -- We need a log function to create a connection pool. We need a connection
     -- pool to create our foundation. And we need our foundation to get a
@@ -139,11 +141,11 @@ warpSettings foundation =
             (toLogStr $ "Exception from Warp: " ++ show e))
       defaultSettings
 
-runHajongInternalControl :: Int -> MVar G.InternalEvent -> MVar G.InternalResult -> IO ()
-runHajongInternalControl wsport inv outv = do
+runHajongInternalControl :: Int -> Text -> MVar G.InternalEvent -> MVar G.InternalResult -> IO ()
+runHajongInternalControl wsport secret inv outv = do
     WS.runClient "localhost" wsport "/" $ \conn -> do
         putStrLn "Internal hajong-server WS control channel opened."
-        WS.sendTextData conn (G.InternalControl "")
+        WS.sendTextData conn (G.InternalControl secret)
         forever $ do
             takeMVar inv >>= WS.sendTextData conn
             WS.receiveData conn >>= putMVar outv

@@ -26,5 +26,7 @@
 
 /status StatusR GET
 
+/api/pictures ProfilePicturesR GET
+
 /token      AuthTokenR GET
 

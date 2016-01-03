@@ -101,6 +101,7 @@ library
                  , acid-state
                  , concurrent-extra
                  , websockets
+                 , pureMD5
 
 executable         hajong-site
     if flag(library-only)

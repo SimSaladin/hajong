@@ -20,7 +20,7 @@ type alias GameState =
    -- lounge-related
    , lounge          : LoungeData
    , lobbyChosenGame : Maybe GameInfo
-   , profilePictures : Dict String String
+   , profilePictures : ProfilePictures
 
     -- In-Game
    , roundState     : Maybe RoundState
@@ -45,6 +45,8 @@ type alias WaitRecord = { seconds : Int, added : Time }
 type LogItem = LogMsg { player_nick : String, msg : String }
              | LogDebug { msg : String }
              | LogError { msg : String }
+
+type alias ProfilePictures = Dict String String
 
 -- }}}
 

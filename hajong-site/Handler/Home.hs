@@ -1,6 +1,9 @@
 module Handler.Home where
 
 import Import
+import qualified Data.ByteString.Lazy.Char8 as C8
+import Data.Text (strip)
+import Data.Digest.Pure.MD5 (md5)
 import Data.FileEmbed (embedFile)
 import Yesod.Auth.Account
 import Yesod.Form.Bootstrap3
@@ -62,3 +65,29 @@ getFaviconR = return $ TypedContent "image/x-icon"
 getRobotsR :: Handler TypedContent
 getRobotsR = return $ TypedContent typePlain
                     $ toContent $(embedFile "config/robots.txt")
+
+getProfilePicturesR :: Handler Value
+getProfilePicturesR = do
+    nicks <- runInputGet $ ireq textListField "nicks[]"
+    users <- runDB $ selectList [UserUsername <-. nicks] []
+
+    let res = flip map users $ \(Entity _ User{..}) ->
+            let profpic | Just fbId <- userFbUserId = "http://graph.facebook.com/" ++ fbId ++ "/picture"
+                        | otherwise                 = "http://www.gravatar.com/avatar/" ++ hashEmail userEmailAddress
+                in (userUsername, profpic)
+
+    returnJson res
+
+-- | for gravatar
+hashEmail :: Text -> Text
+hashEmail = md5sum . toLower . strip
+    where
+        md5sum :: Text -> Text
+        md5sum = tshow . md5 . C8.pack . unpack
+
+-- | List of text fields.
+textListField :: Field Handler [Text]
+textListField = Field
+    { fieldParse = \xs _ -> return (Right $ Just xs)
+    , fieldView  = error "Not viewable"
+    , fieldEnctype = UrlEncoded }

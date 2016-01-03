@@ -14,6 +14,9 @@ var alertedDiv = document.getElementById('alerted');
 var muted = localStorage.getItem("muted");
 /* }}} */
 
+/* {{{ profile pictures */
+/* }}} */
+
 /* {{{ Commands */
 function processCommand(x){
   console.log("command", x);
@@ -48,7 +51,7 @@ function unmute() {
 mainDiv.hidden = true;
 
 function initElm() {
-  return Elm.embed(Elm.Main, mainDiv, { downstream : "" });
+  return Elm.embed(Elm.Main, mainDiv, { downstream : "", profilePicturesInput : [] });
 }
 
 function startGame(doJoin) {
@@ -68,6 +71,12 @@ function startGame(doJoin) {
       } else {
         if (d.type !== "noop") socket.send(e);
       }
+    });
+    game.ports.profilePicturesRequest.subscribe(function(nicks) {
+      if (nicks.length == 0) return;
+      $.get("@{ProfilePicturesR}", { "nicks[]": nicks }, function(data) {
+        game.ports.profilePicturesInput.send(data);
+      });
     });
 
     game.ports.spyRoundState.subscribe(function(x) { currentRoundState = x });
