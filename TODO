@@ -1,6 +1,6 @@
 x = done, / = half done, ! = needs testing
 
-[ ] email: support and auth-account
+[ ] setup sending email: support and auth-account
 [ ] https
 [ ] make final points visible in elm
 [ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
@@ -9,6 +9,7 @@ x = done, / = half done, ! = needs testing
 [ ] refactoring: split H.Server to H.{Server.State,Server.Internal,Database,Database.Query} modules
 [ ] refactoring: replace the StateT in kyoku code with a custom mechanism, which updates the kyoku state right after an event is triggered
 [ ] make csrf middleware work with LogoutR too, so it can be enabled
+[ ] after a game has ended, make it possible to go back to lobby.
 
 # mechanics
 [x] add test: riichi score is transferred on ron

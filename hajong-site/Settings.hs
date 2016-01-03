@@ -57,13 +57,18 @@ data AppSettings = AppSettings
     -- ^ Copyright text to appear in the footer of the page
     , appAnalytics              :: Maybe Text
     -- ^ Google Analytics code
-    , appServerWs               :: Text
-    , appServerBinary           :: FilePath
-    , appServerSocket           :: FilePath
-    , appServerArgs             :: [String]
-    , appServerLog              :: FilePath
+    , appHajong                 :: HajongConf
     , appFacebookCredentials    :: FB.Credentials
     , appSES                    :: SES
+    }
+
+data HajongConf = HajongConf
+    { hajongWs     :: Text
+    , hajongBinary :: FilePath
+    , hajongSocket :: FilePath
+    , hajongArgs   :: [String]
+    , hajongLog    :: FilePath
+    , hajongCtrlSecret :: Text
     }
 
 instance FromJSON AppSettings where
@@ -89,19 +94,24 @@ instance FromJSON AppSettings where
 
         appCopyright              <- o .: "copyright"
         appAnalytics              <- o .:? "analytics"
-        appServerWs               <- o .: "server_ws"
-        appServerBinary           <- o .: "server_binary"
-        appServerSocket           <- o .: "server_socket"
-        appServerArgs             <- o .: "server_args"
-        appServerLog              <- o .: "server_log"
 
         let parseFbCredentials x = FB.Credentials <$> x .: "name" <*> x .: "id" <*> x .: "secret"
         appFacebookCredentials    <- parseFbCredentials =<< o .: "facebook_credentials"
 
+        appHajong                 <- o .: "hajong"
         appSES                    <- o .: "aws"
 
         return AppSettings {..}
 
+instance FromJSON HajongConf where
+    parseJSON = withObject "HajongConf" $ \o -> do
+        hajongWs          <- o .: "server_ws"
+        hajongBinary      <- o .: "server_binary"
+        hajongSocket      <- o .: "server_socket"
+        hajongArgs        <- o .: "server_args"
+        hajongLog         <- o .: "server_log"
+        hajongCtrlSecret  <- o .: "ws_secret"
+        return HajongConf{..}
 
 -- | Settings for 'widgetFile', such as which template languages to support and
 -- default Hamlet settings.

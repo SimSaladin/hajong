@@ -200,7 +200,7 @@ playGame gs = do
 -- | Monitor the kyoku machine and perhaps do something in there.
 processMachine :: Machine -> Worker FinalPoints
 processMachine m = do
-    logMachine m
+    logDebugN $ "Transitioned to state " ++ tshow m
     case m of
         NotBegun s                     -> workerWait s >> processKyokuStarts
         CheckEndConditionsAfterDiscard -> unsafeStep InpAuto    >>= processMachine -- auto check
@@ -252,9 +252,6 @@ takeInput = liftIO . atomically . takeTMVar =<< view wInput
 multicast :: Event -> Worker ()
 multicast ev = do gs <- rview wGame
                   mapM_ (`safeUnicast` ev) (gs^..gamePlayers.each)
-
-logMachine :: Machine -> Worker ()
-logMachine m = logDebugN $ "Transsation to state " ++ tshow m
 
 -- ** Game-related
 

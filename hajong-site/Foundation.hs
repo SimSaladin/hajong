@@ -24,7 +24,7 @@ import qualified Yesod.Facebook as YF
 
 import Language.Haskell.TH (runIO, litE, stringL)
 import Data.Acid
-import qualified Hajong.Server as G
+import qualified Hajong.Database as G
 import qualified Hajong.Connections as G
 import Control.Concurrent.Lock
 import qualified Network.WebSockets as WS

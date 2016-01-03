@@ -9,12 +9,14 @@ ip-from-header: "_env:IP_FROM_HEADER:false"
 copyright: "2016 Samuli Thomasson"
 
 # hajong server settings
-server_ws:     "_env:SERVER_WS:ws://localhost:8001"
-server_binary: "_env:SERVER_BINARY:hajong-server" # in path or absolute
-server_socket: "_env:SERVER_SOCKET:/tmp/hajong.socket"
-server_log:    "_env:SERVER_LOG:game-devel.log"
-server_args:
-  - "--verbose"
+hajong:
+   server_ws:     "_env:SERVER_WS:ws://localhost:8001"
+   ws_secret:     "_env:HAJONG_WS_SECRET:secretkey"
+   server_binary: "_env:SERVER_BINARY:hajong-server" # in path or absolute
+   server_socket: "_env:SERVER_SOCKET:/tmp/hajong.socket"
+   server_log:    "_env:SERVER_LOG:game-devel.log"
+   server_args:
+     - "--verbose"
 
 # Database
 postgres_database:

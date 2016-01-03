@@ -14,6 +14,7 @@ module GameServer
 
 import Import hiding (update)
 import qualified Hajong.Server as G
+import qualified Hajong.Database as G
 import Data.Acid
 
 getAcid = appGameState <$> getYesod

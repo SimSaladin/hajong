@@ -24,6 +24,9 @@ flag cli
 library
   hs-source-dirs:      src
   exposed-modules:     Hajong.Server
+                     , Hajong.Database
+                     , Hajong.Database.Types
+                     , Hajong.Database.Queries
                      , Hajong.Worker
                      , Hajong.Client
                      , Hajong.Connections

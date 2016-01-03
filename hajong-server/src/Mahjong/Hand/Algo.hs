@@ -274,7 +274,7 @@ kokushiShanten grp = case concatMap tileGroupTiles grp L.\\ ["P1", "P9", "M1", "
     []                          -> Just 0
     [x] | honor x || terminal x -> Just (-1)
     _                           -> Just 13
-            -- ^ TODO: this branch is hard, because we can have even 18
+            -- TODO: this branch is hard, because we can have even 18
             -- tiles in the hand at the moment. should discard kokushi
             -- altogether when there are melds.
 

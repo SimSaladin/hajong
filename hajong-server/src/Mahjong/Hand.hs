@@ -138,7 +138,7 @@ handAutoDiscard hand
 handWin :: CanError m => Maybe Shout -> HandA -> m HandA
 handWin ms h
     | isJust ms, h^.handFuriten._Wrapped /= NotFuriten = throwError "You are furiten"
-    -- | Just s <- ms, [] <- shoutTo s                    = return $ setAgari ms h -- XXX: for kokushi tenpai
+    -- Just s <- ms, [] <- shoutTo s                    = return $ setAgari ms h -- XXX: for kokushi tenpai
     | not $ complete $ setAgari ms h                                 = throwError $ "Cannot win with an incomplete hand: " ++ tshow (ms, h)
     | otherwise                                        = return $ setAgari ms h
 

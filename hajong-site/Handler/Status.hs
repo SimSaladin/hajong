@@ -12,7 +12,7 @@ module Handler.Status where
 
 import Import
 import GameServer as G
-import Hajong.Server as G
+import Hajong.Database as G
 import Data.Acid
 import qualified Data.Map as M
 import qualified Data.IntMap as IM

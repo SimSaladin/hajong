@@ -1,5 +1,4 @@
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE UndecidableInstances #-} -- SafeCopy
 {-# LANGUAGE MultiWayIf #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 ------------------------------------------------------------------------------
@@ -17,10 +16,11 @@
 module Hajong.Server where
 
 ------------------------------------------------------------------------------
+import           Mahjong
+import           Hajong.Database
 import           Hajong.Connections
 import           Hajong.Client
 import           Hajong.Worker
-import           Mahjong
 ------------------------------------------------------------------------------
 import           Prelude (read)
 import           Control.Monad.Logger
@@ -30,7 +30,6 @@ import           Control.Concurrent
 import           Data.Acid
 import           Data.Acid.Remote
 import           Data.SafeCopy
-import           Data.ReusableIdentifiers
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
 import           Data.UUID                  (UUID)
@@ -43,57 +42,23 @@ import           System.Random
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 ------------------------------------------------------------------------------
 
--- * Types
+-- | Server logic monad.
+newtype Server a = Server { unServer :: ReaderT ServerSt IO a }
+    deriving ( Functor, Applicative, Monad, MonadIO, MonadReader ServerSt, MonadBase IO )
 
--- | Serialization of an on-going game.
-type Game = GameState Int
-
--- | A record of a client connected or previously connected.
-data ClientRecord = ClientRecord
-    { _cNick           :: Text
-    , _cToken          :: Text
-    , _cRegistered     :: Bool
-    , _cStatus         :: Either UTCTime UTCTime -- ^ Left (disconnected at) or Right (connected at)
-    , _cInGame         :: Maybe Int
-    } deriving (Show, Typeable)
-
--- | A record of a past game.
-data PastGame = PastGame
-    { _pgResults       :: Either Text FinalPoints
-    , _pgGameState     :: GameState Int
-    , _pgLastMachine   :: Machine
-    } deriving (Show, Typeable)
-
--- | This is the root ACID type.
---
--- Players are identified with unique Ints. When joining the server, they
--- may opt for a new *anonymous* identifier or provide their previous
--- identifier and a passphrase.
-data ServerDB = ServerDB
-    { _sePlayerRecord  :: Record              -- ^ Player identifiers
-    , _seReserved      :: IntMap ClientRecord -- ^ Clients identified by @sePlayerRecord@
-    , _seNicks         :: Map Nick Int        -- ^ Reserved nicks
-    , _seGameRecord    :: Record              -- ^ Game identifiers
-    , _seGames         :: IntMap Game         -- ^ Games identified by @seGameRecord@
-    , _seHistory       :: Map UUID PastGame   -- ^ History of run workers
-    } deriving (Show, Typeable)
-
-$(deriveSafeCopy 0 'base ''FinalPoints)
-$(deriveSafeCopy 0 'base ''Machine)
-$(deriveSafeCopy 0 'base ''ClientRecord)
-$(deriveSafeCopy 0 'base ''PastGame)
-$(deriveSafeCopy 0 'base ''ServerDB)
+-- * State
 
 -- | Server logic Reader value.
 data ServerSt = ServerSt
     { _db              :: AcidState ServerDB
-    , _seWsPort        :: Int
+    , _seCtrlSecret    :: Text                      -- ^ Secret key required to authenticate a client for server control.
+    , _seWsPort        :: Int                       -- ^ Which port we are listening on.
     , _seConnections   :: TVar (IntMap Client)      -- ^ Everyone connected
     , _seLounge        :: TVar (Set Client)         -- ^ Lounge
     , _seWatcher       :: TChan (Int, WorkerResult) -- ^ Worker watcher, **broadcast chan**.
     , _seLoggerSet     :: LoggerSet                 -- ^ Fed to new workers
     , _seClient        :: Client                    -- ^ When serving a single client
-    , _seWorkers       :: TVar (IntMap RunningGame)
+    , _seWorkers       :: TVar (IntMap RunningGame) -- ^ Running workers
     } deriving (Typeable)
 
 -- | Game worker thread.
@@ -107,215 +72,24 @@ data RunningGame = RunningGame
 data PartedException = PartedException Text deriving (Show, Typeable)
 instance Exception PartedException
 
--- | Server logic monad.
-newtype Server a = Server { unServer :: ReaderT ServerSt IO a }
-    deriving ( Functor, Applicative, Monad, MonadIO, MonadReader ServerSt, MonadBase IO )
+-- * Lenses
+
+--
+makeLenses ''RunningGame
+makeLenses ''ServerSt
+
+-- Instances
 
 instance MonadBaseControl IO Server where
     type StM Server a = a
     liftBaseWith f    = Server $ liftBaseWith $ \q -> f (q . unServer)
     restoreM          = Server . restoreM
 
--- * Lenses
-
---
-makeLenses ''ClientRecord
-makeLenses ''RunningGame
-makeLenses ''ServerDB
-makeLenses ''ServerSt
-
 instance MonadLogger Server where
     monadLoggerLog loc src lvl msg = do
         lgr <- view seLoggerSet
         let out = defaultLogStr loc src lvl (toLogStr msg)
         liftIO $ pushLogStr lgr out
-
--- * Safecopy
-
--- | TODO: Move these instances and data types to corresponding .Types modules
-$(deriveSafeCopy 0 'base ''Player)
-$(deriveSafeCopy 0 'base ''Wanpai)
-$(deriveSafeCopy 0 'base ''GameSettings)
-$(deriveSafeCopy 0 'base ''Tile)
-$(deriveSafeCopy 0 'base ''TileEq)
-$(deriveSafeCopy 0 'base ''MentsuKind)
-$(deriveSafeCopy 0 'base ''Honor)
-$(deriveSafeCopy 0 'base ''Number)
-$(deriveSafeCopy 0 'base ''Sangen)
-$(deriveSafeCopy 0 'base ''TileKind)
-$(deriveSafeCopy 0 'base ''KyokuResults)
-$(deriveSafeCopy 0 'base ''AbortiveDraw)
-$(deriveSafeCopy 0 'base ''Flag)
-$(deriveSafeCopy 0 'base ''Value)
-$(deriveSafeCopy 0 'base ''Discard)
-$(deriveSafeCopy 0 'base ''TurnAction)
-$(deriveSafeCopy 0 'base ''Yaku)
-$(deriveSafeCopy 0 'base ''Mentsu)
-$(deriveSafeCopy 0 'base ''ShoutKind)
-$(deriveSafeCopy 0 'base ''Kaze)
-$(deriveSafeCopy 0 'base ''ValuedHand)
-$(deriveSafeCopy 0 'base ''Shout)
-$(deriveSafeCopy 0 'base ''GameEvent)
-$(deriveSafeCopy 0 'base ''RiichiState)
-$(deriveSafeCopy 0 'base ''DrawState)
-$(deriveSafeCopy 0 'base ''FuritenState)
-$(deriveSafeCopy 0 'base ''HandFlag)
-$(deriveSafeCopy 0 'base ''GameState)
-
--- Not our data types
-$(deriveSafeCopy 0 'base ''Identity)
-$(deriveSafeCopy 0 'base ''UUID.UUID)
-
--- SafeCopy instances for indexed types
-
-instance (SafeCopy (m (Set HandFlag)), SafeCopy (m Bool), SafeCopy (m [Tile]), SafeCopy (m FuritenState), SafeCopy (PickedTile m)) => SafeCopy (Hand m) where
-    version          = 0
-    putCopy Hand{..} = contain $ do safePut _handCalled; safePut _handDiscards; safePut _handRiichi; safePut _handIppatsu; safePut _handState; safePut _handPicks; safePut _handConcealed; safePut _handFuriten; safePut _handCanTsumo; safePut _handFlags
-    getCopy          = contain $ Hand <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet
-
-instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
-    version = 0
-    putCopy (FromWall t)         = contain $ do safePut (0 :: Word8); safePut t
-    putCopy (FromWanpai t)       = contain $ do safePut (1 :: Word8); safePut t
-    putCopy (AgariTsumo t)       = contain $ do safePut (2 :: Word8); safePut t
-    putCopy (AgariCall s)        = contain $ do safePut (3 :: Word8); safePut s
-    putCopy (AgariTsumoWanpai t) = contain $ do safePut (4 :: Word8); safePut t
-    getCopy = contain $ do tag <- safeGet
-                           case tag :: Word8 of
-                               0 -> FromWall <$> safeGet
-                               1 -> FromWanpai <$> safeGet
-                               2 -> AgariTsumo <$> safeGet
-                               3 -> AgariCall <$> safeGet
-                               4 -> AgariTsumoWanpai <$> safeGet
-                               _ -> fail $ "Couldn't identify tag " ++ show tag
-
-instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
-    version = 0
-    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pTurn; safePut _pFlags; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _sEventHistory; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
-    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet
-
--- * Query
-
-getClientRecord :: Int -> Query ServerDB (Maybe ClientRecord)
-getClientRecord i = view (seReserved.at i)
-
-getGames :: Query ServerDB (IntMap Game)
-getGames = view seGames
-
-getGame :: Int -> Query ServerDB (Maybe Game)
-getGame i = view (seGames.at i)
-
-dumpDB :: Query ServerDB ServerDB
-dumpDB = ask
-
--- * Updates
-
--- | Add the new client to ServerDB if
---      * its @ident@ is known,
---      * the client knows correct @token@ and
---      * there are no other clients with the @ident@
---
---  @connectClient currentTime ident token@
-connectClient :: UTCTime -> Int -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
-connectClient time ident token = do
-    reserved <- use (seReserved.at ident)
-    case reserved of
-        Nothing                     -> return $ Left $ "Unknown identity: " <> tshow ident
-        Just c | token == c^.cToken -> do let c' = c&cStatus.~Right time
-                                          _ <- seReserved.at ident <.= Just c' -- TODO EventResult: should it be checked?
-                                          return (Right (ident, c'))
-               | otherwise          -> return $ Left $ "Auth tokens didn't match (got " <> token <> ")"
-
--- | Client disconnects: Set status to Left in corresponding ClientRecord. 
---
--- @partClient currentTime ident@
-partClient :: UTCTime -> Int -> Update ServerDB (Maybe ClientRecord)
-partClient time ident = use (seReserved.at ident) >>= \case
-        Just c  -> seReserved.at ident <.= Just (c&cStatus.~Left time)
-        Nothing -> return Nothing
-
--- | Assign a @ident@ to a new player if possible.
---
--- @registerPlayer nick token isRegistered@
-registerPlayer :: Text -> Text -> Bool -> Update ServerDB (Either Text (Int, ClientRecord))
-registerPlayer nick token reg = do
-    taken <- use (seNicks.at nick)
-    rec   <- use sePlayerRecord
-    case (taken, newId rec) of
-        -- nick is taken
-        (Just i, _)         -> do Just c <- use (seReserved.at i)
-                                  if | not reg        -> return (Left "Nick is taken")
-                                     | c^.cRegistered -> return (Right (i, c))
-                                     | otherwise      -> return (Left "Nick is used by someone anonymous") -- TODO overwrite his nick?
-        -- server has room
-        (_, Just (i, rec')) -> do sePlayerRecord  .= rec'
-                                  seNicks.at nick .= Just i
-                                  let c = ClientRecord nick token reg (Left $ UTCTime (ModifiedJulianDay 0) $ secondsToDiffTime 0) Nothing
-                                  seReserved.at i .= Just c
-                                  return (Right (i, c))
-        -- server is full
-        (_, Nothing)        -> return (Left "Server is full")
-
--- | Assign an @ident@ to an anonymous player.
---
--- @registerAnonymousPlayer nick token@
-registerAnonymousPlayer :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
-registerAnonymousPlayer nick token = registerPlayer nick token False
-
--- | Assign an @ident@ to a registered player.
---
--- *TODO: If the nick is taken by an anon player, we should force the anon to change his nick.*
---
--- @registerLoggedInPlayer nick token@
-registerLoggedInPlayer :: Text -> Text -> Update ServerDB (Either Text (Int, ClientRecord))
-registerLoggedInPlayer nick token = use (seNicks.at nick) >>= \case
-    Nothing -> registerPlayer nick token True
-    Just i  -> do
-        Just c <- use (seReserved.at i)
-        if c^.cRegistered then return (Right (i, c))
-                          else return (Left "Your nick is in use by someone anonymous!")
-
--- | Set the game of a player
-setPlayerGame :: Int -> Int -> Update ServerDB ()
-setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
-
-destroyGame :: Int -> Update ServerDB [ClientRecord]
-destroyGame gid = do seGameRecord %= freeId gid
-                     cs <- preuse (seGames.at gid._Just.gamePlayers)
-                     seGames.at gid .= Nothing
-                     rs <- forM (maybe [] (^..each) cs) $ \i -> do
-                        seReserved.at i._Just.cInGame .= Nothing
-                        use (seReserved.at i)
-                     return (catMaybes rs)
-
-insertGame :: Game -> Update ServerDB (Either Text Int)
-insertGame game = do
-    rec <- use seGameRecord
-    case newId rec of
-        Just (gid, rec') -> do sePlayerRecord .= rec'
-                               seGames.at gid .= Just game
-                               return (Right gid)
-        Nothing -> return (Left "Server's Game capacity reached")
-
-logWorkerResult :: PastGame -> Update ServerDB ()
-logWorkerResult pg = seHistory.at (_gameUUID $ _pgGameState pg) .= Just pg
-
-flushWorkerLog :: Update ServerDB ()
-flushWorkerLog = seHistory .= mempty
-
-getWorkerResultLog :: Query ServerDB (Map UUID PastGame)
-getWorkerResultLog = view seHistory
-
--- * ACID interface
-$(makeAcidic ''ServerDB [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB
-                        , 'connectClient, 'partClient
-                        , 'registerAnonymousPlayer, 'registerLoggedInPlayer
-                        , 'setPlayerGame
-                        , 'insertGame, 'destroyGame
-                        , 'logWorkerResult, 'getWorkerResultLog, 'flushWorkerLog
-                        ])
-
-------------------------------------------------------------------------------
 
 -- * Entry points
 
@@ -341,20 +115,20 @@ openServerDB = openRemoteState skipAuthenticationPerform "127.0.0.1"
 
 -- * Initialize state
 
-initServer :: Int -> LoggerSet -> IO ServerSt
-initServer port lgr = do
+initServer :: Int       -- ^ Port to listen on
+           -> Text      -- ^ Control client secret key
+           -> LoggerSet -- ^ Logger to use
+           -> IO ServerSt
+initServer port secret lgr = do
     sdb <- openLocalState emptyDB
     chan <- newBroadcastTChanIO
-    ServerSt sdb port
+    ServerSt sdb secret port
         <$> newTVarIO mempty -- no-one is connected
         <*> newTVarIO mempty -- in lounge either
         <*> pure chan
         <*> pure lgr
         <*> pure (error "No client")
         <*> newTVarIO mempty
-
-emptyDB :: ServerDB
-emptyDB = ServerDB (newRecord 1024) mempty mempty (newRecord 256) mempty mempty
 
 -- * Run Servers
 
@@ -650,15 +424,17 @@ createGame settings = do
                        atomically $ modifyTVar ws (insertMap g rg)
                        uni $ InternalGameCreated g 
 
-
 -- * Internal
 
+-- | The WS listener of an internal connection.
 internalConnect :: Text -> Server ()
-internalConnect _secret = do
-    -- TODO Check secret
-    c <- view seClient
-    forever $ receive c >>= \case
-        InternalNewGame settings -> createGame settings
+internalConnect secret = do
+    real <- view seCtrlSecret
+    if real /= secret
+        then uni ("Error: wrong secret key" :: Text)
+        else do c <- view seClient
+                forever $ receive c >>= \case
+                    InternalNewGame settings -> createGame settings
 
 ------------------------------------------------------------------------------
 
