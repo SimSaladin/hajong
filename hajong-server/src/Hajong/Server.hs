@@ -60,7 +60,6 @@ data ClientRecord = ClientRecord
 -- | A record of a past game.
 data PastGame = PastGame
     { _pgResults       :: Either Text FinalPoints
-    , _pgSettings      :: GameSettings
     , _pgGameState     :: GameState Int
     , _pgLastMachine   :: Machine
     } deriving (Show, Typeable)
@@ -381,7 +380,7 @@ startGame gid game = do
     createWorker game >>= forkWorker gid
 
 createWorker :: Game -> Server WorkerData
-createWorker game = WorkerData (game^.gameSettings)
+createWorker game = WorkerData
     <$> (liftIO . newTVarIO =<< attachClients game)
     <*> (liftIO $ newTVarIO $ NotBegun 5)
     <*> liftIO newEmptyTMVarIO
@@ -473,7 +472,7 @@ workerDied gid res = do
         gs           <- readTVar (wd^.wGame) <&> map getIdent
         machine      <- readTVar (wd^.wMachine)
         let clientSet = rg^..gClients.folded & setFromList
-            pg        = PastGame (_Left %~ tshow $ res) (wd^.wSettings) gs machine
+            pg        = PastGame (_Left %~ tshow $ res) gs machine
 
         modifyTVar' (ss^.seWorkers) (at gid .~ Nothing)
         modifyTVar' (ss^.seLounge) (union clientSet)

@@ -127,4 +127,4 @@ clientToPlayer :: IsPlayer p => p -> GameState p -> Maybe Player
 clientToPlayer c gs =  fmap (^._1) $
     (gs^.gamePlayers & ifind (\_ x -> x == c))
     `mplus`
-    (gs^.gamePlayers & ifind (\p c' -> isBot c' && playerNick c' == playerNick c ++ " (n/a"))
+    (gs^.gamePlayers & ifind (\_ c' -> isBot c' && playerNick c' == playerNick c ++ " (n/a"))

@@ -143,7 +143,7 @@ instance ToJSON GameEvent where
         DealRiichi pk                            -> atEvent "riichi"       ["player-kaze" .= pk]
         DealEnded results                        -> atEvent "end"          ["results"     .= results]
         GamePoints pk n                          -> atEvent "points"       ["player-kaze" .= pk, "points" .= n]
-        GameEnded finalPoints                    -> atEvent "game-ended"   ["final_points" .= mapToList finalPoints]
+        GameEnded (FinalPoints points)           -> atEvent "game-ended"   ["final_points" .= mapToList points]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard d) = atType "discard"    ["riichi" .= _dcRiichi d, "tile" .= _dcTile d, "to" .= _dcTo d]

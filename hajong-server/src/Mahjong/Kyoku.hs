@@ -130,7 +130,7 @@ step (WaitingShouts couldShout winning shouts chankan) inp
 
 step CheckEndConditionsAfterDiscard InpAuto = checkEndConditions
 
-step (KyokuEnded{}) _ = do
+step (KyokuEnded{}) InpAuto = do
     k <- get
     case maybeGameResults k of
         Nothing -> return (NotBegun 15)
@@ -186,6 +186,8 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
 
     GamePoints pk ps ->
         [ Endo $ pPlayers.ix pk._2 +~ ps ]
+
+    GameEnded _ -> []
 
 dealTurnAction :: Kaze -> TurnAction -> Endo Kyoku
 dealTurnAction p ta = mconcat $ case ta of 
@@ -271,7 +273,7 @@ nagashiOrDraw = do
         payers  = map (\xs@((p,_):_) -> (p, sumOf (traversed._2) xs)) $ groupBy (equating fst) $ (concatMap snd $ catMaybes $ map snd $ mapToList wins) :: [Payer]
 
     res <- if null winners then endDraw else return $ DealTsumo winners payers
-    endKyoku rse
+    endKyoku res
 
 
 handWinsNagashi :: Kaze -> Hand Identity -> Maybe (Winner, [Payer])
@@ -484,12 +486,12 @@ processShouts shouts@((fsk,fs):_) _chank = do
 
 -- ** Ending
 
-endKyoku :: InkYoku m => KyokuResults -> m Machine
+endKyoku :: InKyoku m => KyokuResults -> m Machine
 endKyoku res = return (KyokuEnded res)
 
-endGame :: FinalPoints -> m Machine
-endGame finalPoints = do tellEvent $ GameEnded finalPoints
-                         return $ HasEnded finalPoints
+endGame :: InKyoku m => FinalPoints -> m Machine
+endGame points = do tellEvent $ GameEnded points
+                    return $ HasEnded points
 
 endTsumo :: InKyoku m => Kaze -> m KyokuResults
 endTsumo winner = do

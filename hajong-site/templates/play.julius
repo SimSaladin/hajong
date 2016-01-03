@@ -10,12 +10,18 @@ var alertedDiv = document.getElementById('alerted');
 
 /* }}} */
 
+/* {{{ Persisting settings */
+var muted = localStorage.getItem("muted");
+/* }}} */
+
+/* {{{ Commands */
 function processCommand(x){
   console.log("command", x);
   if (x.startsWith("save")) {
     $.post("@{SaveViewR}", currentRoundState);
   }
 }
+/* }}} */
 
 /* {{{ Sounds */
 var sounds = {
@@ -23,8 +29,18 @@ var sounds = {
 };
 
 function soundHandler(x) {
+  if (muted) return false;
   sounds[x] && console.log(x);
   sounds[x] && sounds[x].play()
+}
+
+function mute() {
+  muted = true;
+  localStorage.setItem("muted", true);
+}
+function unmute() {
+  muted = false;
+  localStorage.removeItem("muted");
 }
 /* }}} */
 

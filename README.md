@@ -15,6 +15,8 @@ Requires elm 0.15
 
 compile with `hajong-client-web/build.sh`
 
+http://mahjong.org/kanrinin/haiga-tool/
+
 # `hajong-site`
 
     sudo -u postgres createuser hajong-site

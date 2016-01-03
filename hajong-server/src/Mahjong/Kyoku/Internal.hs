@@ -101,7 +101,7 @@ data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a rou
                | DealRiichi Kaze
                | DealEnded KyokuResults
                | GamePoints Kaze Int -- ^ Point change
-               | GameEnded (Map Player Points)
+               | GameEnded FinalPoints
                deriving (Show, Read, Typeable)
 
 -- | Actions you do on your turn.
@@ -123,7 +123,7 @@ data GameAction = GameTurn TurnAction
 type PointsStatus = Map Player Points
 
 -- | Results from a whole game of mahjong.
-newtype FinalPoints = FinalPoints PointsStatus deriving (Show, Read)
+newtype FinalPoints = FinalPoints PointsStatus deriving (Show, Read, Eq)
 
 data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                   | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }
