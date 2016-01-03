@@ -12,22 +12,27 @@ import Set
 import Mouse
 import Text
 import Time
+import Dict
+import Graphics.Input.Field as Field
 import Task exposing (Task)
 import Json.Decode exposing (Value)
 import Graphics.Input.Field as Field
 import Graphics.Element exposing (..)
 import Color exposing (..)
 import Signal exposing (..)
+import Window
 import Debug
 
 -- {{{ Server IO ----------------------------------------------
+
+-- Events from server (handled in javascript)
 port downstream : Signal String
 
 eventInput : Signal Event
 eventInput = decodeEvent `map` downstream
 
 port runner : Signal (Task x ())
-port runner = MsgDialog.userTextInputClear
+port runner = MsgDialog.tasks
 
 -- upstream signal: to server. Further handled from JS.
 port upstream : Signal String
@@ -55,15 +60,22 @@ newState = { status     = InLounge
            , myid       = 0
            , lounge     = defaultLounge
            , gameWait   = Nothing
-           , updated    = 0
            , supportURL = "/support/"
+           , dialogFieldContent = Field.noContent
 
            , roundState = Nothing
            , gameUUID   = Nothing
            , waitTurnAction = Nothing
+           , gameFinalPoints = Nothing
            , waitShout  = Nothing
            , turnBegan  = 0
            , riichiWith = []
+
+           , lobbyChosenGame = Nothing
+           , profilePictures = Dict.empty
+
+           , updated    = 0
+           , dimensions = (0, 0)
 
            , logging    = []
            }
@@ -72,15 +84,22 @@ newState = { status     = InLounge
 -- {{{ Game loop input ----------------------------------------
 type Input = AnEvent Event
            | GameInput Game.Controls
-           | LoungeInput Lounge.Controls
+           | LoungeInput Lounge.UserInput
+           | MsgDialogInput MsgDialog.UserInput 
+           | Dimensions (Int, Int)
            | TimeDelta Time.Time
 
 input : Signal Input
 input = mergeMany
    [ AnEvent `map` eventInput
    , GameInput `map` Game.controls
-   , LoungeInput `map` Lounge.controls
+   , LoungeInput `map` Lounge.userInput
+   , MsgDialogInput `map` MsgDialog.userInput
+   , minDimensions >> Dimensions  `map` Window.dimensions
    , TimeDelta `map` Time.every Time.second ]
+
+minDimensions : (Int, Int) -> (Int, Int)
+minDimensions (x, y) = (max x 360, max x 360)
 -- }}}
 
 -- {{{ Sounds -------------------------------------------------
@@ -113,12 +132,16 @@ gameState = foldp stepGame newState input
 
 stepGame : Input -> GameState -> GameState
 stepGame x gs = case x of
-   AnEvent event -> stepEvent event <| { gs | logging =
+   AnEvent event      -> stepEvent event <| { gs | logging =
       maybe gs.logging (\x -> x :: gs.logging) <| MsgDialog.eventToDebugMsg event }
-   TimeDelta time -> { gs | updated = time
-                     , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
-                     }
-   _             -> gs
+
+   GameInput _        -> gs -- TODO ?
+   LoungeInput inp    -> Lounge.stepUserInput inp gs
+   MsgDialogInput inp -> MsgDialog.stepUserInput inp gs
+   Dimensions x       -> { gs | dimensions = x }
+   TimeDelta time     -> { gs | updated = time
+                         , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
+                         }
 
 -- | Apply an Event to the GameState.
 stepEvent : Event -> GameState -> GameState
@@ -155,19 +178,18 @@ deleteNick n l =
 -- }}}
 
 -- {{{ Display ------------------------------------------------
-display : Field.Content -> GameState -> Element -> Element
-display userinput game view = flow down
+display : GameState -> Element -> Element
+display st view = flow down
    [ view
-   , MsgDialog.dialog (500, 200) userinput game
+   , MsgDialog.dialog st
    ]
 
 mainView = mergeMany
-   [ sampleOn (filter Util.atLounge newState gameState)
-      (map2 Lounge.display Lounge.controls gameState)
+   [ sampleOn (filter Util.atLounge newState gameState) (map Lounge.display gameState)
    , sampleOn (filter Util.inGame newState gameState)
       (map2 Game.display Game.controls gameState)
    ]
 -- }}}
 
 -- main -------------------------------------------------------
-main = map3 display (.signal MsgDialog.userTextInput) gameState mainView
+main = map2 display gameState mainView

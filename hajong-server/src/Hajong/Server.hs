@@ -33,6 +33,7 @@ import           Data.SafeCopy
 import           Data.ReusableIdentifiers
 import           Data.Set                   (mapMonotonic)
 import qualified Network.WebSockets         as WS
+import           Data.UUID                  (UUID)
 import qualified Data.UUID                  as UUID
 import           Data.Time.Clock (secondsToDiffTime)
 import           Network
@@ -75,7 +76,7 @@ data ServerDB = ServerDB
     , _seNicks         :: Map Nick Int        -- ^ Reserved nicks
     , _seGameRecord    :: Record              -- ^ Game identifiers
     , _seGames         :: IntMap Game         -- ^ Games identified by @seGameRecord@
-    , _seHistory       :: [PastGame]          -- ^ History of run workers
+    , _seHistory       :: Map UUID PastGame   -- ^ History of run workers
     } deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''FinalPoints)
@@ -191,8 +192,8 @@ instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
 
 instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
     version = 0
-    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pTurn; safePut _pFlags; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _pDeals; safePut _sEvents; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
-    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet 
+    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pTurn; safePut _pFlags; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _sEventHistory; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
+    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet
 
 -- * Query
 
@@ -298,12 +299,12 @@ insertGame game = do
         Nothing -> return (Left "Server's Game capacity reached")
 
 logWorkerResult :: PastGame -> Update ServerDB ()
-logWorkerResult pg = seHistory %= cons pg
+logWorkerResult pg = seHistory.at (_gameUUID $ _pgGameState pg) .= Just pg
 
 flushWorkerLog :: Update ServerDB ()
-flushWorkerLog = seHistory .= []
+flushWorkerLog = seHistory .= mempty
 
-getWorkerResultLog :: Query ServerDB [PastGame]
+getWorkerResultLog :: Query ServerDB (Map UUID PastGame)
 getWorkerResultLog = view seHistory
 
 -- * ACID interface
@@ -689,7 +690,7 @@ serverDebugger = forever $ do
 
           | ["s", gid', filename] <- words inp, Just gid <- readMay gid' -> withRunningGame gid $ \rg -> do
                 let wd = _gWorker rg
-                output <- liftIO $ (\m k -> show m ++ "\n" ++ show (_gameDeal k)) <$> readTVarIO (_wMachine wd) <*> readTVarIO (_wGame wd)
+                output <- liftIO $ (\m k -> show m ++ "\n" ++ show (_gameKyoku k)) <$> readTVarIO (_wMachine wd) <*> readTVarIO (_wGame wd)
                 writeFile (unpack filename) output
           | otherwise -> putStrLn "Unknown command"
     putStrLn ""

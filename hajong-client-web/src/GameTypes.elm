@@ -1,29 +1,39 @@
 module GameTypes where
 
+import Dict exposing (Dict)
 import Time exposing (Time)
 import Dict
 import Set exposing (Set)
 import Set
 import Debug
+import Graphics.Input.Field as Field
 
 -- {{{ GameState -------------------------------------------------------------
 type alias GameState =
    { status     : Status
    , mynick     : String
    , myid       : Int
-   , lounge     : LoungeData
    , gameWait   : Maybe Int
-   , updated    : Time
    , supportURL : String
+   , dialogFieldContent : Field.Content
+
+   -- lounge-related
+   , lounge          : LoungeData
+   , lobbyChosenGame : Maybe GameInfo
+   , profilePictures : Dict String String
 
     -- In-Game
    , roundState     : Maybe RoundState
    , waitTurnAction : Maybe WaitRecord
    , waitShout      : Maybe (WaitRecord, List Shout)
+   , gameFinalPoints : Maybe FinalPoints
    , turnBegan      : Time
    , riichiWith     : List Tile
    , gameUUID       : Maybe String
 
+   -- properties
+   , updated    : Time
+   , dimensions : (Int, Int)
    -- Debug
    , logging    : List LogItem
    }
@@ -58,7 +68,7 @@ type alias RoundState =
    , results   : Maybe RoundResult
    , honba     : Int
    , inTable   : Int -- Number of riichi sticks in table
-   , prevDeals : List Round
+   , eventsHistory : List GameEvent
    }
 
 type alias Round = { kaze : Kaze, round_rot : Int, round_honba : Int }
@@ -84,6 +94,8 @@ type alias HandValue =
    , han : Han
    , points : Points
    , named : Maybe String }
+
+type alias FinalPoints = List (Player, Int)
 
 -- }}}
 
@@ -119,6 +131,7 @@ type GameEvent = RoundPrivateStarts            RoundState
                | RoundFlippedDora              { tile : Tile }
                | RoundRiichi                   { player_kaze : Kaze }
                | RoundGamePoints               { player_kaze : Kaze, points : Points }
+               | GameEnded                     FinalPoints
 -- }}}
 
 -- {{{ Actions ---------------------------------------------------------------

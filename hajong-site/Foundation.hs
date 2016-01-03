@@ -54,10 +54,8 @@ instance Yesod App where
     -- see: https://github.com/yesodweb/yesod/wiki/Overriding-approot
     approot = ApprootMaster $ appRoot . appSettings
 
-    -- Store session data on the client in encrypted cookies,
-    -- default session idle timeout is 120 minutes
     makeSessionBackend _ = Just <$> defaultClientSessionBackend
-        120    -- timeout in minutes
+        (14 * 24 * 60)    -- timeout in minutes
         "config/client_session_key.aes"
 
     -- Yesod Middleware allows you to run code before and after each handler function.
@@ -66,7 +64,11 @@ instance Yesod App where
     --   a) Sets a cookie with a CSRF token in it.
     --   b) Validates that incoming write requests include that token in either a header or POST parameter.
     -- For details, see the CSRF documentation in the Yesod.Core.Handler module of the yesod-core package.
-    yesodMiddleware = defaultCsrfMiddleware . defaultYesodMiddleware
+    yesodMiddleware = {- defaultCsrfMiddleware . -} defaultYesodMiddleware
+            -- TODO: The csrf protection doesn't work with
+            -- GET'ing yesod-auth:LogoutR, because it uses redirectToPost
+            -- which doesn't support csrf by itself. Not sure how to fix
+            -- this atm.
 
     defaultLayout widget = do
         master <- getYesod

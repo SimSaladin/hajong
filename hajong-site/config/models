@@ -17,13 +17,13 @@ SavedRoundState json
    user UserId
    content Text -- JSON-serialized RoundState
 
-PastGame
+Game json
    uuid Text
    created UTCTime
-   started UTCTime
-   finished UTCTime
-   data Text -- serialized json
-   UniquePastGame uuid
+   finished UTCTime Maybe
+   content Text Maybe -- serialized json of the roundstate
+   results GameResults
+   UniqueGame uuid
 
 Ticket
    created UTCTime

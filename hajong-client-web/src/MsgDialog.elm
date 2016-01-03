@@ -14,23 +14,48 @@ import Graphics.Input.Field as Field
 import Graphics.Element as Element
 import Graphics.Element exposing (Element)
 
-dialog : (Int, Int) -> Field.Content -> GameState -> Element
-dialog (w, h) content gs = toElement w h <| div [ id "msg-dialog" ]
-   [ div [ id "msg-messages" ] <| List.reverse <| List.map dialogObject gs.logging
-   , span [ id "msg-dialog-nick" ] [ text gs.mynick ]
-   , span [ id "msg-input" ] [ fromElement <| Element.height 30 <| userTextInputField content ]
-   , reportBugLink gs
-   ]
+type alias State a = { a | dialogFieldContent : Field.Content
+                         , dimensions : (Int, Int)
+                         , logging : List LogItem
+                         , mynick : String
+                         , supportURL : String
+                         , gameUUID : Maybe String
+                      }
 
--- | Msg events
+type UserInput = TextInput Field.Content
+
+userInput : Signal UserInput
+userInput = TextInput `Signal.map` userTextInput.signal
+
+stepUserInput : UserInput -> State a -> State a
+stepUserInput inp st = case inp of
+   TextInput content -> { st | dialogFieldContent = content }
+
+-- | Emits Msg events to server
 eventMessage : Signal String
 eventMessage = Signal.sampleOn
    (Signal.filter identity False Keyboard.enter)
    (Signal.map .string userTextInput.signal)
 
-userTextInputClear : Signal (Task x ())
-userTextInputClear = Signal.sampleOn eventMessage
+tasks : Signal (Task x ())
+tasks = Signal.sampleOn eventMessage
    (Signal.constant <| Signal.send userTextInput.address Field.noContent)
+
+-- | Display dialog
+dialog : State a -> Element
+dialog st = toElement (fst st.dimensions) 200 <|
+   div [ id "msg-dialog" ]
+       [ div [ id "msg-messages" ] <| List.reverse <| List.map dialogObject st.logging
+       , div [ id "msg-controls" ]
+             [ span [ id "msg-dialog-nick" ]
+                    [ text st.mynick ]
+
+             , span [ id "msg-input" ]
+                    [ fromElement <| Element.width 500 <| Element.height 40 <| userTextInputField st.dialogFieldContent ]
+             , reportBugLink st ]
+       ]
+
+------------------------------------------------
 
 userTextInput : Signal.Mailbox Field.Content
 userTextInput = Signal.mailbox Field.noContent
@@ -38,8 +63,9 @@ userTextInput = Signal.mailbox Field.noContent
 userTextInputField : Field.Content -> Element
 userTextInputField = Field.field Field.defaultStyle (Signal.message userTextInput.address) ""
 
-reportBugLink gs = span [ id "report-bug" ]
-                        [ a [ href <| gs.supportURL ++ Maybe.withDefault "" gs.gameUUID
+reportBugLink : State a -> Html
+reportBugLink st = span [ id "report-bug" ]
+                        [ a [ href <| st.supportURL ++ Maybe.withDefault "" st.gameUUID
                             , target "_blank" ]
                             [ text "Report a problem in the game" ] ]
 

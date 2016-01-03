@@ -110,7 +110,11 @@ gameEventOfType eventType = case eventType of
     "filpped-dora" -> object1 (\t      -> RoundFlippedDora              { tile = t                                 } ) ("tile" := tile)
     "end"          -> object1 RoundEnded                                                                               ("results" := results)
     "points"       -> object2 (\pk po  -> RoundGamePoints               { player_kaze = pk, points = po            } ) playerKaze ("points" := int)
+    "game-ended"   -> object1 GameEnded ("final_points" := list finalPoints)
     _              -> Debug.crash <| "Couldn't deserialize game event type `" ++ eventType ++ "'"
+
+finalPoints : Decoder (Player, Int)
+finalPoints = object2 (,) ("player" := int) ("points" := int)
 
 -- ** Hand
 
@@ -229,7 +233,7 @@ roundState = object8 RoundState
        ("results"    := maybe results)
        ("honba"      := int)
        ("in-table"   := int)
-       ("prev-deals" := list round)
+       ("event-history" := list gameEvent)
     )
 
 round : Decoder Round
@@ -325,8 +329,12 @@ toJSON_RoundState rs = Encode.object
    ,("results", Util.maybe Encode.null toJSON_Results rs.results)
    ,("honba", Encode.int rs.honba)
    ,("in-table", Encode.int rs.inTable)
-   ,("prev-deals", Encode.list <| List.map toJSON_Round rs.prevDeals)
+   ,("event-history", Encode.list <| List.map toJSON_GameEvent rs.eventsHistory)
    ]
+
+toJSON_GameEvent : GameEvent -> Value
+toJSON_GameEvent ev = case ev of
+   x -> atType "invalid" [("content", Encode.string <| toString x)] -- TODO
 
 toJSON_Kaze : Kaze -> Value
 toJSON_Kaze k = Encode.string <| toString k

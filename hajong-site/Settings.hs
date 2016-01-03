@@ -19,6 +19,7 @@ import Yesod.Default.Config2       (applyEnvValue, configSettingsYml)
 import Yesod.Default.Util          (WidgetFileSettings, widgetFileNoReload,
                                     widgetFileReload)
 
+import Handler.SendMail
 import qualified Facebook as FB
 
 -- | Runtime settings to configure this application. These settings can be
@@ -62,6 +63,7 @@ data AppSettings = AppSettings
     , appServerArgs             :: [String]
     , appServerLog              :: FilePath
     , appFacebookCredentials    :: FB.Credentials
+    , appSES                    :: SES
     }
 
 instance FromJSON AppSettings where
@@ -93,8 +95,10 @@ instance FromJSON AppSettings where
         appServerArgs             <- o .: "server_args"
         appServerLog              <- o .: "server_log"
 
-        let parseFbCredentials o = FB.Credentials <$> o .: "name" <*> o .: "id" <*> o .: "secret"
+        let parseFbCredentials x = FB.Credentials <$> x .: "name" <*> x .: "id" <*> x .: "secret"
         appFacebookCredentials    <- parseFbCredentials =<< o .: "facebook_credentials"
+
+        appSES                    <- o .: "aws"
 
         return AppSettings {..}
 

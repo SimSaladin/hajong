@@ -34,20 +34,19 @@ import qualified Text.PrettyPrint.ANSI.Leijen   as P
 data Kyoku' m = Kyoku
     -- always public
     { _pRound         :: Round
-    , _pTurn          :: Kaze
-    , _pOja           :: Player -- TODO is field this necessary?
+    , _pTurn          :: Kaze   -- ^ Current player in turn
+    , _pOja           :: Player -- ^ TODO is field this necessary?
     , _pFirstOja      :: Player
-    , _pWallTilesLeft :: Int
-    , _pDora          :: [Tile]
+    , _pWallTilesLeft :: Int    -- ^ A public aggregate of sWall
+    , _pDora          :: [Tile] -- ^ Indicators
     , _pPlayers       :: Map Kaze (Player, Points, Text)
     , _pHonba         :: Int
     , _pRiichi        :: Int -- ^ Points in table for riichi
     , _pResults       :: Maybe KyokuResults
-    , _pDeals         :: [Round] -- ^ Previous deals in decreasing order by time TODO: include renchan and previous kyoku uuid's
     , _pFlags         :: Set Flag -- ^ List of extendable flags active in the game.
 
     -- secret
-    , _sEvents        :: [GameEvent]
+    , _sEventHistory  :: [GameEvent] -- ^ Complete history of events applied in this kyoku, latest first
     , _sHands         :: Map Kaze (Hand m)
     , _sWall          :: [Tile]
     , _sWanpai        :: Wanpai
@@ -102,6 +101,7 @@ data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a rou
                | DealRiichi Kaze
                | DealEnded KyokuResults
                | GamePoints Kaze Int -- ^ Point change
+               | GameEnded (Map Player Points)
                deriving (Show, Read, Typeable)
 
 -- | Actions you do on your turn.
@@ -196,8 +196,7 @@ newKyoku players names = do
     oja <- (players L.!!) <$> randomRIO (0, 3)
     tiles <- shuffleTiles
     return $ dealTiles tiles $ Kyoku
-        { _pDeals         = []
-        , _pDora          = []
+        { _pDora          = []
         , _pFirstOja      = oja
         , _pHonba         = 0
         , _pRiichi        = 0
@@ -209,7 +208,7 @@ newKyoku players names = do
         , _pFlags         = setFromList [FirstRoundUninterrupted]
 
         , _pWallTilesLeft = 0
-        , _sEvents        = mempty
+        , _sEventHistory  = mempty
         , _sHands         = mempty
         , _sWall          = mempty
         , _sWanpai        = Wanpai mempty mempty mempty mempty
@@ -220,7 +219,7 @@ dealTiles :: [Tile] -> Kyoku -> Kyoku
 dealTiles tiles deal = deal
         { _pWallTilesLeft = length wall
         , _pDora          = [doraX]
-        , _sEvents        = []
+        , _sEventHistory  = []
         , _sHands         = Map.fromList $ zip [Ton .. Pei] (initHand <$> [h1, h2, h3, h4])
         , _sWall          = wall
         , _sWanpai        = Wanpai supplement doraXS uradora rest
@@ -256,7 +255,7 @@ wanpaiTiles Wanpai{..} = _wSupplement ++ _wDora ++ _wUraDora ++ _wBlank
 -- Instances
 
 instance P.Pretty Kyoku where
-    pretty Kyoku{..} = P.pretty _pDeals P.<$$>
+    pretty Kyoku{..} =
         P.string "wall:"   P.<+> P.hang 0 (prettyList' _sWall) P.<$$>
         P.string "unrevealed dora:" P.<+> P.hang 0 (prettyList' $ _wDora _sWanpai) P.<$$>
         P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)

@@ -71,6 +71,7 @@ data Machine = NotBegun Int -- Seconds to wait before continuing. Waiting is not
                 -- [] representing the Nothing-case. Must take note of the
                 -- safecopy instances, though.
              | KyokuEnded KyokuResults
+             | HasEnded FinalPoints
              deriving (Eq, Show, Read)
 
 data MachineInput = InpAuto
@@ -94,7 +95,7 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | pk /= pk'                     = throwError $ "Not your (" ++ tshow pk' ++ ") turn, it's turn of " ++ tshow pk
             | TurnTileDiscard d <- ta       = processDiscard pk d
             | TurnAnkan t <- ta             = processAnkan pk t
-            | TurnTsumo <- ta               = endTsumo pk <&> KyokuEnded
+            | TurnTsumo <- ta               = endKyoku =<< endTsumo pk
             | TurnShouminkan t <- ta        = processShouminkan pk t
 
 step (WaitingShouts couldShout winning shouts chankan) inp
@@ -129,7 +130,13 @@ step (WaitingShouts couldShout winning shouts chankan) inp
 
 step CheckEndConditionsAfterDiscard InpAuto = checkEndConditions
 
-step (KyokuEnded{}) _ = throwError "This kyoku has ended!"
+step (KyokuEnded{}) _ = do
+    k <- get
+    case maybeGameResults k of
+        Nothing -> return (NotBegun 15)
+        Just res -> endGame res
+
+step HasEnded{} _     = throwError "This game has ended!"
 step st inp           = throwError $ "Kyoku.step: Invalid input in state " <> tshow st <> ": " <> tshow inp
 
 -- | chankan?
@@ -243,7 +250,6 @@ nextDeal kyoku = do tiles <- shuffleTiles
        . if' rotate (over pPlayers rotatePlayers) id
        . if' riichiTransfers (pRiichi .~ 0) id
        . set pResults Nothing
-       . over pDeals (cons $ _pRound kyoku)
 
     newRound    = nextRound kyoku
     rotate      = newRound^._2 /= kyoku^.pRound._2
@@ -264,7 +270,9 @@ nagashiOrDraw = do
     let winners = map fst $ catMaybes $ map snd $ mapToList wins :: [Winner]
         payers  = map (\xs@((p,_):_) -> (p, sumOf (traversed._2) xs)) $ groupBy (equating fst) $ (concatMap snd $ catMaybes $ map snd $ mapToList wins) :: [Payer]
 
-    if null winners then KyokuEnded <$> endDraw else return $ KyokuEnded $ DealTsumo winners payers
+    res <- if null winners then endDraw else return $ DealTsumo winners payers
+    endKyoku rse
+
 
 handWinsNagashi :: Kaze -> Hand Identity -> Maybe (Winner, [Payer])
 handWinsNagashi pk hand =
@@ -307,10 +315,10 @@ checkEndConditions = do
     let fourWindTiles = length firstDiscards == 4 && isKaze (headEx firstDiscards) && allSame firstDiscards
 
     case () of
-        _ | length dora == 5 -> return $ KyokuEnded $ DealAbort SuuKaikan -- TODO check that someone is not waiting for the yakuman
+        _ | length dora == 5 -> endKyoku $ DealAbort SuuKaikan -- TODO check that someone is not waiting for the yakuman
           | tilesLeft == 0   -> nagashiOrDraw
-          | everyoneRiichi   -> return $ KyokuEnded $ DealAbort SuuchaRiichi
-          | fourWindTiles    -> return $ KyokuEnded $ DealAbort SuufonRenda
+          | everyoneRiichi   -> endKyoku $ DealAbort SuuchaRiichi
+          | fourWindTiles    -> endKyoku $ DealAbort SuufonRenda
           | otherwise        -> advanceTurn <&> (`WaitingDraw` False)
   where
      allSame :: [Tile] -> Bool
@@ -467,7 +475,7 @@ processShouts shouts@((fsk,fs):_) _chank = do
     updateHand tk th'
 
     case () of
-        _ | shoutKind fs `elem` [Ron, Chankan] -> endRon (map fst shouts) tk <&> KyokuEnded
+        _ | shoutKind fs `elem` [Ron, Chankan] -> endRon (map fst shouts) tk >>= endKyoku
           | shoutKind fs == Kan -> unsetFlag FirstRoundUninterrupted >> return (WaitingDraw fsk True)
           | otherwise -> do
               unsetFlag FirstRoundUninterrupted
@@ -475,6 +483,13 @@ processShouts shouts@((fsk,fs):_) _chank = do
               return (WaitingDiscard fsk)
 
 -- ** Ending
+
+endKyoku :: InkYoku m => KyokuResults -> m Machine
+endKyoku res = return (KyokuEnded res)
+
+endGame :: FinalPoints -> m Machine
+endGame finalPoints = do tellEvent $ GameEnded finalPoints
+                         return $ HasEnded finalPoints
 
 endTsumo :: InKyoku m => Kaze -> m KyokuResults
 endTsumo winner = do
@@ -613,7 +628,7 @@ updatePlayerNick p nick = playerToKaze p >>= \pk -> tellEvent (DealNick pk p nic
 -- seen by the player (hide "Deal" but show the player's own hand).
 buildPlayerState :: Kyoku -> Kaze -> AsPlayer
 buildPlayerState deal pk = flip appEndo (deal { _sHands = imap (\k -> if pk == k then convertHand else maskPublicHand) (_sHands deal) }) $ mconcat
-    [ Endo $ sEvents .~ []
+    [ Endo $ sEventHistory .~ []
     , Endo $ sWall .~ []
     , Endo $ sWanpai .~ Wanpai [] [] [] []
     , Endo $ sWaiting %~ mwaiting

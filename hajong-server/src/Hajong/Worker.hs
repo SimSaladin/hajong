@@ -134,7 +134,7 @@ processInput (WorkerGameAction c ga)            = fmap (clientToPlayer c) (rview
 
 processInput WorkerForceStart                   = rmodify wGame (gamePlayers.each %~ \c -> c { isReady = True }) >> return Nothing
 
-processInput (WorkerReplaceKyoku machine kyoku) = do rmodify wGame (gameDeal .~ kyoku)
+processInput (WorkerReplaceKyoku machine kyoku) = do rmodify wGame (gameKyoku .~ kyoku)
                                                      void $ rswap wMachine machine
                                                      $logInfo "Game state was replaced successfully"
                                                      return Nothing
@@ -176,15 +176,17 @@ logMachine m = logDebugN $ "Transsation to state " ++ tshow m
 -- | As a precondition, the gamestate must be present in the workerdata.
 processKyokuStarts :: WCont
 processKyokuStarts = do
-    Just k <- rview wGame <&> _gameDeal
+    Just k <- rview wGame <&> _gameKyoku
     liftIO (maybeNextDeal k) >>= either return go -- returns finalpoints or starts next kyoku
   where
-    go k = rmodify wGame (gameDeal.~Just k) >> unsafeStep InpAuto >>= processMachine
+    go k = rmodify wGame (gameKyoku.~Just k) >> unsafeStep InpAuto >>= processMachine
 
 processKyokuEnded :: KyokuResults -> WCont
 processKyokuEnded results = do
     $logInfo $ "Kyoku ended: " <> tshow results
-    rmodify wGame (gameDeal._Just.pResults.~Just results)
+    gs <- rview wGame
+    let Just k = _Just.pResults.~Just results $ _gameKyoku gs -- TODO shouldn't be here
+    rmodify wGame $ gameHistory %~ cons k
     void $ rswap wMachine (NotBegun 15)
     processMachine =<< rview wMachine
 
@@ -221,7 +223,7 @@ addPlayer client callback = do
         return gs'
 
     clientEither client e_gs $ \gs -> do
-        when (gs^.gameDeal.to isJust) $ do
+        when (gs^.gameKyoku.to isJust) $ do
             let p = fromJust $ clientToPlayer client gs -- We check in above transaction the client really is there
             unsafeRoundM $ updatePlayerNick p (getNick client) -- XXX: cannot be in the same transaction because the kyoku machinery wouldn't update until the resulting events are applied, so the state would be out-of-date in the second acation
             unsafeRoundM $ tellPlayerState p
@@ -246,7 +248,7 @@ roundM :: RoundM a -> Worker (Either Text (a, Worker ()))
 roundM ma = do
         gs <- rview wGame
         return $ do (res, kyoku, events) <- runRoundM ma gs
-                    return (res, rmodify wGame (gameDeal .~ Just kyoku) >> sendGameEvents events)
+                    return (res, rmodify wGame (gameKyoku .~ Just kyoku) >> sendGameEvents events)
 
 -- | Just execute the action - if it fails the worker dies! Use with care.
 unsafeRoundM :: RoundM a -> Worker a

@@ -1,9 +1,9 @@
 <h1>Game history
 
-<p>List of all games played on this server. On-going or abandoned games are not listed.
+<p>List of all games on this server.
 
 <ul>
   $if null games
     <i>Oh noes.. nothing to show here
   $forall Entity _ v <- games
-    <li>#{pastGameUuid v}
+    <li>#{gameUuid v}

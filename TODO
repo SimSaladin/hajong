@@ -1,5 +1,15 @@
 x = done, / = half done, ! = needs testing
 
+[ ] email: support and auth-account
+[ ] https
+[ ] make final points visible in elm
+[ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
+[ ] Rework lobby: better listing of user names perhaps with facebook profile pics / gravatars
+[ ] Set up logging from workers to a file.
+[ ] refactoring: split H.Server to H.{Server.State,Server.Internal,Database,Database.Query} modules
+[ ] refactoring: replace the StateT in kyoku code with a custom mechanism, which updates the kyoku state right after an event is triggered
+[ ] make csrf middleware work with LogoutR too, so it can be enabled
+
 # mechanics
 [x] add test: riichi score is transferred on ron
 [x] add test: honba are added to payments
@@ -28,7 +38,6 @@ x = done, / = half done, ! = needs testing
 [x] add test: kokushi furiten
 [x] add test: chiitoi furiten
 [x] shouting a aka-dora results in all tiles of the mentsu be aka-dora
-[ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
 # client
 [x] sending messages
 [x] interface for viewing different kyoku states
@@ -40,12 +49,9 @@ x = done, / = half done, ! = needs testing
 [x] Display concealed hands of other players
 [x] display aka-dora as red
 # site
-[ ] In the settings page, encourage making feature requests via the support form
-[ ] test and make the support form email functionality work
-[ ] Rework lobby
-[ ] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
-      [ ] test facebook authentication
-[ ] Set up logging from workers to a file.
+[x] In the settings page, encourage making feature requests via the support form
+[x] Rework authentication system. *Email-based*. Include facebook etc. and gravatar.
+[x] test facebook authentication
 [x] report bug button: game UUID
 [x] The yesod binary doesn't reconnect to hajong-server automatically. Make it shut down on disconnect.
 

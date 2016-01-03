@@ -20,7 +20,7 @@ import           Text.Julius (RawJS(..))
 getViewR :: Text -> Text -> Int -> Int -> Handler Html
 getViewR uuid k_in n h = do
     k    <- maybe notFound return (readMay k_in) :: Handler G.Kaze
-    game <- runDB $ getBy404 $ UniquePastGame uuid
+    game <- runDB $ getBy404 $ UniqueGame uuid
 
     defaultLayout $ do
         setTitle "View"

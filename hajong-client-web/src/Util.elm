@@ -4,8 +4,9 @@ import GameTypes exposing (..)
 import Maybe
 
 import Text
+import Signal
 import Debug
-import Graphics.Element exposing (..)
+import Graphics.Element as Element
 import Color exposing (..)
 
 atLounge : GameState -> Bool
@@ -14,7 +15,7 @@ atLounge = (\s -> s.status == InLounge)
 inGame : GameState -> Bool
 inGame = (\s -> s.status == InGame)
 
-lookupGameInfo : GameState -> Int -> Maybe GameInfo
+lookupGameInfo : { a | lounge : LoungeData } -> Int -> Maybe GameInfo
 lookupGameInfo game ident = List.head <| List.filter (\g -> g.ident == ident) game.lounge.games
 
 log : String -> GameState -> GameState
@@ -62,8 +63,8 @@ pickedTile pt = case pt of
    AgariCall shout    -> shout.shoutTile
    AgariTsumoWanpai t -> t
 
-blockElement : Int -> Int -> Element -> Element
-blockElement w h e = size w h (color gray e)
+renderTitle title = Text.fromString title |> Text.bold |> Element.centered
 
-renderTitle title = Text.fromString title |> Text.bold |> centered
-
+-- | An event signal, where Nothing is a Noop
+maybeEvent : (a -> Event) -> Signal (Maybe a) -> Signal Event
+maybeEvent f s = Signal.map (Maybe.withDefault Noop << Maybe.map f) s

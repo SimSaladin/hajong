@@ -5,6 +5,8 @@ import Database.Persist.Quasi
 
 import Yesod.Auth.Account (PersistUserCredentials(..))
 
+type GameResults = [(Text, Int)] -- ^ username, points
+
 -- You can define all of your database entities in the entities file.
 -- You can find more information on persistent and how to declare entities
 -- at:

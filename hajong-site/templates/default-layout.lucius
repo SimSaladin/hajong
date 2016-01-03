@@ -127,23 +127,95 @@ aside .btn-half {
 }
 
 #game {
-  padding:0.5em;
-  border:1px solid gray;
+  margin:0.5em;
 }
 #msg-dialog {
+  margin-top: 5px;
+  border:1px solid gray;
 }
 #msg-messages {
   height:170px;
-  border:1px solid gray;
   overflow-y:auto;
+  border-bottom:1px solid #CACACA;
 }
-#msg-dialog-nick {
-  font-style:bold;
-  color:blue;
-  padding:3px;
+#msg-controls {
+  padding:0 5px;
+  display:flex;
+  #msg-dialog-nick {
+    flex:0 0 auto;
+    font-style:bold;
+    color:blue;
+    padding:3px;
+  }
+  #msg-input {
+    flex:1 1 auto;
+  }
+  #report-bug {
+    flex:0 0 auto;
+  }
 }
 .msg { padding:0 5px; line-height:1.2em; }
 .msg-debug { color:gray; }
 .msg-error { background:red; }
 
+.lobby {
+  display: flex;
+  h2 { margin-bottom: 0; }
+}
+.games {
+  flex-grow: 1;
+  padding:0.5em;
+  margin-right:5px;
+  border:1px solid gray;
+  min-height:500px;
+}
+
+.idle-players {
+  flex-grow: 1;
+
+  padding:0.5em;
+  border:1px solid gray;
+
+  display:flex;
+  flex-direction:column;
+  h1 { flex: 0 }
+}
+
+.idle-players-list {
+  padding:0;
+  border:1px solid gray;
+  li {
+    list-style:none;
+  }
+  li img {
+    margin-right:7px;
+    background:gray;
+  }
+}
+
+.games-list { 
+  padding:0;
+
+  li { list-style: none; }
+}
+
+.game-info-block {
+  border:1px solid gray;
+
+  display:flex;
+
+  .game-ident { flex: 0 0 auto; padding:0 5px; color:gray; }
+  .game-name { flex: 1 1 auto; color:blue; }
+  .game-player-count { flex: 0 1 auto; padding:0 5px; font-style:bold; }
+  .game-players { flex: 0 0 auto; display:inline; }
+}
+.game-info-block.chosen {
+  background:#DFFAC1;
+}
+.game-info-block.waiting {
+  background:#FFBC00;
+}
+.game-info-block.normal:hover {
+  background:#FFFBEA;
+}
 /* }}} */

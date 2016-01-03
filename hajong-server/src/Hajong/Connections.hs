@@ -143,6 +143,7 @@ instance ToJSON GameEvent where
         DealRiichi pk                            -> atEvent "riichi"       ["player-kaze" .= pk]
         DealEnded results                        -> atEvent "end"          ["results"     .= results]
         GamePoints pk n                          -> atEvent "points"       ["player-kaze" .= pk, "points" .= n]
+        GameEnded finalPoints                    -> atEvent "game-ended"   ["final_points" .= mapToList finalPoints]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard d) = atType "discard"    ["riichi" .= _dcRiichi d, "tile" .= _dcTile d, "to" .= _dcTo d]
@@ -181,18 +182,18 @@ instance ToJSON Honor where
 
 instance (ToJSON (m Bool), ToJSON (m [Tile]), ToJSON (m Tile), ToJSON (m RiichiState), ToJSON (m FuritenState), ToJSON (m DrawState)) => ToJSON (Kyoku' m) where
     toJSON x = object
-        [ "round"      .= _pRound x
-        , "turn"       .= _pTurn x
-        , "oja"        .= _pOja x
-        , "first-oja"  .= _pFirstOja x
-        , "tiles-left" .= _pWallTilesLeft x
-        , "dora"       .= _pDora x
-        , "players"    .= map (toJSON *** toJSON) (M.toList $ _pPlayers x)
-        , "honba"      .= _pHonba x
-        , "in-table"   .= _pRiichi x
-        , "results"    .= _pResults x
-        , "prev-deals" .= _pDeals x
-        , "hands"      .= map (toJSON *** toJSON) (M.toList $ _sHands x)
+        [ "round"         .= _pRound x
+        , "turn"          .= _pTurn x
+        , "oja"           .= _pOja x
+        , "first-oja"     .= _pFirstOja x
+        , "tiles-left"    .= _pWallTilesLeft x
+        , "dora"          .= _pDora x
+        , "players"       .= map (toJSON *** toJSON) (M.toList $ _pPlayers x)
+        , "honba"         .= _pHonba x
+        , "in-table"      .= _pRiichi x
+        , "results"       .= _pResults x
+        , "hands"         .= map (toJSON *** toJSON) (M.toList $ _sHands x)
+        , "event-history" .= _sEventHistory x
         ]
 
 instance ToJSON (m Tile) => ToJSON (PickedTile m) where

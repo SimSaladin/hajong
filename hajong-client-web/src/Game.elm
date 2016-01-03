@@ -494,6 +494,7 @@ processInGameEvent event gs = case event of
    RoundRiichi {player_kaze} -> setRiichi player_kaze gs
    RoundGamePoints {player_kaze,points} -> setPoints player_kaze points gs
    RoundFlippedDora {tile} -> flipDora tile gs
+   GameEnded finalPoints -> { gs | gameFinalPoints = Just finalPoints }
 -- }}}
 
 -- {{{ Modify state: field modify boilerplate ---------------------------

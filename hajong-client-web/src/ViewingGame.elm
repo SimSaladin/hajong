@@ -19,6 +19,6 @@ setRoundState mrs = case mrs of
    Ok rs   -> { rawState | roundState = Just rs }
    Err err -> { rawState | logging = [ LogError { msg = err } ] }
 
-display content gco gs = flow down [ Game.display gco gs, MsgDialog.dialog (500, 200) content gs ]
+display gco gs = flow down [ Game.display gco gs]
 
-main = Signal.map3 display (.signal MsgDialog.userTextInput) Game.controls gameState
+main = Signal.map2 display Game.controls gameState

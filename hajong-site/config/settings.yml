@@ -31,6 +31,11 @@ facebook_credentials:
    id:     "_env:FB_ID:appid"
    secret: "_env:FB_SECRET:appsecret"
 
+aws:
+   access_key: "_env:SES_ACCESS_KEY:app@app.com"
+   secret_key: "_env:SES_SECRET_KEY:app@app.com"
+   region:     "_env:SES_REGION:eu-west-1"
+   ses_from:   "_env:SES_FROM:app@app.com"
 
 # Optional values with the following production defaults.
 # In development, they default to the inverse.

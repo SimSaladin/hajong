@@ -28,7 +28,8 @@ import qualified Data.UUID as UUID
 
 -- | "GameState" records all information of a single game.
 data GameState playerID = GameState
-                   { _gameDeal     :: Maybe Kyoku -- ^ Maybe initialized
+                   { _gameKyoku    :: Maybe Kyoku           -- ^ Active kyoku
+                   , _gameHistory  :: [Kyoku]               -- ^ In decending order
                    , _gamePlayers  :: Map Player playerID
                    , _gameUUID     :: UUID.UUID
                    , _gameSettings :: GameSettings
@@ -38,11 +39,12 @@ instance P.Pretty p => P.Pretty (GameState p) where
     pretty GameState{..} = P.pretty (show _gameSettings) P.<$$>
                            P.pretty (UUID.toString $ _gameUUID) P.<$$>
                            P.prettyList (Map.elems _gamePlayers) P.<$$>
-                           P.pretty _gameDeal
+                           P.prettyList (map P.pretty _gameHistory) P.<$$>
+                           P.pretty _gameKyoku
 
 -- | Create a new GameState with the given label.
 newEmptyGS :: a -> UUID.UUID -> GameSettings -> GameState a
-newEmptyGS defPlayer = GameState Nothing (Map.fromList $ zip fourPlayers $ repeat defPlayer)
+newEmptyGS defPlayer = GameState Nothing [] (Map.fromList $ zip fourPlayers $ repeat defPlayer)
 
 -- ** Lenses
 
@@ -66,11 +68,12 @@ type RoundM = RWST Kyoku [GameEvent] Kyoku (Either Text)
 -- so **it is important you apply the changes implied by the events on the
 -- state!** Haskell clients may use "@applyRoundEvents@".
 runRoundM :: RoundM r -> GameState p -> Either Text (r, Kyoku, [GameEvent])
-runRoundM m gs = maybe (Left "No active round!") (flip runKyoku m) (_gameDeal gs)
+runRoundM m gs = maybe (Left "No active round!") (flip runKyoku m) (_gameKyoku gs)
 
 -- | Run action and apply gameveents.
 runKyoku :: Kyoku -> RoundM a -> Either Text (a, Kyoku, [GameEvent])
-runKyoku k m = runRWST m k k
+runKyoku k m = fmap logEvents $ runRWST m k k
+    where logEvents (res, k, evs) = (res, k & sEventHistory %~ mappend evs, evs)
 
 ------------------------------------------------------------------------------
 
@@ -88,12 +91,12 @@ class Eq playerID => IsPlayer playerID where
 -- | If appropriate, begin the game
 maybeBeginGame :: IsPlayer p => GameState p -> Maybe (IO (GameState p))
 maybeBeginGame gs = do
-    guard . isNothing       $ gs^.gameDeal
+    guard . isNothing       $ gs^.gameKyoku
     guard . (== 4) . length $ gs^.gamePlayers
     guard . null            $ gs^.gamePlayers^..each.filtered (not . playerReady)
     return $ do
         rs <- newKyoku fourPlayers (gs^.gamePlayers^..each.to playerNick)
-        return $ gameDeal .~ Just rs $ gs
+        return $ gameKyoku .~ Just rs $ gs
 
 -- * Modify
 

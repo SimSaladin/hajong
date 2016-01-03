@@ -40,6 +40,8 @@ playLayout mgid = do
         $(widgetFile "play")
 {-# INLINE playLayout #-}
 
+-- * Create games
+
 -- | Creating games
 getNewGameR, postNewGameR :: Handler Html
 getNewGameR  = do
@@ -51,7 +53,12 @@ getNewGameR  = do
 
 postNewGameR = do
     ((FormSuccess settings,_), _) <- runFormPost newGameForm
+
+    createTime <- liftIO getCurrentTime
     G.InternalGameCreated gid <- goGame $ G.InternalNewGame settings
+    Just gs <- G.getGame gid
+
+    runDB $ insert $ Game (UUID.toText $ G._gameUUID gs) createTime Nothing Nothing []
     redirect $ PlayR gid
 
 newGameForm :: Form G.GameSettings
