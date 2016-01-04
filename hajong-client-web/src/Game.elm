@@ -90,7 +90,7 @@ processInGameEventWith event st rs =
    in case event of
 
       RoundPrivateStarts rs ->
-         setRs { st | gameWait = Nothing } rs
+         setRs { st | gameWait = Nothing, gameFinalPoints = Nothing } rs
 
       RoundPrivateWaitForTurnAction {seconds, riichiWith} ->
          { st | waitTurnAction = Just <| WaitRecord seconds st.updated
@@ -197,7 +197,10 @@ display st = flow down
         , group <| map (fst >> \k -> moveRotateKaze riichi_off st.rs.mypos k playerRiichi)
                 <| List.filter (snd >> .riichiState >> \x -> x /= NoRiichi) st.rs.hands
         , maybe (toForm empty) dispResults st.rs.results
+        , maybe (toForm empty) (dispFinalPoints st) st.gameFinalPoints
         ]
+
+    -- action buttons
     , container 1000 40 midTop <| flow right
        <| (
           maybe [] (snd >> displayShoutButtons st) (st.waitShout)
@@ -207,10 +210,23 @@ display st = flow down
            ++ riichiButtons st.rs st.riichiWith
            ++ [ tsumoButton st.rs.myhand.canTsumo ]
            )
+
+    -- my hand
     , container 1000 100 midTop <| dispHand st.rs.mypos st st.rs.myhand
     ]
 
 -- }}}
+
+dispFinalPoints : State a -> FinalPoints -> Form
+dispFinalPoints st res =
+   let dispPointsFor (player, points) =
+         let (_, (_, _, nick)) = fromJust <| Util.listFindWith (\(_,(p,_,_)) -> p) player st.rs.players
+         in show nick `beside` spacer 5 5 `beside` show points
+   in List.map dispPointsFor res
+      |> flow down
+      |> container 400 300 middle
+      |> color green
+      |> toForm
 
 -- {{{ Display: per-player -------------------------------------------
 
