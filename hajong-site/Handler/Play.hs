@@ -54,6 +54,7 @@ getNewGameR  = do
 postNewGameR = do
     ((FormSuccess settings,_), _) <- runFormPost newGameForm
 
+    print settings
     createTime <- liftIO getCurrentTime
     G.InternalGameCreated gid <- goGame $ G.InternalNewGame settings
     Just gs <- G.getGame gid

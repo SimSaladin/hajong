@@ -197,8 +197,10 @@ initiateHandshake = do
 handshake :: Text -> Maybe Int -> Server ()
 handshake token mgame = do
     c <- view seClient
-    $logInfo $ "New client " <> tshow (getIdent c) <> " (" <> getNick c <> ")"
     time <- liftIO getCurrentTime
+
+    $logInfo $ "New client " <> tshow (getIdent c) <> " (" <> getNick c <> ")"
+
     res <- update' $ ConnectClient time (getIdent c) token
     case res of
         Left err -> uniError $ "Handshake failed: " <> err
@@ -231,11 +233,13 @@ workerWatcher = do
 workerDied :: Int -> WorkerResult -> Server ()
 workerDied gid res = do
 
-    -- Log and then destroy the game
+    -- Log what happened
     case res of
         Left err -> $logError $ "Game " ++ tshow gid ++ " errored! " ++ tshow err
         Right x  -> $logInfo  $ "Game " ++ tshow gid ++ " finished. " ++ tshow x
-    _ <- update' $ DestroyGame gid -- TODO EventResult: should it be checked?
+
+    removedClients <- update' $ DestroyGame gid -- TODO acid EventResult: should it be checked?
+    $logInfo $ "Players " ++ tshow removedClients ++ " free'd"
 
     -- atomic
     ss <- ask
@@ -254,7 +258,7 @@ workerDied gid res = do
         return (pg, clientSet)
 
     -- Send part events
-    forM_ clients $ \c -> unicast c (PartGame (getNick c))
+    forM_ clients $ \c -> safeUnicast c (PartGame (getNick c))
 
     -- Log the game
     update' $ LogWorkerResult pg
@@ -267,10 +271,10 @@ putWorker :: RunningGame -> WorkerInput -> Server ()
 putWorker rg = atomically . putTMVar (rg^.gWorker.wInput)
 
 putLounge :: Event -> Server ()
-putLounge ev = rview seLounge >>= mapM_ (`unicast` ev)
+putLounge ev = rview seLounge >>= mapM_ (`safeUnicast` ev)
 
-uni :: WS.WebSocketsData e => e -> Server ()
-uni ev = view seClient >>= (`unicast` ev)
+uni :: (Show e, WS.WebSocketsData e) => e -> Server ()
+uni ev = view seClient >>= (`safeUnicast` ev)
 
 uniError :: Text -> Server ()
 uniError txt = view seClient >>= (`unicastError` txt)
@@ -280,8 +284,8 @@ uniError txt = view seClient >>= (`unicastError` txt)
 update' ev = view db >>= \d -> liftIO (update d ev)
 query'  ev = view db >>= \d -> liftIO (query d ev)
 
-multicast :: MonadIO m => GameState Client -> Event -> m ()
-multicast gs event = mapM_ (`unicast` event) (gs^.gamePlayers^..each)
+multicast :: (MonadLogger m, MonadBaseControl IO m, MonadIO m) => GameState Client -> Event -> m ()
+multicast gs event = mapM_ (`safeUnicast` event) (gs^.gamePlayers^..each)
 
 -- | Send updated lounge to everyone there
 updateLounge :: Server ()
@@ -293,7 +297,7 @@ updateLounge = do
     let gameInfos  = intersectionWithMap (\g ns -> (g^.gameSettings, ns, g^.gameUUID.to UUID.toText)) games nicks
         loungeInfo = LoungeInfo $ Lounge (mapMonotonic getNick lounge) gameInfos
 
-    forM_ lounge (`unicast` loungeInfo)
+    forM_ lounge (`safeUnicast` loungeInfo)
 
 withInGame :: (Int -> Server ()) -> Server ()
 withInGame f = do
@@ -309,7 +313,7 @@ withRunningGame gid f = do
 randomToken :: IO Text
 randomToken = liftM pack $ replicateM 16 $ randomRIO ('A', 'Z')
 
--- * Listen logic
+-- * Clients
 
 -- | Execute usual connection rituals with the new connection.
 connects :: ClientRecord -> Server ()
@@ -396,7 +400,7 @@ handleJoinGame gid rg = do
     let nick = getNick c
     putWorker rg $ WorkerAddPlayer c $ \gs -> do
         multicast gs (JoinGame gid nick)
-        runServer ss $ do
+        liftIO $ runServer ss $ do
             update' (SetPlayerGame gid (getIdent c))
             atomically $ do modifyTVar' (ss^.seLounge) (deleteSet c)
                             modifyTVar' (ss^.seWorkers) (ix gid.gClients.at (getIdent c) .~ Just c)
@@ -433,6 +437,7 @@ internalConnect secret = do
     if real /= secret
         then uni ("Error: wrong secret key" :: Text)
         else do c <- view seClient
+                uni ("success" :: Text)
                 forever $ receive c >>= \case
                     InternalNewGame settings -> createGame settings
 

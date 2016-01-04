@@ -49,8 +49,8 @@ data WorkerData = WorkerData
                 , _wLogger  :: LoggerSet
                 } deriving (Typeable)
 
-data WorkerInput = WorkerAddPlayer Client (GameState Client -> IO ())
-                 | WorkerPartPlayer Client (GameState Client -> IO ())
+data WorkerInput = WorkerAddPlayer Client Callback -- ^ Careful with the callbacks, an uncatched exception will kill the worker
+                 | WorkerPartPlayer Client Callback
                  | WorkerGameAction Client GameAction
                  | WorkerForceStart
                  | WorkerReplaceKyoku Machine (Maybe Kyoku) -- ^ For debugging only.
@@ -70,6 +70,8 @@ instance MonadBaseControl IO Worker where -- associated type, cannot derive
 -- with this type for when the worker dies.
 type Finalize = Either SomeException FinalPoints -> IO ()
 
+type Callback = GameState Client -> Worker ()
+
 -- * Lenses
 makeLenses ''WorkerData
 
@@ -87,7 +89,7 @@ execWorker st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
 
 -- | Remove the player identified by connection from the game and replace
 -- the player with a dummy client.
-partPlayer :: Client -> (GameState Client -> IO ()) -> Worker ()
+partPlayer :: Client -> Callback -> Worker ()
 partPlayer client callback = do
     $logInfo $ "Client leaving: " <> tshow client
     gsv <- view wGame
@@ -100,10 +102,10 @@ partPlayer client callback = do
             Nothing -> return Nothing
 
     maybe ($logError $ "Parting client " ++ getNick client ++ ", but it doesn't exist.")
-          (liftIO . callback) mgs
+          callback mgs
 
 -- | Add a new or existing player to the game with the given connection.
-addPlayer :: Client -> (GameState Client -> IO ()) -> Worker ()
+addPlayer :: Client -> Callback -> Worker ()
 addPlayer client callback = do
     $logInfo $ "Client connecting: " <> tshow client
     gsv  <- view wGame
@@ -120,7 +122,7 @@ addPlayer client callback = do
             let p = fromJust $ clientToPlayer client gs -- We check in above transaction the client really is there
             unsafeRoundM $ updatePlayerNick p (getNick client) -- XXX: cannot be in the same transaction because the kyoku machinery wouldn't update until the resulting events are applied, so the state would be out-of-date in the second acation
             unsafeRoundM $ tellPlayerState p
-        liftIO $ callback gs
+        callback gs
 
 -- * Worker logic
 

@@ -104,6 +104,9 @@ registerLoggedInPlayer nick token = use (seNicks.at nick) >>= \case
 setPlayerGame :: Int -> Int -> Update ServerDB ()
 setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
 
+setGame :: Int -> Game -> Update ServerDB ()
+setGame gid game = seGames.ix gid .= game
+
 destroyGame :: Int -> Update ServerDB [ClientRecord]
 destroyGame gid = do seGameRecord %= freeId gid
                      cs <- preuse (seGames.at gid._Just.gamePlayers)

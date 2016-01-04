@@ -16,9 +16,9 @@ rawState  = Main.newState
 gameState = Signal.map (JSON.decodeRoundState >> setRoundState) downstream
 
 setRoundState mrs = case mrs of
-   Ok rs   -> { rawState | roundState = Just rs }
+   Ok rs   -> { rawState | status = InGame rs, rs = rs }
    Err err -> { rawState | logging = [ LogError { msg = err } ] }
 
-display gco gs = flow down [ Game.display gco gs]
+display gs = flow down [ Game.display gs ]
 
-main = Signal.map2 display Game.controls gameState
+main = Signal.map display gameState

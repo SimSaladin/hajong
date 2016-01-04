@@ -9,16 +9,10 @@ import Debug
 import Graphics.Element as Element
 import Color exposing (..)
 
-atLounge : GameState -> Bool
-atLounge = (\s -> s.status == InLounge)
-
-inGame : GameState -> Bool
-inGame = (\s -> s.status == InGame)
-
 lookupGameInfo : { a | lounge : LoungeData } -> Int -> Maybe GameInfo
 lookupGameInfo game ident = List.head <| List.filter (\g -> g.ident == ident) game.lounge.games
 
-log : String -> GameState -> GameState
+log : String -> { a | logging : List LogItem } -> { a | logging : List LogItem }
 log str gs = { gs | logging = LogDebug {msg = str } :: gs.logging }
 
 groupInto n xs = case xs of

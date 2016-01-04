@@ -6,4 +6,8 @@
   $if null games
     <i>Oh noes.. nothing to show here
   $forall Entity _ v <- games
-    <li>#{gameUuid v}
+    <li>
+      #{gameUuid v}
+      <span>#{show $ gameResults v}
+      $maybe content <- gameContent v
+        <textarea>#{content}

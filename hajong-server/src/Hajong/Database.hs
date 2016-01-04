@@ -44,5 +44,5 @@ import           Data.Acid
 $(makeAcidic ''ServerDB
     [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB, 'connectClient,
     'partClient, 'registerAnonymousPlayer, 'registerLoggedInPlayer,
-    'setPlayerGame, 'insertGame, 'destroyGame, 'logWorkerResult,
+    'setPlayerGame, 'insertGame, 'setGame, 'destroyGame, 'logWorkerResult,
     'getWorkerResultLog, 'flushWorkerLog ])

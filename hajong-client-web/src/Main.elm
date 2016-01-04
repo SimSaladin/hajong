@@ -30,9 +30,9 @@ port runner = MsgDialog.tasks
 -- A port exposed out of elm which json-encodes current @roundState@
 port spyRoundState : Signal String
 port spyRoundState =
-   let f {roundState} = case roundState of
-         Just r  -> encodeRoundState r
-         Nothing -> ""
+   let f {status} = case status of
+         InGame rs -> encodeRoundState rs
+         _ -> ""
    in Signal.map f gameState
 
 -- {{{ Server IO ----------------------------------------------
@@ -66,6 +66,8 @@ port profilePicturesRequest =
          |> Signal.dropRepeats
          |> Signal.map snd
 
+-- }}}
+
 -- {{{ Default state ------------------------------------------
 newState : GameState
 newState = { status     = InLounge
@@ -76,13 +78,15 @@ newState = { status     = InLounge
            , supportURL = "/support/"
            , dialogFieldContent = Field.noContent
 
-           , roundState = Nothing
            , gameUUID   = Nothing
            , waitTurnAction = Nothing
            , gameFinalPoints = Nothing
            , waitShout  = Nothing
            , turnBegan  = 0
            , riichiWith = []
+           , hoveredTileNth = -1
+           , relatedToShout = []
+           , rs = emptyRoundState
 
            , lobbyChosenGame = Nothing
            , profilePictures = Dict.empty
@@ -92,11 +96,31 @@ newState = { status     = InLounge
 
            , logging    = []
            }
+
+emptyRoundState =
+   { mypos         = Ton
+   , round         = { kaze = Ton, round_rot = 0, round_honba = 0 }
+   , turn          = Ton
+   , player        = -1
+   , oja           = -1
+   , firstoja      = -1
+   , tilesleft     = -1
+   , dora          = []
+   , hands         = []
+   , players       = []
+   , myhand        = { concealed = [], picks = [], furiten = NotFuriten,
+                        canTsumo = False, state = DrawNone, called = [],
+                        discards = [], riichiState = NoRiichi, ippatsu = True }
+   , results       = Nothing
+   , honba         = 0
+   , inTable       = 0
+   , eventsHistory = []
+   }
 -- }}}
 
 -- {{{ Game loop input ----------------------------------------
 type Input = AnEvent Event
-           | GameInput Game.Controls
+           | GameInput Game.UserInput
            | LoungeInput Lounge.UserInput
            | MsgDialogInput MsgDialog.UserInput 
            | Dimensions (Int, Int)
@@ -106,13 +130,13 @@ type Input = AnEvent Event
 input : Signal Input
 input = mergeMany
    [ decodeEvent >> AnEvent                   `map` downstream
-   , GameInput                                `map` Game.controls
+   , GameInput                                `map` Game.userInput
    , LoungeInput                              `map` Lounge.userInput
    , MsgDialogInput                           `map` MsgDialog.userInput
    , minDimensions >> Dimensions              `map` Window.dimensions
    , TimeDelta                                `map` Time.every Time.second
    , Dict.fromList >> ReceivedProfilePictures `map` profilePicturesInput
-   ]
+   ] -- TODO too much racing in here; should move all but game/lounge/msg sum to a record
 
 minDimensions : (Int, Int) -> (Int, Int)
 minDimensions (x, y) = (max x 360, max x 360)
@@ -151,11 +175,11 @@ stepGame x gs = case x of
    AnEvent event      -> stepEvent event <| { gs | logging =
       maybe gs.logging (\x -> x :: gs.logging) <| MsgDialog.eventToDebugMsg event }
 
-   GameInput _        -> gs -- TODO ?
+   GameInput inp      -> Game.stepUserInput inp gs
    LoungeInput inp    -> Lounge.stepUserInput inp gs
    MsgDialogInput inp -> MsgDialog.stepUserInput inp gs
    Dimensions x       -> { gs | dimensions = x }
-   ReceivedProfilePictures pics -> { gs | profilePictures = pics }
+   ReceivedProfilePictures pics -> { gs | profilePictures = gs.profilePictures `Dict.union` pics }
    TimeDelta time     -> { gs | updated   = time
                               , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
                          }
@@ -176,7 +200,8 @@ stepEvent event gameState = case event of
                                                             else gameState.gameWait
                    , gameUUID = Maybe.map .uuid <| lookupGameInfo gameState ident
        }
-   InGameEvents events -> List.foldl Game.processInGameEvent gameState events
+   InGameEvents events ->
+      List.foldl Game.processInGameEvent gameState events
    _ -> gameState
 -- }}}
 
@@ -195,18 +220,13 @@ deleteNick n l =
 -- }}}
 
 -- {{{ Display ------------------------------------------------
-display : GameState -> Element -> Element
-display st view = flow down
-   [ view
-   , MsgDialog.dialog st
-   ]
 
-mainView = mergeMany
-   [ sampleOn (filter Util.atLounge newState gameState) (map Lounge.display gameState)
-   , sampleOn (filter Util.inGame newState gameState)
-      (map2 Game.display Game.controls gameState)
-   ]
+display : GameState -> Element
+display st = case st.status of
+   InLounge -> flow down [ Lounge.display st, MsgDialog.dialog st ]
+   InGame rs -> flow down [ Game.display st, MsgDialog.dialog st ]
+
 -- }}}
 
 -- main -------------------------------------------------------
-main = map2 display gameState mainView
+main = map display gameState

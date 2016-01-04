@@ -143,12 +143,16 @@ warpSettings foundation =
 
 runHajongInternalControl :: Int -> Text -> MVar G.InternalEvent -> MVar G.InternalResult -> IO ()
 runHajongInternalControl wsport secret inv outv = do
+    putStrLn "Opening InternalCtrl channel..."
     WS.runClient "localhost" wsport "/" $ \conn -> do
-        putStrLn "Internal hajong-server WS control channel opened."
         WS.sendTextData conn (G.InternalControl secret)
-        forever $ do
-            takeMVar inv >>= WS.sendTextData conn
-            WS.receiveData conn >>= putMVar outv
+        res <- WS.receiveData conn
+        case res of
+            "success" -> do putStrLn "Internal hajong-server WS control channel opened."
+                            forever $ do
+                                takeMVar inv >>= WS.sendTextData conn
+                                WS.receiveData conn >>= putMVar outv
+            err       -> putStrLn $ "InternalCtrl handshake failed: " ++ err
 
 -- | For yesod devel, return the Warp settings and WAI Application.
 getApplicationDev :: IO (Settings, Application)

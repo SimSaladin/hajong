@@ -23,13 +23,15 @@ type alias GameState =
    , profilePictures : ProfilePictures
 
     -- In-Game
-   , roundState     : Maybe RoundState
    , waitTurnAction : Maybe WaitRecord
    , waitShout      : Maybe (WaitRecord, List Shout)
    , gameFinalPoints : Maybe FinalPoints
    , turnBegan      : Time
    , riichiWith     : List Tile
    , gameUUID       : Maybe String
+   , hoveredTileNth : Int
+   , relatedToShout : List Int
+   , rs             : RoundState
 
    -- properties
    , updated    : Time
@@ -38,7 +40,8 @@ type alias GameState =
    , logging    : List LogItem
    }
 
-type Status = InLounge | InGame
+type Status = InLounge
+            | InGame RoundState
 
 type alias WaitRecord = { seconds : Int, added : Time }
 
