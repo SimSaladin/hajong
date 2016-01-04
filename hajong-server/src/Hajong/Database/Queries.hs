@@ -120,7 +120,7 @@ insertGame :: Game -> Update ServerDB (Either Text Int)
 insertGame game = do
     rec <- use seGameRecord
     case newId rec of
-        Just (gid, rec') -> do sePlayerRecord .= rec'
+        Just (gid, rec') -> do seGameRecord .= rec'
                                seGames.at gid .= Just game
                                return (Right gid)
         Nothing -> return (Left "Server's Game capacity reached")

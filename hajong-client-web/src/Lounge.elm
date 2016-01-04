@@ -172,7 +172,7 @@ toPlayerInfoLi st nick = li []
            , width 50, height 50 ] []
      , text nick ]
 
-smallPlayerInfo : State a -> String -> Html
+smallPlayerInfo : {a | profilePictures : Dict String String } -> String -> Html
 smallPlayerInfo st nick =
    img [ src <| Maybe.withDefault "" (Dict.get nick st.profilePictures)
        , title nick, width 30, height 30

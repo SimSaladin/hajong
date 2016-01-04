@@ -33,6 +33,8 @@ type alias GameState =
    , relatedToShout : List Int
    , rs             : RoundState
 
+   , resources : Dict String String -- image urls
+
    -- properties
    , updated    : Time
    , dimensions : (Int, Int)

@@ -134,7 +134,9 @@ isKantsu  = (== Kantsu)  . mentsuKind
 -- On shouts
 
 possibleShouts :: Tile -> [(MentsuKind, [Tile])]
-possibleShouts x = (Koutsu, [x, x]) : (Kantsu, [x, x, x]) : (Jantou, [x]) : if' (isSuited x) shuntsuShouts []
+possibleShouts x =
+    let xf = removeFlags x
+    (Koutsu, [x, xf]) : (Kantsu, [x, xf, xf]) : (Jantou, [x]) : if' (isSuited x) shuntsuShouts []
   where
     shuntsuShouts = catMaybes
         [ succMay x >>= \y -> succMay y >>= \z -> return (Shuntsu, [y, z]) --  x . .

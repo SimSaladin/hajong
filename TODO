@@ -1,5 +1,7 @@
 x = done, / = half done, ! = needs testing
 
+[ ] homepage: move aside up in mobile view
+[ ] reloading when kyoku has ended goes to lobby; should send the roundstate then too
 [ ] setup sending email: support and auth-account
 [ ] https
 [ ] make final points visible in elm

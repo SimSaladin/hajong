@@ -5,6 +5,8 @@ import Maybe
 
 import Text
 import Signal
+import Dict
+import Dict exposing (Dict)
 import Debug
 import Graphics.Element as Element
 import Color exposing (..)
@@ -15,9 +17,10 @@ lookupGameInfo game ident = List.head <| List.filter (\g -> g.ident == ident) ga
 log : String -> { a | logging : List LogItem } -> { a | logging : List LogItem }
 log str gs = { gs | logging = LogDebug {msg = str } :: gs.logging }
 
-groupInto n xs = case xs of
+groupInto : Int -> Int -> List a -> List (List a)
+groupInto limit n xs = case xs of
    [] -> []
-   _  -> List.take n xs :: groupInto n (List.drop n xs)
+   _  -> if limit == 0 then [ xs ] else List.take n xs :: groupInto (limit - 1) n (List.drop n xs)
 
 listModify : k -> (a -> a) -> List (k, a) -> List (k, a)
 listModify k f xs = case xs of
@@ -62,3 +65,8 @@ renderTitle title = Text.fromString title |> Text.bold |> Element.centered
 -- | An event signal, where Nothing is a Noop
 maybeEvent : (a -> Event) -> Signal (Maybe a) -> Signal Event
 maybeEvent f s = Signal.map (Maybe.withDefault Noop << Maybe.map f) s
+
+lookupResource : {a | resources : Dict String String } -> String -> String
+lookupResource st k = case Dict.get k st.resources of
+   Just x -> x
+   Nothing -> "resource-not-found.jpg"

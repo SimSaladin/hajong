@@ -192,6 +192,10 @@ terminal t = case tileNumber t of
     Just n -> n == minBound || n == maxBound
     _      -> False
 
+removeFlags :: Tile -> Tile
+removeFlags (Suited tk n _) = Suited tk n False
+removeFlags x               = x
+
 -- * Tile order
 
 -- | @CircularOrd@ models the succession of tiles, dragons and winds.
