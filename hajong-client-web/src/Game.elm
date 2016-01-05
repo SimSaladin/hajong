@@ -106,10 +106,12 @@ processInGameEventWith event st rs =
       RoundTurnAction {player_kaze, action} -> setRs st <| processTurnAction player_kaze action rs
 
       RoundTurnShouted {player_kaze, shout} ->
-         Util.log (toString player_kaze ++ " shouted: " ++ toString shout) st
+         { st | relatedToShout = [], hoveredTileNth = 0 }
+         |> Util.log (toString player_kaze ++ " shouted: " ++ toString shout)
 
       RoundHandChanged {player_kaze, hand} ->
-         setRs st { rs | hands = updateHand player_kaze hand rs.hands }
+         setRs { st | hoveredTileNth = -1 }
+               { rs | hands = updateHand player_kaze hand rs.hands }
 
       RoundEnded res ->
          setRs st { rs | results = Just res }
