@@ -37,10 +37,11 @@ facebook_credentials:
    secret: "_env:FB_SECRET:appsecret"
 
 aws:
-   access_key: "_env:SES_ACCESS_KEY:app@app.com"
-   secret_key: "_env:SES_SECRET_KEY:app@app.com"
+   from:       "_env:SES_FROM:app@app.com"
+   access-key: "_env:SES_ACCESS_KEY:app@app.com"
+   secret-key: "_env:SES_SECRET_KEY:app@app.com"
    region:     "_env:SES_REGION:eu-west-1"
-   ses_from:   "_env:SES_FROM:app@app.com"
+   to: []   # List of addresses where to send a copy of every email produced by the app.
 
 # Optional values with the following production defaults.
 # In development, they default to the inverse.

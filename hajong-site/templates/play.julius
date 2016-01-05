@@ -120,7 +120,7 @@ function startGame(doJoin) {
 /* {{{ error handling (notifications) */
 function alerted(data, fatal) {
   if (data.startsWith("Handshake failed: Unknown identity:"))
-    document.location = "@{AuthR LogoutR}";
+    document.getElementById("logout").submit();
   console.log(data);
   alertedDiv.innerHTML = data;
   if (!fatal && alertedDiv.hidden)

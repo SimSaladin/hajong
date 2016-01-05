@@ -30,6 +30,7 @@ getLobbyR = playLayout Nothing
 -- | Maybe game to join to.
 playLayout :: Maybe Int -> Handler Html
 playLayout mgid = do
+    token <- maybe "" id . reqToken <$> getRequest
     muserName <- maybeAuthId
     fullscreen <- isJust <$> lookupGetParam "fullscreen"
     websocketURI <- hajongWs . appHajong . appSettings <$> getYesod

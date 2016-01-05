@@ -35,10 +35,11 @@ class (Yesod master, HasHttpManager master) => YesodSES master where
 
 instance FromJSON SES.SES where
     parseJSON = withObject "SES" $ \o -> do
-        sesFrom      <- encodeUtf8 . asText <$> o .: "ses_from"
-        sesAccessKey <- encodeUtf8 . asText <$> o .: "access_key"
-        sesSecretKey <- encodeUtf8 . asText <$> o .: "secret_key"
+        sesFrom      <- encodeUtf8 . asText <$> o .: "from"
+        sesAccessKey <- encodeUtf8 . asText <$> o .: "access-key"
+        sesSecretKey <- encodeUtf8 . asText <$> o .: "secret-key"
         sesRegion    <- o .: "region"
+        sesTo        <- map (encodeUtf8 . asText) <$> o .:? "to" .!= []
         return SES.SES{..}
 
 renderSendMail :: YesodSES master => [Text] -> Mime.Mail -> HandlerT master IO ()
