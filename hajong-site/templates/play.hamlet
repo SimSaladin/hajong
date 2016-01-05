@@ -2,7 +2,3 @@
 <div id="wait">Connecting...
 $if not fullscreen
   <div id="game" style="min-width:100px; min-height:100px; width:100%; height:100vh">
-
-<form#logout style="display:hidden" method=post action=@{AuthR LogoutR}>
-    <input type=hidden name=_token value=#{token}>
-    <input.btn.btn-full type=submit value="Log out">
