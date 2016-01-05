@@ -1,5 +1,9 @@
 x = done, / = half done, ! = needs testing
 
+[ ] [Error] Game 128 errored! unsafeRoundM: unexpected Left: Hand state was DrawNone, but expected DrawFromWanpai @(hajon_58UM7JvDhFX6fY2cDWnlc6:Hajong.Server src/Hajong/Server.hs:238:21)
+
+[ ] email when name contains äääöö
+[ ] when third player joins he may get the place of second player; possibly second player had left and reconnected only after third player joined
 [ ] discard hovered/shout-indicator info after that's not relevant; bugs at leat mobile devices
 [x] homepage: move aside up in mobile view
 [ ] reloading when kyoku has ended goes to lobby; should send the roundstate then too

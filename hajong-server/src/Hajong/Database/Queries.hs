@@ -101,7 +101,9 @@ registerLoggedInPlayer nick token = use (seNicks.at nick) >>= \case
                           else return (Left "Your nick is in use by someone anonymous!")
 
 -- | Set the game of a player
-setPlayerGame :: Int -> Int -> Update ServerDB ()
+setPlayerGame :: Int -- ^ Game ID
+              -> Int -- ^ Client ID
+              -> Update ServerDB ()
 setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
 
 setGame :: Int -> Game -> Update ServerDB ()

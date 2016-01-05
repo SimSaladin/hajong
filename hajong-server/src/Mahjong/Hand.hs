@@ -168,7 +168,9 @@ shouminkanOn tile hand = do
     let isShoum m = mentsuKind m == Koutsu && headEx (mentsuTiles m) ==~ tile
     case hand' ^? handCalled.each.filtered isShoum of
         Nothing -> throwError "Shouminkan not possible: no such open koutsu"
-        Just _  -> return $ handCalled.each.filtered isShoum %~ promoteToKantsu $ hand'
+        Just _  -> return $ handCalled.each.filtered isShoum %~ promoteToKantsu
+                          $ handState .~ DrawFromWanpai
+                          $ hand'
 
 -- * Call
 

@@ -114,7 +114,7 @@ function startGame(doJoin) {
 /* {{{ error handling (notifications) */
 
 function handleInvalidEvent(content) {
-  if (content.startsWith("Handshake failed: Unknown identity:")) {
+  if (content.startsWith("Handshake failed:")) {
     authenticateGameServer();
   } else {
     alerted(content);

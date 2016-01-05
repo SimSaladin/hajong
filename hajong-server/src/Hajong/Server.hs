@@ -402,6 +402,7 @@ handleJoinGame gid rg = do
         multicast gs (JoinGame gid nick)
         liftIO $ runServer ss $ do
             update' (SetPlayerGame gid (getIdent c))
+            update' (SetGame gid (getIdent <$> gs))
             atomically $ do modifyTVar' (ss^.seLounge) (deleteSet c)
                             modifyTVar' (ss^.seWorkers) (ix gid.gClients.at (getIdent c) .~ Just c)
             putLounge (JoinGame gid nick)
