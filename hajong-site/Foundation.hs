@@ -214,7 +214,7 @@ instance Acc.AccountSendEmail App where
                 , appMailFooter ]
 
         let mail = Mime.simpleMail' (Address (Just userDisplayName) addr)
-                                    (error "npplied elsewhere") subject (fromStrict body)
+                                    (error "snpplied elsewhere") subject (fromStrict body)
         renderSendMail [addr] mail
 
 -- * Auth

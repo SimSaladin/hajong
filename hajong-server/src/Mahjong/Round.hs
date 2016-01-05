@@ -100,13 +100,11 @@ maybeBeginGame gs = do
 
 -- * Modify
 
--- | Try putting the given client to an empty player seat. Returns Nothing
--- if the game is already full.
+-- | Try putting the given client to its previous place ior an empty seat.
+-- Returns Nothing if the game is already full.
 addClient :: IsPlayer p => p -> GameState p -> Maybe (GameState p)
-addClient client = uncurry (flip (<$)) . mapAccumLOf (gamePlayers.traversed) go Nothing
-    where
-        go s c | isNothing s && isBot c = (Just (), client)
-               | otherwise              = (s, c)
+addClient client gs = do p <- clientToPlayer client gs
+                         return $ gamePlayers.at p .~ Just client $ gs
 
 setClient :: IsPlayer p => p -> Player -> GameState p -> GameState p
 setClient client p = gamePlayers.at p .~ Just client

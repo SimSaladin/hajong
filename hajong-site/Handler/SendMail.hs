@@ -47,9 +47,8 @@ renderSendMail to mail = do
     let mail' = mail { Mime.mailFrom = appInfoAddress }
     mgr <- getsYesod getHttpManager
     ses <- getSES
-#if DEVELOPMENT
     $(logInfo) ("mail to <" ++ tshow to ++ ">: " ++ tshow mail')
-#else
+#if !DEVELOPMENT
     SES.renderSendMailSES mgr ses { SES.sesTo = SES.sesTo ses ++ map encodeUtf8 to } mail'
 #endif
 
