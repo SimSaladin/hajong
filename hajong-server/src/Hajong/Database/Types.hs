@@ -29,12 +29,22 @@ import qualified Data.UUID                  as UUID
 -- may opt for a new *anonymous* identifier or provide their previous
 -- identifier and a passphrase.
 data ServerDB = ServerDB
-    { _sePlayerRecord  :: Record              -- ^ Player identifiers
-    , _seReserved      :: IntMap ClientRecord -- ^ Clients identified by @sePlayerRecord@
-    , _seNicks         :: Map Nick Int        -- ^ Reserved nicks
-    , _seGameRecord    :: Record              -- ^ Game identifiers
-    , _seGames         :: IntMap Game         -- ^ Games identified by @seGameRecord@
-    , _seHistory       :: Map UUID PastGame   -- ^ History of run workers
+    { _sePlayerRecord  :: Record
+    -- ^ Record of used and free integral player (client) identifiers. The
+    -- pool is bounded in size, see @Record@.
+    , _seReserved      :: IntMap ClientRecord
+    -- ^ Player identifiers mapped to @ClientRecord@s. If an identifier is
+    -- reserved in _sePlayerRecord, then it must also have a record in this
+    -- map.
+    , _seNicks         :: Map Nick Int
+    -- ^ This is related to anonymous clients which are not working at the
+    -- moment. Usernames and visible names are managed on the webapp side.
+    , _seGameRecord    :: Record
+    -- ^ Integral game identifiers.
+    , _seGames         :: IntMap Game
+    -- ^ Games that are running at the moment, analogous to @_seReserved@. 
+    , _seHistory       :: Map UUID PastGame
+    -- ^ History of games that have finished.
     } deriving (Show, Typeable)
 
 -- | Initialize an empty database. Allows 1024 active clients and 256 running games.
@@ -44,10 +54,20 @@ emptyDB = ServerDB (newRecord 1024) mempty mempty (newRecord 256) mempty mempty
 -- | A record of a client connected or previously connected.
 data ClientRecord = ClientRecord
     { _cNick           :: Text
-    , _cToken          :: Text
+    -- ^ Better named username; maps to them.
+    , _cToken          :: Text 
+    -- ^ When a client has disconnected, to reconnect it must know this
+    -- token. If the client loses the token, it must retrieve it by
+    -- authenticating to the site which gets and sends the value to the
+    -- client.
     , _cRegistered     :: Bool
-    , _cStatus         :: Either UTCTime UTCTime -- ^ Left (disconnected at) or Right (connected at)
+    -- ^ We technically support anonymous players on the game server level,
+    -- but atm this isn't used. (anonymous authentication was actually
+    -- implemented in an earlier version).
+    , _cStatus         :: Either UTCTime UTCTime
+    -- ^ Left (disconnected at) or Right (connected at)
     , _cInGame         :: Maybe Int
+    -- ^ The game the client has joined to
     } deriving (Show, Typeable)
 
 -- | Serialization of an on-going game.

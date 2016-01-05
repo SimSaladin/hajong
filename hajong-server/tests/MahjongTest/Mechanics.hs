@@ -70,6 +70,7 @@ gameFlowTests = testGroup "Game flow"
       kyoku <- testKyoku
       case runKyokuState kyoku (replicateM_ 250 $ stepped InpAuto) of
           Left "This kyoku has ended!" -> return ()
+          Left err                     -> assertFailure (unpack err)
           Right _                      -> assertFailure "Kyoku didn't end withing 250 automatic advances"
 
   , testCase "One han minimum to win a hand, not counting YakuExtra" $ do
@@ -403,6 +404,12 @@ riichiTests = testGroup "Riichi tests"
       case res of
           Left err -> err @?= "Cannot riichi: not tenpai"
           Right (_,(m,k)) -> traceShowM (m,k) >> assertFailure "Game should have errored"
+
+  , testCase "When riichi, ura-dora are opened" $ do
+      kyoku <- testKyoku <&> sHands . ix Ton . handRiichi .~ Riichi
+      let res = runKyoku kyoku $ getValuedHand Ton
+      requireRight res $ \(vh, _, _) -> return () -- we just check that there were no complications
+            
   ]
 
 weirdYaku :: TestTree

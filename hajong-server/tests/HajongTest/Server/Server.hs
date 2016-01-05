@@ -25,6 +25,6 @@ tests = testGroup "The websocket server"
 setupProcess :: IO ProcessID
 setupProcess = do
     lgr <- newStderrLoggerSet defaultBufSize
-    pid <- forkProcess $ hSilence [stdout, stderr] $ initServer lgr >>= runServerMain
+    pid <- forkProcess $ hSilence [stdout, stderr] $ initServer 8030 "secret" lgr >>= runServerMain
     threadDelay 1000000
     return pid

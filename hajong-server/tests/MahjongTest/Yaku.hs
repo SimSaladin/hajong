@@ -14,7 +14,7 @@ import Mahjong
 import MahjongTest.Mechanics
 
 -- | Defaults for the tests
-kyoku = Kyoku {_pRound = (Ton, 1, 0), _pTurn = Ton, _pOja = Player 3, _pFirstOja = Player 3, _pWallTilesLeft = 70, _pDora = [], _pFlags = setFromList [OpenedUraDora []], _pPlayers = error "not used", _pHonba = 0, _pRiichi = 0, _pResults = Nothing, _pDeals = [], _sEvents = [], _sHands = error "not used", _sWall = [], _sWanpai = Wanpai [] [] ["M1"] [], _sWaiting = Nothing}
+kyoku = Kyoku {_pRound = (Ton, 1, 0), _pTurn = Ton, _pOja = Player 3, _pFirstOja = Player 3, _pWallTilesLeft = 70, _pDora = [], _pFlags = setFromList [OpenedUraDora []], _pPlayers = error "not used", _pHonba = 0, _pRiichi = 0, _pResults = Nothing, _sEventHistory = [], _sHands = error "not used", _sWall = [], _sWanpai = Wanpai [] [] ["M1"] [], _sWaiting = Nothing}
 valueInfo = ValueInfo kyoku Ton $ Hand [] (map (\t -> Discard t Nothing False) ["N" ,"W" ,"G!","S7","P9","M6","S2","R!","S9","P1"]) NoRiichi False DrawNone [AgariTsumo "P2"] (return ["S5","P6","S6","P5","P4","S4","M5","S2","P3","P7","S7","S3","M5"]) (return NotFuriten) (return False) (pure mempty)
 
 tests :: TestTree

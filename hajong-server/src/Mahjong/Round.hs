@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
@@ -33,8 +34,9 @@ data GameState playerID = GameState
                    , _gamePlayers  :: Map Player playerID
                    , _gameUUID     :: UUID.UUID
                    , _gameSettings :: GameSettings
-                   } deriving (Show, Typeable, Read, Functor)
+                   } deriving (Show, Typeable, Read, Functor, Generic)
 
+--  TODO this instance is impaired, doesn't show everything it should.
 instance P.Pretty p => P.Pretty (GameState p) where
     pretty GameState{..} = P.pretty (show _gameSettings) P.<$$>
                            P.pretty (UUID.toString $ _gameUUID) P.<$$>
@@ -109,11 +111,6 @@ addClient client gs = do p <- clientToPlayer client gs
 setClient :: IsPlayer p => p -> Player -> GameState p -> GameState p
 setClient client p = gamePlayers.at p .~ Just client
 
-removeClient :: IsPlayer p => p -> GameState p -> Maybe (GameState p)
-removeClient client gs = do
-    p <- clientToPlayer client gs
-    return $ (gamePlayers.at p .~ Nothing) gs
-
 -- * Query
 
 playerToClient :: GameState p -> Player -> Maybe p
@@ -123,6 +120,9 @@ playerToClient gs p = gs^.gamePlayers.at p
 -- seat.
 clientToPlayer :: IsPlayer p => p -> GameState p -> Maybe Player
 clientToPlayer c gs =  fmap (^._1) $
-    (gs^.gamePlayers & ifind (\_ x -> x == c))
+    (gs^.gamePlayers & ifind (\_ x -> x == c)) -- are the same player, by ident
     `mplus`
-    (gs^.gamePlayers & ifind (\_ c' -> isBot c' && playerNick c' == playerNick c ++ " (n/a"))
+    (gs^.gamePlayers & ifind (\_ c' -> isBot c' && playerNick c' == playerNick c ++ " (n/a)"))
+    `mplus`                                    -- a bot replacement
+    (gs^.gamePlayers & ifind (\_ x -> isBot x && null (playerNick x)))
+                                               -- empty seat

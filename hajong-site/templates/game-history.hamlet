@@ -11,3 +11,5 @@
       <span>#{show $ gameResults v}
       $maybe content <- gameContent v
         <textarea>#{content}
+
+<a.btn href=@{UpdateGamesR}>Refresh

@@ -345,16 +345,16 @@ countingDora = do
 
 countingUraDora :: YakuCheck Yaku
 countingUraDora = do
-    _ <- riichi
-    [OpenedUraDora dora] <- yakuState <&> toListOf (vKyoku.pFlags._Wrapped.each.filtered isUraFlag)
+    void $ riichi
+    dora <- yakuState <&> concat . toListOf (vKyoku.pFlags._Wrapped.each.to getUra)
     tiles <- yakuAllTiles
     let num = length [ () | a <- map succCirc dora, b <- tiles, a ==~ T.TileEq b ]
     case num of
         0 -> yakuFail
         _ -> return $ YakuExtra num "Ura-Dora"
   where
-    isUraFlag (OpenedUraDora _) = True
-    isUraFlag _                 = False
+    getUra (OpenedUraDora xs) = xs
+    getUra _                  = []
 
 countingAkaDora :: YakuCheck Yaku
 countingAkaDora = do

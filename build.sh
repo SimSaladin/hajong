@@ -12,7 +12,7 @@ cd $(dirname $0)
 
 hajong-client-web/build.sh
 
-stack build
+stack build $@
 
 BIN_LOCATION=$(stack path --local-install-root | cut -d\  -f 2)
 rsync -a $BIN_LOCATION/bin/ dist/bin

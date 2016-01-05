@@ -28,6 +28,7 @@ import           Data.Aeson.TH
 import           Data.Aeson.Types (Pair)
 import qualified Data.Binary as B
 import           Data.Text.Binary ()
+import qualified Data.UUID    as UUID
 
 ------------------------------------------------------------------------------
 
@@ -202,6 +203,16 @@ instance ToJSON (m Tile) => ToJSON (PickedTile m) where
     toJSON (AgariTsumo t) = atType "agari-tsumo" [ "tile" .= t ]
     toJSON (AgariCall s) = atType "agari-call" [ "tile" .= shoutTile s, "shout" .= s ]
     toJSON (AgariTsumoWanpai t) = atType "agari-tsumo-wanpai" [ "tile" .= t ]
+
+$(deriveJSON (aesonOptions 0) ''GameSettings)
+
+instance ToJSON a => ToJSON (Map Player a) where
+    toJSON = toJSON . itoList
+
+instance ToJSON UUID.UUID where
+    toJSON = toJSON . UUID.toText
+
+instance ToJSON a => ToJSON (GameState a)
 
 -- derived
 

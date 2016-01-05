@@ -1,5 +1,7 @@
 module GameTypes where
 
+import PlayerInfo
+
 import Dict exposing (Dict)
 import Time exposing (Time)
 import Dict
@@ -20,7 +22,7 @@ type alias GameState =
    -- lounge-related
    , lounge          : LoungeData
    , lobbyChosenGame : Maybe GameInfo
-   , profilePictures : ProfilePictures
+   , playerInfo      : PlayerInfo.InfoDict
 
     -- In-Game
    , waitTurnAction : Maybe WaitRecord

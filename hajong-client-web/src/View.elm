@@ -55,7 +55,7 @@ newState = { status     = InLounge
            , rs = emptyRoundState
 
            , lobbyChosenGame = Nothing
-           , profilePictures = Dict.empty
+           , playerInfo = Dict.empty
 
            , resources = defaultResources
 
@@ -93,7 +93,7 @@ type Input = AnEvent Event
            | MsgDialogInput MsgDialog.UserInput 
            | Dimensions (Int, Int)
            | TimeDelta Time.Time
-           | ReceivedProfilePictures ProfilePictures 
+           | StateUpdate (GameState -> GameState)
 
 minDimensions : (Int, Int) -> (Int, Int)
 minDimensions (x, y) = (max x 260, max y 260)
@@ -107,7 +107,7 @@ stepGame x gs = case x of
    LoungeInput inp    -> Lounge.stepUserInput inp gs
    MsgDialogInput inp -> MsgDialog.stepUserInput inp gs
    Dimensions x       -> { gs | dimensions = x }
-   ReceivedProfilePictures pics -> { gs | profilePictures = gs.profilePictures `Dict.union` pics }
+   StateUpdate f      -> f gs
    TimeDelta time     -> { gs | updated   = time
                               , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
                          }

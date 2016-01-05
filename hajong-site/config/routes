@@ -8,26 +8,30 @@
 
 /new-game   NewGameR GET POST
 
-/games      GamesR   GET
-/game/#Int  GameR    GET POST
+-- global history
+/games        GamesR         GET
+/game/#Int    GameR          GET POST
+/update-games UpdateGamesR   GET
 
 /play       LobbyR   GET
 /play/#Int  PlayR    GET
 
 /view/#Text/#Text/#Int/#Int ViewR     GET
 
-/get-views                   ListViewsR  GET
-/save-view                   SaveViewR   POST
+-- user space
+/personal   PersonalR   GET
+/get-views  ListViewsR  GET
+/save-view  SaveViewR   POST
 
-/personal  PersonalR GET
 
 /support       SupportR         GET POST
 /support/#Text SupportWithUuidR GET POST
 /thank-you     SupportThankYouR GET
 
-/status StatusR GET
-
-/api/pictures ProfilePicturesR GET
+/api/pictures    ProfilePicturesR GET
+/api/player-info ApiPlayerInfoR GET
 
 /token      AuthTokenR GET
 
+-- admin space
+/status StatusR GET

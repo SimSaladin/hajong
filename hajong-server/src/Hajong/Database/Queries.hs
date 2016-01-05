@@ -21,19 +21,10 @@ import           Data.UUID                  (UUID)
 import           Data.Time.Clock (secondsToDiffTime)
 ------------------------------------------------------------------------------
 
+-- * Clients
+
 getClientRecord :: Int -> Query ServerDB (Maybe ClientRecord)
 getClientRecord i = view (seReserved.at i)
-
-getGames :: Query ServerDB (IntMap Game)
-getGames = view seGames
-
-getGame :: Int -> Query ServerDB (Maybe Game)
-getGame i = view (seGames.at i)
-
-dumpDB :: Query ServerDB ServerDB
-dumpDB = ask
-
--- * Updates
 
 -- | Add the new client to ServerDB if
 --      * its @ident@ is known,
@@ -100,11 +91,22 @@ registerLoggedInPlayer nick token = use (seNicks.at nick) >>= \case
         if c^.cRegistered then return (Right (i, c))
                           else return (Left "Your nick is in use by someone anonymous!")
 
--- | Set the game of a player
-setPlayerGame :: Int -- ^ Game ID
-              -> Int -- ^ Client ID
-              -> Update ServerDB ()
-setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
+-- * Games
+
+getGames :: Query ServerDB (IntMap Game)
+getGames = view seGames
+
+getGame :: Int -> Query ServerDB (Maybe Game)
+getGame i = view (seGames.at i)
+
+insertGame :: Game -> Update ServerDB (Either Text Int)
+insertGame game = do
+    rec <- use seGameRecord
+    case newId rec of
+        Just (gid, rec') -> do seGameRecord .= rec'
+                               seGames.at gid .= Just game
+                               return (Right gid)
+        Nothing -> return (Left "Server's Game capacity reached")
 
 setGame :: Int -> Game -> Update ServerDB ()
 setGame gid game = seGames.ix gid .= game
@@ -118,14 +120,13 @@ destroyGame gid = do seGameRecord %= freeId gid
                         use (seReserved.at i)
                      return (catMaybes rs)
 
-insertGame :: Game -> Update ServerDB (Either Text Int)
-insertGame game = do
-    rec <- use seGameRecord
-    case newId rec of
-        Just (gid, rec') -> do seGameRecord .= rec'
-                               seGames.at gid .= Just game
-                               return (Right gid)
-        Nothing -> return (Left "Server's Game capacity reached")
+-- | Set the game of a player
+setPlayerGame :: Int -- ^ Game ID
+              -> Int -- ^ Client ID
+              -> Update ServerDB ()
+setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
+
+-- * Updates
 
 logWorkerResult :: PastGame -> Update ServerDB ()
 logWorkerResult pg = seHistory.at (_gameUUID $ _pgGameState pg) .= Just pg
@@ -136,3 +137,8 @@ flushWorkerLog = seHistory .= mempty
 getWorkerResultLog :: Query ServerDB (Map UUID PastGame)
 getWorkerResultLog = view seHistory
 
+
+-- * Debug
+
+dumpDB :: Query ServerDB ServerDB
+dumpDB = ask

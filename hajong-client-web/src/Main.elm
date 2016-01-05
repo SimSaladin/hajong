@@ -1,5 +1,8 @@
 module Main where
 
+import Http
+
+import PlayerInfo
 import Lounge
 import MsgDialog
 import Game
@@ -53,20 +56,15 @@ port upstream = encodeEvent `map` mergeMany
 
 -- }}}
 
--- {{{ Profile pictures
-port profilePicturesInput : Signal (List (String, String))
+-- {{{ Profile information
 
-port profilePicturesRequest : Signal (List String)
-port profilePicturesRequest =
-   let allNicks gs  = gs.mynick `Set.insert` gs.lounge.idle
-           `Set.union`
-            List.foldr (\a b -> Set.union a.players b) Set.empty gs.lounge.games
-       f gs (fetched, _) = let nicks = allNicks gs
-                               in (Set.union fetched nicks,
-                                   Set.toList <| Set.diff nicks fetched)
-      in Signal.foldp f (Set.empty, []) gameState
-         |> Signal.dropRepeats
-         |> Signal.map snd
+port playerInfoRunner : Signal (Task Http.Error ())
+port playerInfoRunner = PlayerInfo.requests <| Signal.map allNicks gameState
+
+-- | Get all nicks in the GameState
+allNicks : GameState -> Set.Set String
+allNicks gs  = gs.mynick `Set.insert` gs.lounge.idle
+     `Set.union` List.foldr (\a b -> Set.union a.players b) Set.empty gs.lounge.games
 
 -- }}}
 
@@ -74,12 +72,12 @@ port profilePicturesRequest =
 
 input : Signal Input
 input = mergeMany
-   [ decodeEvent >> AnEvent                   `map` downstream
-   , GameInput                                `map` Game.userInput
-   , LoungeInput                              `map` Lounge.userInput
-   , MsgDialogInput                           `map` MsgDialog.userInput
-   , TimeDelta                                `map` Time.every Time.second
-   , Dict.fromList >> ReceivedProfilePictures `map` profilePicturesInput
+   [ decodeEvent >> AnEvent  `map` downstream
+   , GameInput               `map` Game.userInput
+   , LoungeInput             `map` Lounge.userInput
+   , MsgDialogInput          `map` MsgDialog.userInput
+   , TimeDelta               `map` Time.every Time.second
+   , StateUpdate             `map` .signal PlayerInfo.updates
    ]
 -- }}}
 

@@ -10,6 +10,8 @@
 module GameServer
     ( getGame, getRegisteredUser, getNewAnonUser, G.Game, G.ClientRecord(..)
     , getAcid
+    , queryGameServer
+    , queryGameServer
     ) where
 
 import Import hiding (update)
@@ -18,6 +20,15 @@ import qualified Hajong.Database as G
 import Data.Acid
 
 getAcid = appGameState <$> getYesod
+
+queryGameServer action = do
+    acid <- getAcid
+    liftIO $ acid `query` action
+
+updateGameServer action = do
+    acid <- getAcid
+    liftIO $ acid `update` action
+
 
 -- | By GameId
 getGame :: Int -> Handler (Maybe G.Game)

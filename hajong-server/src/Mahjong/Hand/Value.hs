@@ -60,8 +60,8 @@ getFu ys | any (\y -> _yName y == "Chiitoitsu") ys = const 25
     where rounded = (* 10) . fst . (`divMod` 10)
 
 baseFu :: ValueInfo -> Fu
-baseFu vi | AgariCall{} <- vi^?!vHand.handPicks._last = 30
-          | otherwise                                 = 20
+baseFu vi | Just AgariCall{} <- vi^?vHand.handPicks._last = 30
+          | otherwise                                     = 20
 
 waitValue :: ValueInfo -> Fu
 waitValue = go <$> pickedTile . (^?! vHand.handPicks._last) <*> map mentsuTiles . filter (not . mentsuShouted) . view (vHand.handCalled)

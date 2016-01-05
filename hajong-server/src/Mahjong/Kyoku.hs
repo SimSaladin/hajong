@@ -27,6 +27,7 @@ module Mahjong.Kyoku
     , playerToKaze
     , getShouts
     , nextRound
+    , getValuedHand
     , module Mahjong.Kyoku.Internal
     ) where
 
@@ -133,7 +134,7 @@ step CheckEndConditionsAfterDiscard InpAuto = checkEndConditions
 step (KyokuEnded{}) InpAuto = do
     k <- get
     case maybeGameResults k of
-        Nothing -> return (NotBegun 15)
+        Nothing -> return (NotBegun 15) -- TODO Return instead a WaitingNextDeal before this, which only continues with a new kyoku state.
         Just res -> endGame res
 
 step HasEnded{} _     = throwError "This game has ended!"
@@ -542,7 +543,7 @@ dealEnds results = do
 -- raise an error.
 getValuedHand :: InKyoku m => Kaze -> m ValuedHand
 getValuedHand pk = do
-    revealUraDora
+    revealUraDora -- TODO wrong place for this
     vh <- valueHand pk <$> handOf' pk <*> get
     when (length (vh^..vhValue.vaYaku.each.filtered yakuNotExtra) == 0) $
         throwError $ "Need at least one yaku that ain't dora to win.\nThe ValuedHand: " ++ tshow vh

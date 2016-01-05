@@ -21,7 +21,8 @@ Game json
    uuid Text
    created UTCTime
    finished UTCTime Maybe
-   content Text Maybe -- serialized json of the roundstate
+   content Text Maybe   -- serialized json of the roundstate
+   failed Text Maybe    -- the game errored with some message
    results GameResults
    UniqueGame uuid
 

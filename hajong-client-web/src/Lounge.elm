@@ -3,6 +3,7 @@ module Lounge where
 import GameTypes exposing (..)
 import Events
 import Util exposing (..)
+import PlayerInfo
 
 import Dict exposing (Dict)
 import Dict
@@ -31,17 +32,6 @@ isSubmit s = map (\x -> x == Submit) s
 
 -- {{{ State, input and events ------------------------
 
--- | This is like GameTypes.GameState, but only the fields we actually use in
--- this module.
-type alias State a =
-   { a | lounge          : LoungeData
-       , mynick          : String
-       , lobbyChosenGame : Maybe GameInfo
-       , profilePictures : Dict String String -- dom. urls
-       , gameWait        : Maybe Int
-       , dimensions      : (Int, Int)
-   }
-
 -- | User input this module listens to.
 type UserInput = ChooseGame (Maybe GameInfo)
 
@@ -49,7 +39,7 @@ userInput : Signal UserInput
 userInput = ChooseGame `map` chosenGame.signal
 
 -- | Handling user input events in the state.
-stepUserInput : UserInput -> State a -> State a
+stepUserInput : UserInput -> GameState -> GameState
 stepUserInput inp st = case inp of
    ChooseGame mg -> { st | lobbyChosenGame = mg }
 
@@ -81,7 +71,7 @@ forceStartButton n = Input.button (forceStart n) "Force start"
 -- }}}
 
 -- {{{ Display -----------------------------------------
-display : State a -> Element
+display : GameState -> Element
 display st = flow down
     [ currentWaitInfo st
     , toElement (fst st.dimensions) 500 <| div [ class "lobby" ]
@@ -89,7 +79,7 @@ display st = flow down
                        , idlePlayers st ]
     ]
 
-idlePlayers : State a -> Html
+idlePlayers : GameState -> Html
 idlePlayers st = 
    div [ class "idle-players" ]
        [ ul [ class "idle-players-list" ]
@@ -102,7 +92,7 @@ idlePlayers st =
        ]
 
 -- | Waiting for a game to start
-currentWaitInfo : State a -> Element
+currentWaitInfo : GameState -> Element
 currentWaitInfo st = case st.gameWait `Maybe.andThen` Util.lookupGameInfo st of
    Just gamewait ->
 
@@ -120,7 +110,7 @@ currentWaitInfo st = case st.gameWait `Maybe.andThen` Util.lookupGameInfo st of
 
 -- {{{ Game list
 
-gameListing : State a -> Html
+gameListing : GameState -> Html
 gameListing st =
    div [ class "games" ]
        [ h2 [] [ text "Games" ]
@@ -130,7 +120,7 @@ gameListing st =
        ]
 
 -- | `active_game all_games`
-buildGameList : State a -> Html
+buildGameList : GameState -> Html
 buildGameList st =
    let chooseClass gi = case st.gameWait of
                               Nothing  -> if st.lobbyChosenGame == Just gi then "chosen" else "normal"
@@ -142,7 +132,7 @@ buildGameList st =
        in ul [ class "games-list" ]
              <| List.map gameInfoLi st.lounge.games
 
-gameInfoBlock : State a -> (GameInfo -> String) -> GameInfo -> Html
+gameInfoBlock : GameState -> (GameInfo -> String) -> GameInfo -> Html
 gameInfoBlock st getsClass gi =
    div [ class <| "game-info-block " ++ getsClass gi ]
        [ span [ class "game-ident"        ] [ text (toString gi.ident) ]
@@ -166,16 +156,21 @@ newGameButton = toElement 200 40 <|
 -- {{{ Display player information
 
 -- | li-element based on nick
-toPlayerInfoLi : State a -> String -> Html
-toPlayerInfoLi st nick = li []
-     [ img [ src <| Maybe.withDefault "" (Dict.get nick st.profilePictures)
-           , width 50, height 50 ] []
-     , text nick ]
 
-smallPlayerInfo : {a | profilePictures : Dict String String } -> String -> Html
+smallPlayerInfo : GameState -> String -> Html
 smallPlayerInfo st nick =
-   img [ src <| Maybe.withDefault "" (Dict.get nick st.profilePictures)
-       , title nick, width 30, height 30
+   img [ src   <| getInfoWithDefault st "" .profilePicture nick
+       , title <| getInfoWithDefault st "" .displayName nick, width 30, height 30
        ] []
 
+toPlayerInfoLi : GameState -> String -> Html
+toPlayerInfoLi st nick = li []
+     [ img [ src <| getInfoWithDefault st "" .profilePicture nick
+           , width 50, height 50 ] []
+     , text <| getInfoWithDefault st nick .displayName nick ]
+
 -- }}}
+
+getInfoWithDefault : GameState -> a -> (PlayerInfo.PlayerInfo -> a) -> String -> a
+getInfoWithDefault st def f k = Dict.get k st.playerInfo
+    |> Maybe.map f |> Maybe.withDefault def

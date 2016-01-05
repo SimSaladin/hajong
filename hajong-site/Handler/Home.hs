@@ -99,3 +99,21 @@ getProfilePicturesR = do
     users <- runDB $ selectList [UserUsername <-. nicks] []
     let res = flip map users $ liftA2 (,) userUsername userProfilePicture . entityVal
     returnJson res
+
+-- |
+--   ("name"    := Json.string)
+--   ("picture" := Json.string)
+--
+getApiPlayerInfoR :: Handler Value
+getApiPlayerInfoR = do
+    nicks <- runInputGet $ ireq textListField "u"
+    users <- runDB $ selectList [UserUsername <-. nicks] []
+
+    let res :: Map Text (Map Text Text)
+        res = mapFromList $ flip map users $ \(Entity _ user) ->
+            (userUsername user, mapFromList
+                [ ("name", userDisplayName user)
+                , ("picture", userProfilePicture user)
+                ] :: Map Text Text)
+
+    returnJson res
