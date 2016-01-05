@@ -39,6 +39,8 @@ import qualified Hajong.Connections as G
 import qualified Network.WebSockets as WS
 import Network (PortID(UnixSocket))
 
+import System.Exit (exitFailure)
+
 import Handler.Home
 import Handler.Personal
 import Handler.Play
@@ -76,12 +78,7 @@ makeFoundation appSettings = do
 
     -- site communicates with hajong-server via this local websocket.
     let wsport  = read $ tail $ dropWhile (/= ':') $ dropWhile (/= '/') $ unpack hajongWs
-        runCtrl = runHajongInternalControl wsport hajongCtrlSecret appGameIn appGameOut
-
-    _threadId <- forkIO $ runCtrl `finally`
-        do putStrLn "Internal hajong-server WS control channel lost. Reconnecting in 1s..."
-           threadDelay 1000000
-           runCtrl
+    _threadId <- forkIO $ runHajongInternalControl wsport hajongCtrlSecret appGameIn appGameOut
 
     -- We need a log function to create a connection pool. We need a connection
     -- pool to create our foundation. And we need our foundation to get a
@@ -142,17 +139,27 @@ warpSettings foundation =
       defaultSettings
 
 runHajongInternalControl :: Int -> Text -> MVar G.InternalEvent -> MVar G.InternalResult -> IO ()
-runHajongInternalControl wsport secret inv outv = do
-    putStrLn "Opening InternalCtrl channel..."
-    WS.runClient "localhost" wsport "/" $ \conn -> do
-        WS.sendTextData conn (G.InternalControl secret)
-        res <- WS.receiveData conn
-        case res of
-            "success" -> do putStrLn "Internal hajong-server WS control channel opened."
-                            forever $ do
-                                takeMVar inv >>= WS.sendTextData conn
-                                WS.receiveData conn >>= putMVar outv
-            err       -> putStrLn $ "InternalCtrl handshake failed: " ++ err
+runHajongInternalControl wsport secret inv outv =
+    let withChannel go = do putStrLn "Opening InternalCtrl channel..."
+                            WS.runClient "localhost" wsport "/" $ \conn -> do
+                                WS.sendTextData conn (G.InternalControl secret)
+                                res <- WS.receiveData conn
+                                case res of
+                                   "success" -> do putStrLn "Internal hajong-server WS control channel (re)opened."
+                                                   go conn
+                                   err       -> do putStrLn $ "InternalCtrl handshake failed: " ++ err
+                                                   exitFailure
+
+        processWith conn = forever $ bracketOnError (takeMVar inv) (putMVar inv) $ \inp -> do
+            WS.sendTextData conn inp
+            WS.receiveData conn >>= putMVar outv
+
+        openAndProcess = withChannel processWith
+
+    in openAndProcess `finally` do
+            putStrLn "Internal hajong-server WS control channel lost. Reconnecting in 1s..."
+            threadDelay 1000000
+            openAndProcess
 
 -- | For yesod devel, return the Warp settings and WAI Application.
 getApplicationDev :: IO (Settings, Application)
