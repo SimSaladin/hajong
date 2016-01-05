@@ -3,6 +3,7 @@ module Game where
 import Util exposing (..)
 import Lounge
 import GameTypes exposing (..)
+import MsgDialog
 
 import List
 import Dict exposing (Dict)
@@ -36,26 +37,6 @@ playAreaWidth = 2 * handOffCenter + 2 * t_h
 playAreaHeight = playAreaWidth
 
 -- {{{ State, input and events ---------------------------------------
-
-type alias State a =
-   { a | hoveredTileNth : Int
-       , relatedToShout : List Int
-       , logging        : List LogItem
-       , status         : Status
-       , dimensions     : (Int, Int)
-
-       , gameWait   : Maybe Int
-       , gameFinalPoints : Maybe FinalPoints
-       , riichiWith     : List Tile
-       , waitTurnAction : Maybe WaitRecord
-       , waitShout      : Maybe (WaitRecord, List Shout)
-       , turnBegan      : Time
-       , updated        : Time
-       , resources      : Dict String String
-       , profilePictures : Dict String String
-
-       , rs             : RoundState
-    }
 
 type UserInput = HoverTile Int
                | HoverShoutTiles (List Int)
@@ -201,48 +182,54 @@ shoutChooseTile = mailbox Nothing
 
 -- {{{ Display: main -------------------------------------------------
 
-display : State a -> Element
-display st = let propY = toFloat (fst st.dimensions) / playAreaHeight
-                 propX = toFloat (snd st.dimensions) / playAreaWidth
-                 factor = min 1 <| min propY propX
-                 x     = Debug.watch "Dimensions" <| st.dimensions
-             in
-   container (fst st.dimensions) (snd st.dimensions) middle
-   <| color gray
+display : GameState -> Element
+display st =
+   let propY = toFloat (fst st.dimensions) / playAreaHeight
+       propX = toFloat (snd st.dimensions) / playAreaWidth
+       factor = min 1 <| min propY propX
+       x     = Debug.watch "Dimensions" <| st.dimensions
+       realGameArea = min playAreaWidth <| min (fst st.dimensions) (snd st.dimensions)
+       gameDisplay = collage realGameArea realGameArea
+            [ scale factor <| group
+                [ dispInfoBlock st
+                , dispDiscards st
+                , dispOthersHands st
+                , dispPlayerInfos st
 
-   <| collage (fst st.dimensions) (snd st.dimensions)
-   [ scale factor <| group
-       [ dispInfoBlock st
-       , dispDiscards st
-       , dispOthersHands st
-       , dispPlayerInfos st
+                , group <| map (fst >> \k -> moveRotateKaze (riichiBetsOffCenter, 0) st.rs.mypos k (playerRiichi st))
+                        <| List.filter (snd >> .riichiState >> \x -> x /= NoRiichi) st.rs.hands
 
-       , group <| map (fst >> \k -> moveRotateKaze (riichiBetsOffCenter, 0) st.rs.mypos k (playerRiichi st))
-               <| List.filter (snd >> .riichiState >> \x -> x /= NoRiichi) st.rs.hands
+                , maybe (toForm empty) (dispResults st) st.rs.results
+                , maybe (toForm empty) (dispFinalPoints st) st.gameFinalPoints
 
-       , maybe (toForm empty) (dispResults st) st.rs.results
-       , maybe (toForm empty) (dispFinalPoints st) st.gameFinalPoints
+                -- action buttons
+                , moveY (-handOffCenter + t_h) <| toForm <| container playAreaWidth 40 midTop <| flow right
+                   <| (
+                      maybe [] (snd >> displayShoutButtons st) (st.waitShout)
+                       ++ shouminkanButtons st.rs "Shouminkan"
+                       ++ [ ankanButton st.rs "Ankan"
+                          , nocareButton st.waitShout "Pass" ]
+                       ++ riichiButtons st.rs st.riichiWith
+                       ++ [ tsumoButton st.rs.myhand.canTsumo ]
+                       )
+                ]
+             , dispHand st.rs.mypos st st.rs.myhand
+                  |> fitToViewX st.dimensions
+                  |> moveY (-handOffCenter * factor)
+             ] |> color (rgb 210 207 190)
 
-       -- action buttons
-       , moveY (-handOffCenter + t_h) <| toForm <| container playAreaWidth 40 midTop <| flow right
-          <| (
-             maybe [] (snd >> displayShoutButtons st) (st.waitShout)
-              ++ shouminkanButtons st.rs "Shouminkan"
-              ++ [ ankanButton st.rs "Ankan"
-                 , nocareButton st.waitShout "Pass" ]
-              ++ riichiButtons st.rs st.riichiWith
-              ++ [ tsumoButton st.rs.myhand.canTsumo ]
-              )
-       ]
-    , dispHand st.rs.mypos st st.rs.myhand
-         |> fitToViewX st.dimensions
-         |> moveY (-handOffCenter * factor)
-    ]
+   in container (fst st.dimensions) (snd st.dimensions) middle gameDisplay
+         |> color gray
+
+asSideBar : GameState -> Element
+asSideBar st = container 300 (snd st.dimensions) middle
+   <| color black
+   <| MsgDialog.dialog st
 
 fitToViewX : (Int, Int) -> Element -> Form
 fitToViewX (w,_) e = scale (min 1 <| toFloat w / toFloat (widthOf e)) <| toForm e
 
-dispPlayerInfos : State a -> Form
+dispPlayerInfos : GameState -> Form
 dispPlayerInfos st = [Ton, Nan, Shaa, Pei]
    |> List.concatMap (\k ->
       [ dispPlayerInfo st k |> moveRotateKaze (handOffCenter-t_h,-playAreaWidth / 4) st.rs.mypos k
@@ -250,7 +237,7 @@ dispPlayerInfos st = [Ton, Nan, Shaa, Pei]
    )
    |> group
 
-dispPlayerInfo : State a -> Kaze -> Form
+dispPlayerInfo : GameState -> Kaze -> Form
 dispPlayerInfo st k =
    let (p, points, name) = Util.listFind k st.rs.players
        playerName        = if name == "" then T.fromString "(bot)" else T.fromString name |> T.bold
@@ -265,7 +252,7 @@ dispPlayerInfo st k =
 
 -- {{{ DIsplay: FinalPoints screen ----------------------------------
 
-dispFinalPoints : State a -> FinalPoints -> Form
+dispFinalPoints : GameState -> FinalPoints -> Form
 dispFinalPoints st res =
    let dispPointsFor (player, points) =
          let (_, (_, _, nick)) = fromJust <| Util.listFindWith (\(_,(p,_,_)) -> p) player st.rs.players
@@ -280,7 +267,7 @@ dispFinalPoints st res =
 
 -- {{{ Display: Public Hand Info -------------------------------------
 
-dispOthersHands : State a -> Form
+dispOthersHands : GameState -> Form
 dispOthersHands st = [Ton, Nan, Shaa, Pei]
    |> List.filter (\x -> x /= st.rs.mypos)
    |> map (\k ->
@@ -295,7 +282,7 @@ dispOthersHands st = [Ton, Nan, Shaa, Pei]
       )
    |> group
 
-dispDiscards : State a -> Form
+dispDiscards : GameState -> Form
 dispDiscards st = group <| map
    (\k -> Util.listFind k st.rs.hands
        |> dispHandDiscards st
@@ -307,7 +294,7 @@ dispDiscards st = group <| map
 
 -- {{{ Display: info block in the center -----------------------------
 
-dispInfoBlock : State a -> Form
+dispInfoBlock : GameState -> Form
 dispInfoBlock st =
    toForm
    <| color black <| container (infoBlockWidth + 2) (infoBlockWidth + 2) middle
@@ -323,7 +310,7 @@ dispInfoBlock st =
 
 dealAndRoundIndicator st = toForm <| kazeImage st (st.rs.round.kaze) `beside` centered (T.fromString (toString <| st.rs.round.round_rot))
 
-turnIndicator : State a -> Form
+turnIndicator : GameState -> Form
 turnIndicator st =
    let col = if isNothing st.waitShout then lightGreen else lightOrange
                 in group
@@ -343,7 +330,7 @@ riichiInTableIndicator n = if n > 0 then move (-30, -60) <| toForm <| centered <
 -- }}}
 
 -- {{{ Display: Utility ----------------------------------------------
-kazeImage : State a -> Kaze -> Element
+kazeImage : GameState -> Kaze -> Element
 kazeImage st kaze = fittedImage 28 38 <| lookupResource st (toString kaze)
 
 titleText : String -> Element
@@ -361,12 +348,12 @@ moveRotateKaze (offY, offX) mypos pos =
       _ -> moveX (-offY) << moveY (-offX) << rotate (degrees 270)
 
 -- | Riichi stick, not rotated.
-playerRiichi : State a -> Form
+playerRiichi : GameState -> Form
 playerRiichi st = toForm <| image 200 20 <| lookupResource st "stick-1000"
 -- }}}
 
 -- {{{ Display: Results ----------------------------------------------
-dispResults : State a -> RoundResult -> Form
+dispResults : GameState -> RoundResult -> Form
 dispResults st res =
    let (col, view) = case res of
             DealTsumo {winners, payers} -> (lightBlue,
@@ -388,7 +375,7 @@ dispResults st res =
          <| container 700 300 middle
          <| flow down view
 
-dispWinner : State a -> Winner -> Element
+dispWinner : GameState -> Winner -> Element
 dispWinner st {player_kaze, points, valuehand} =
    [ T.concat [ T.fromString (toString player_kaze)
               , T.fromString (toString points) |> T.append (T.fromString "+") |> T.color green
@@ -408,7 +395,7 @@ dispTenpai {player_kaze, points} = T.concat
    , T.fromString (toString points) |> T.append (T.fromString "+") |> T.color green ]
    |> centered
 
-dispValued : State a -> Valued -> Element
+dispValued : GameState -> Valued -> Element
 dispValued st {mentsu, tiles, value} =
    [ collage 600 80
       [ flow right (map (dispTileHand st) tiles ++ map (dispMentsu st Ton) mentsu) -- TODO get player ton
@@ -432,7 +419,7 @@ dispYaku {han, name} = T.concat
 
 -- {{{ Display: My hand ---------------------------------------------------
 
-dispHand : Kaze -> State a -> Hand -> Element
+dispHand : Kaze -> GameState -> Hand -> Element
 dispHand k st hand = flow right <|
    List.map2 (dispTileInHand st) [1..14] (sortTiles hand.concealed)
    ++ [ spacer 10 10 ]
@@ -441,7 +428,7 @@ dispHand k st hand = flow right <|
    ++ map (dispMentsu st k) hand.called
 
 -- | Adds click events and hover effects.
-dispTileInHand : State a -> Int -> Tile -> Element
+dispTileInHand : GameState -> Int -> Tile -> Element
 dispTileInHand st n tile =
    let isHover = st.hoveredTileNth == n || List.member n st.relatedToShout
        in dispTileHand st tile
@@ -457,7 +444,7 @@ dispTileInHand st n tile =
 
 -- Discard pool height: 3 * t_h
 --              width:  2 * infoBlockWidth (last row might continue further)
-dispHandDiscards : State a -> HandPublic' b -> Element
+dispHandDiscards : GameState -> HandPublic' b -> Element
 dispHandDiscards st h =
    let f i disc = move
    in h.discards |> List.filter (.to >> isNothing)
@@ -467,7 +454,7 @@ dispHandDiscards st h =
                  |> flow down
                  |> container (2 * infoBlockWidth) (3 * t_h) topLeft
 
-dispDiscard : State a -> Discard -> Element
+dispDiscard : GameState -> Discard -> Element
 dispDiscard st d = if d.riichi
    then collage t_h t_w [ rotate (degrees 90) <| toForm <| dispTile st d.tile ]
    else dispTile st d.tile
@@ -482,7 +469,7 @@ dispHiddenTiles h =
    let num = 13 - 2 * List.length h.called
        in flow right <| List.repeat num tileHidden
 
-dispOthersHand : State a -> Kaze -> HandPublic -> Element
+dispOthersHand : GameState -> Kaze -> HandPublic -> Element
 dispOthersHand st k h = dispHiddenTiles h `beside` dispPublicMentsu st k h
 
 -- }}}
@@ -491,18 +478,18 @@ dispOthersHand st k h = dispHiddenTiles h `beside` dispPublicMentsu st k h
 
 -- | The second argument tells who we are. We need to know in order to rotate the
 -- correct tile in a shouted mentsu.
-dispMentsu : State a -> Kaze -> Mentsu -> Element
+dispMentsu : GameState -> Kaze -> Mentsu -> Element
 dispMentsu st k m = case m.from of
    Nothing -> dispMentsuConcealed st m
    Just s  -> dispShout st k m s
 
-dispMentsuConcealed : State a -> Mentsu -> Element
+dispMentsuConcealed : GameState -> Mentsu -> Element
 dispMentsuConcealed st m = flow right <| map (dispTile st) <| m.tiles
 
-dispPublicMentsu : State a -> Kaze -> HandPublic -> Element
+dispPublicMentsu : GameState -> Kaze -> HandPublic -> Element
 dispPublicMentsu st k h = flow right <| map (dispMentsu st k) h.called
 
-dispShout : State a -> Kaze -> Mentsu -> Shout -> Element
+dispShout : GameState -> Kaze -> Mentsu -> Shout -> Element
 dispShout st k m s =
    let myTiles  = map (dispTile st) s.shoutTo
        rotated  = rotate (degrees 90) <| toForm <| dispTile st s.shoutTile
@@ -520,16 +507,16 @@ dispShout st k m s =
 
 -- {{{ Display: Tiles --------------------------------------------------------------
 
-dispTile : State a -> Tile -> Element
+dispTile : GameState -> Tile -> Element
 dispTile = tileImage False
 
-dispTileHand : State a -> Tile -> Element
+dispTileHand : GameState -> Tile -> Element
 dispTileHand = tileImage True
 
-dispWanpai : State a -> Element
+dispWanpai : GameState -> Element
 dispWanpai st = st.rs.dora |> map (dispTile st) |> flow right
 
-tileImage : Bool -> State a -> Tile -> Element
+tileImage : Bool -> GameState -> Tile -> Element
 tileImage inhand st tile =
    let (col, row) = case tile of
                Suited ManTile n False -> ((n - 1) * t_w, 0)
@@ -555,7 +542,7 @@ tileHidden = collage t_w (t_h // 3) [ rect t_w (t_h / 3) |> outlined defaultLine
 
 -- {{{ Buttons -----------------------------------------------------------------
 
-displayShoutButtons : State a -> List Shout -> List Element
+displayShoutButtons : GameState -> List Shout -> List Element
 displayShoutButtons st = map <| \s -> shoutButton s
    |> hoverable (\f -> message shoutHover.address <|
          if f then (getTileIndices (sortTiles st.rs.myhand.concealed) s.shoutTo, Just s) else ([], Nothing))

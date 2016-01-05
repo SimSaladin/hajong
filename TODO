@@ -4,13 +4,11 @@ x = done, / = half done, ! = needs testing
 [ ] reloading when kyoku has ended goes to lobby; should send the roundstate then too
 [ ] setup sending email: support and auth-account
 [ ] https
-[ ] make final points visible in elm
+[ ] restyle kyoku results and final points views
 [ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
-[ ] Rework lobby: better listing of user names perhaps with facebook profile pics / gravatars
+[x] Rework lobby: better listing of user names perhaps with facebook profile pics / gravatars
 [ ] Set up logging from workers to a file.
-[ ] refactoring: split H.Server to H.{Server.State,Server.Internal,Database,Database.Query} modules
-[ ] refactoring: replace the StateT in kyoku code with a custom mechanism, which updates the kyoku state right after an event is triggered
-[ ] make csrf middleware work with LogoutR too, so it can be enabled
+[x] refactoring: split H.Server to H.{Server.State,Server.Internal,Database,Database.Query} modules
 [ ] after a game has ended, make it possible to go back to lobby.
 
 # mechanics
@@ -60,7 +58,9 @@ x = done, / = half done, ! = needs testing
 
 
 # someday/maybe
+[ ] refactoring: replace the StateT in kyoku code with a custom mechanism, which updates the kyoku state right after an event is triggered
 [ ] add tests: riichi-transfers on multi-ron
+[ ] make csrf middleware work with LogoutR too, so it can be enabled
 [ ] Save game results to relational database
 [ ] inspect test failure:
       TileGroupings of tiles of 'tileGroup' .<-- [ tileGroup ]:                    FAIL (0.34s)
