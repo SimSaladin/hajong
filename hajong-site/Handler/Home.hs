@@ -72,7 +72,7 @@ getProfilePicturesR = do
     users <- runDB $ selectList [UserUsername <-. nicks] []
 
     let res = flip map users $ \(Entity _ User{..}) ->
-            let profpic | Just fbId <- userFbUserId = "http://graph.facebook.com/" ++ fbId ++ "/picture"
+            let profpic | Just fbId <- userFbUserId = "http://graph.facebook.com/" ++ fbId ++ "/picture?type=square"
                         | otherwise                 = "http://www.gravatar.com/avatar/" ++ hashEmail userEmailAddress
                 in (userUsername, profpic)
 
