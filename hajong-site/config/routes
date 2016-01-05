@@ -23,6 +23,7 @@
 
 /support       SupportR         GET POST
 /support/#Text SupportWithUuidR GET POST
+/thank-you     SupportThankYouR GET
 
 /status StatusR GET
 

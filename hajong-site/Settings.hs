@@ -19,7 +19,7 @@ import Yesod.Default.Config2       (applyEnvValue, configSettingsYml)
 import Yesod.Default.Util          (WidgetFileSettings, widgetFileNoReload,
                                     widgetFileReload)
 
-import Handler.SendMail
+import Handler.SendMail (SES)
 import qualified Facebook as FB
 
 -- | Runtime settings to configure this application. These settings can be
@@ -40,7 +40,6 @@ data AppSettings = AppSettings
     , appIpFromHeader           :: Bool
     -- ^ Get the IP address from the header when logging. Useful when sitting
     -- behind a reverse proxy.
-
     , appDetailedRequestLogging :: Bool
     -- ^ Use detailed request logging system
     , appShouldLogAll           :: Bool
@@ -51,15 +50,18 @@ data AppSettings = AppSettings
     -- ^ Assume that files in the static dir may change after compilation
     , appSkipCombining          :: Bool
     -- ^ Perform no stylesheet/script combining
-
-    -- Example app-specific configuration values.
     , appCopyright              :: Text
     -- ^ Copyright text to appear in the footer of the page
     , appAnalytics              :: Maybe Text
     -- ^ Google Analytics code
     , appHajong                 :: HajongConf
+    -- ^ Hajong configuration
     , appFacebookCredentials    :: FB.Credentials
+    -- ^ Facebook API credentials
     , appSES                    :: SES
+    -- ^ Amazon SES configuration
+    , appSupportTo              :: [Text]
+    -- ^ Where support request mails should be sent
     }
 
 -- TODO This should be in Hajong.Configuration
@@ -95,6 +97,7 @@ instance FromJSON AppSettings where
 
         appCopyright              <- o .: "copyright"
         appAnalytics              <- o .:? "analytics"
+        appSupportTo              <- o .: "support-to"
 
         let parseFbCredentials x = FB.Credentials <$> x .: "name" <*> x .: "id" <*> x .: "secret"
         appFacebookCredentials    <- parseFbCredentials =<< o .: "facebook_credentials"

@@ -5,6 +5,9 @@
   <i>username: #{userUsername}
   <br>
   <i>email: #{userEmailAddress}
+  <br>
+<h2>Actions
+<a .btn href=@{AuthR resetPasswordR}>Set or reset password
 
 <h1>Saved game states
 $if null res

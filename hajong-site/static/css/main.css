@@ -115,6 +115,7 @@ nav a {
     text-decoration: none;
     font-weight: bold;
 
+    background:rgb(171, 137, 0);
     color: white;
 }
 
@@ -161,19 +162,11 @@ nav a:hover {
    Author's custom styles
    ========================================================================== */
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+.header-account-info img {
+   margin-right: 15px;
+   width:40px;
+   height:40px;
+}
 
 /* ==========================================================================
    Media Queries
@@ -191,6 +184,7 @@ nav a:hover {
         margin: 0 1.7%;
         padding: 25px 2%;
         margin-bottom: 0;
+        background:none;
     }
 
     nav li:first-child a {
@@ -199,6 +193,24 @@ nav a:hover {
 
     nav li:last-child a {
         margin-right: 0;
+    }
+
+    .header-support {
+      background:none;
+    }
+
+    .header-account-info a {
+       padding-bottom:0;
+       padding-top:15px;
+    }
+
+    .header-account-info img {
+       margin:0;
+       margin-top:5px;
+    }
+
+    .header-account-info .txt {
+       display:none;
     }
 
 /* ========================

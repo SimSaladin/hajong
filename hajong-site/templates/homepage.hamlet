@@ -1,4 +1,20 @@
 
+<aside>
+  $maybe (_, Entity _ user) <- muser
+    <h1>Play
+    <div>
+      <P>Logged in as #{userDisplayName user}.
+      <a.btn.btn-full href=@{LobbyR}>Browse public games
+      <a.btn.btn-full href=@{NewGameR}>Create a new game
+      <form method=post action=@{AuthR LogoutR}>
+        <input type=hidden name=_token value=#{token}>
+        <input.btn.btn-full type=submit value="Log out">
+
+  $nothing
+    <h1>Log in
+    <!-- not logged in -->
+    ^{myLoginWidget}
+
 <article>
   <section>
     <h1>Riichi Mahjong Online
@@ -35,17 +51,3 @@
       The only other multiplayer implementation I am aware of is the Japanese
       Tenhou.net, which is in Japanese and uses Flash in its game. That's one
       of the reasons I wanted to give a try on rolling my own software.
-
-<aside>
-  $maybe (_, Entity _ user) <- muser
-    <h1>Play
-    <div>
-      <P>Logged in as #{userDisplayName user}.
-      <a.btn.btn-full href=@{LobbyR}>Browse public games
-      <a.btn.btn-full href=@{NewGameR}>Create a new game
-      <a.btn.btn-full href=@{AuthR LogoutR}>Log out
-
-  $nothing
-    <h1>Log in
-    <!-- not logged in -->
-    ^{myLoginWidget}

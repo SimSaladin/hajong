@@ -8,6 +8,9 @@ ip-from-header: "_env:IP_FROM_HEADER:false"
 
 copyright: "2016 Samuli Thomasson"
 
+support-to:
+   - "someone@example.org"
+
 # hajong server settings
 hajong:
    server_ws:     "_env:SERVER_WS:ws://localhost:8001"

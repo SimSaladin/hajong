@@ -1,3 +1,5 @@
+{-# GHCOPT -fno-warn-orphans #-}
+{-# LANGUAGE CPP #-}
 ------------------------------------------------------------------------------
 -- | 
 -- Module         : Handler.SendMail
@@ -6,11 +8,19 @@
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
--- File Created   : 2016-01-02T17:58:05+0200
+--
+-- It's useful to import this with @Network.Mail.Mime@. We re-export @Mime@
+-- and @Address@ for convenience
+--
+-- @
+-- import Handler.SendMail
+-- import qualified Network.Mail.Mime as Mime
+-- @
 ------------------------------------------------------------------------------
 module Handler.SendMail
     ( module Handler.SendMail
     , SES.SES
+    , Mime.Mail(..), Mime.Address(..)
     ) where
 
 import ClassyPrelude.Yesod
@@ -31,14 +41,17 @@ instance FromJSON SES.SES where
         sesRegion    <- o .: "region"
         return SES.SES{..}
 
-sendMail :: YesodSES master => [Text] -> LByteString -> HandlerT master IO ()
-sendMail to bs = do
-    mgr <- getsYesod getHttpManager
-    ses <- getSES
-    SES.sendMailSES mgr ses { SES.sesTo = map encodeUtf8 to } bs
-
 renderSendMail :: YesodSES master => [Text] -> Mime.Mail -> HandlerT master IO ()
 renderSendMail to mail = do
+    let mail' = mail { Mime.mailFrom = appInfoAddress }
     mgr <- getsYesod getHttpManager
     ses <- getSES
-    SES.renderSendMailSES mgr ses { SES.sesTo = map encodeUtf8 to } mail
+#if DEVELOPMENT
+    $(logInfo) ("mail to <" ++ tshow to ++ ">: " ++ tshow mail')
+#else
+    SES.renderSendMailSES mgr ses { SES.sesTo = SES.sesTo ses ++ map encodeUtf8 to } mail'
+#endif
+
+-- | TODO into config
+appInfoAddress :: Mime.Address
+appInfoAddress = Mime.Address Nothing "info@funjong.org"

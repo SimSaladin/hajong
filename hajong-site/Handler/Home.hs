@@ -1,48 +1,75 @@
 module Handler.Home where
 
 import Import
-import qualified Data.ByteString.Lazy.Char8 as C8
-import Data.Text (strip)
-import Data.Digest.Pure.MD5 (md5)
+
+import Handler.SendMail
+import qualified Network.Mail.Mime as Mime
+
 import Data.FileEmbed (embedFile)
-import Yesod.Auth.Account
 import Yesod.Form.Bootstrap3
     ( BootstrapFormLayout (..), renderBootstrap3, withSmallInput )
 
 getHomeR :: Handler Html
 getHomeR = do
+    token <- maybe "" id . reqToken <$> getRequest
     muser <- maybeAuthPair
     defaultLayout $ do
         setTitle "Funjong"
         $(widgetFile "homepage")
 
 getSupportR, postSupportR :: Handler Html
-getSupportR  = postSupportR
-postSupportR = supportWithUuidR Nothing
+getSupportR  = handleSupportWithUuidR Nothing
+postSupportR = handleSupportWithUuidR Nothing
 
-supportWithUuidR :: Maybe Text -> Handler Html
-supportWithUuidR maybeUuid = do
-    ((res, widget), enctype) <- runFormPost $ ticketForm maybeUuid
+getSupportWithUuidR, postSupportWithUuidR :: Text -> Handler Html
+getSupportWithUuidR  = handleSupportWithUuidR . Just
+postSupportWithUuidR = handleSupportWithUuidR . Just 
 
-    submitted <- case res of
+handleSupportWithUuidR :: Maybe Text -> Handler Html
+handleSupportWithUuidR maybeUuid = do
+    museremail <- fmap (userEmailAddress . entityVal . snd) <$> maybeAuthPair
+    ((res, widget), enctype) <- runFormPost $ ticketForm museremail maybeUuid
+
+    case res of
         FormSuccess ticket -> do
             tid <- runDB $ insert ticket
-            return (Just tid)
-        _ -> return Nothing
+            mailTicket (Entity tid ticket) >>= setSession "ticket-body"
+            redirect SupportThankYouR
+        _ -> return ()
 
-    -- TODO: send email to me
     defaultLayout $ do
         setTitle "Support"
         $(widgetFile "support")
 
-getSupportWithUuidR, postSupportWithUuidR :: Text -> Handler Html
-getSupportWithUuidR  = postSupportWithUuidR
-postSupportWithUuidR = supportWithUuidR . Just 
+getSupportThankYouR :: Handler Html
+getSupportThankYouR = do
+    body <- lookupSession "ticket-body" >>= maybe notFound return
+    defaultLayout $ do
+        setTitle "Thank you"
+        $(widgetFile "support-thankyou")
 
-ticketForm :: Maybe Text -> Form Ticket
-ticketForm maybeUuid = renderBootstrap3 BootstrapBasicForm $ Ticket
+mailTicket :: Entity Ticket -> Handler Text
+mailTicket (Entity tid Ticket{..}) = do
+
+    AppSettings{..} <- getsYesod appSettings
+
+    let body = unlines
+            [ "Ticket #" ++ tshow (fromSqlKey tid)
+            , "Created " ++ tshow ticketCreated
+            , "\n" ++ ticketContent ]
+
+        mail = (Mime.emptyMail (Address Nothing ticketEmail))
+            { mailBcc     = map (Address Nothing) appSupportTo
+            , mailHeaders = [("Subject", "[support] Ticket #" ++ tshow (fromSqlKey tid) ++ " at funjong.org")]
+            , mailParts   = [[ Mime.plainPart $ fromStrict body ]] }
+
+    renderSendMail appSupportTo mail
+    return body
+
+ticketForm :: Maybe Text -> Maybe Text -> Form Ticket
+ticketForm maybeEmail maybeUuid = renderBootstrap3 BootstrapBasicForm $ Ticket
     <$> lift (liftIO getCurrentTime)
-    <*> areq emailField "Your email address" Nothing
+    <*> areq emailField "Your email address" maybeEmail
     <*> fmap unTextarea (areq textareaField "Description" { fsAttrs = [("rows", "17")] } $ Just $ ticketTemplate maybeUuid)
 
 ticketTemplate :: Maybe Text -> Textarea
@@ -70,24 +97,5 @@ getProfilePicturesR :: Handler Value
 getProfilePicturesR = do
     nicks <- runInputGet $ ireq textListField "nicks[]"
     users <- runDB $ selectList [UserUsername <-. nicks] []
-
-    let res = flip map users $ \(Entity _ User{..}) ->
-            let profpic | Just fbId <- userFbUserId = "http://graph.facebook.com/" ++ fbId ++ "/picture?type=square"
-                        | otherwise                 = "http://www.gravatar.com/avatar/" ++ hashEmail userEmailAddress
-                in (userUsername, profpic)
-
+    let res = flip map users $ liftA2 (,) userUsername userProfilePicture . entityVal
     returnJson res
-
--- | for gravatar
-hashEmail :: Text -> Text
-hashEmail = md5sum . toLower . strip
-    where
-        md5sum :: Text -> Text
-        md5sum = tshow . md5 . C8.pack . unpack
-
--- | List of text fields.
-textListField :: Field Handler [Text]
-textListField = Field
-    { fieldParse = \xs _ -> return (Right $ Just xs)
-    , fieldView  = error "Not viewable"
-    , fieldEnctype = UrlEncoded }

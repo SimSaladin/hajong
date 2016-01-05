@@ -1,0 +1,6 @@
+<section>
+  <h1>Thank you!
+  <p>
+    Your support request has been received. I'll get back to you soon.
+    <br>
+    <textarea style="width:100%" disabled rows=15>#{body}

@@ -46,11 +46,8 @@ a:hover {
 .title {
     text-shadow:2px 2px 2px #555;
 }
-nav a {
-   background:rgb(171, 137, 0);
-}
 nav a.active {
-   background: #ce9814;
+  text-decoration:underline;
 }
 .game-settings-dialog {
   max-width:30em;
@@ -65,6 +62,10 @@ nav a.active {
    }
   input[type="submit"] {
     margin-left:8em;
+  }
+  input.btn-full {
+    margin-left:0;
+    max-width:30em;
   }
 }
 
@@ -93,19 +94,15 @@ input[type=text], input[type=password], input[type=email], textarea {
 }
 /* }}} */
 
-/* {{{ login */
+/* {{{ auth */
+.auth-wrapper {
+  max-width:30em;
+  margin:0 auto;
+}
 .login-facebook a {
   color: white;
   background: #3b5998;
   width:100%;
-}
-.login-options {
-  max-width:30em;
-  margin:0 auto;
-}
-.login-account, .newaccountDiv {
-  max-width:30em;
-  margin:0 auto;
 }
 .login-account input {
   width: 100%;

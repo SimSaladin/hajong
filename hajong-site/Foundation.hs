@@ -29,6 +29,13 @@ import qualified Hajong.Connections as G
 import Control.Concurrent.Lock
 import qualified Network.WebSockets as WS
 
+import Handler.SendMail
+import qualified Network.Mail.Mime as Mime
+
+import qualified Data.ByteString.Lazy.Char8 as C8
+import Data.Text (strip)
+import Data.Digest.Pure.MD5 (md5)
+
 -- | The foundation datatype for your application. This can be a good place to
 -- keep settings and values requiring initialization before your application
 -- starts running, such as database connections. Every handler will have
@@ -64,17 +71,13 @@ instance Yesod App where
     --   a) Sets a cookie with a CSRF token in it.
     --   b) Validates that incoming write requests include that token in either a header or POST parameter.
     -- For details, see the CSRF documentation in the Yesod.Core.Handler module of the yesod-core package.
-    yesodMiddleware = {- defaultCsrfMiddleware . -} defaultYesodMiddleware
-            -- TODO: The csrf protection doesn't work with
-            -- GET'ing yesod-auth:LogoutR, because it uses redirectToPost
-            -- which doesn't support csrf by itself. Not sure how to fix
-            -- this atm.
+    yesodMiddleware = defaultCsrfMiddleware . defaultYesodMiddleware
 
     defaultLayout widget = do
         master <- getYesod
         mmsg <- getMessage
         route <- getCurrentRoute
-        muser <- maybeAuthId
+        mapair <- maybeAuthPair
 
         let development =
 #if DEVELOPMENT
@@ -99,6 +102,7 @@ instance Yesod App where
     isAuthorized RobotsR _ = return Authorized
     isAuthorized HomeR _ = return Authorized
     isAuthorized SupportR _ = return Authorized
+    isAuthorized SupportThankYouR _ = return Authorized
     isAuthorized _ _ = requireAuthId >> return Authorized
 
     -- This function creates static content files in the static folder
@@ -141,6 +145,98 @@ instance YesodPersist App where
 instance YesodPersistRunner App where
     getDBRunner = defaultGetDBRunner appConnPool
 
+-- This instance is required to use forms. You can modify renderMessage to
+-- achieve customized and internationalized form validation messages.
+instance RenderMessage App FormMessage where
+    renderMessage _ _ = defaultFormMessage
+
+-- Useful when writing code that is re-usable outside of the Handler context.
+-- An example is background jobs that send email.
+-- This can also be useful for writing code that works across multiple Yesod applications.
+instance HasHttpManager App where
+    getHttpManager = appHttpManager
+
+unsafeHandler :: App -> Handler a -> IO a
+unsafeHandler = Unsafe.fakeHandlerGetLogger appLogger
+
+-- Note: Some functionality previously present in the scaffolding has been
+-- moved to documentation in the Wiki. Following are some hopefully helpful
+-- links:
+--
+-- https://github.com/yesodweb/yesod/wiki/Sending-email
+-- https://github.com/yesodweb/yesod/wiki/Serve-static-files-from-a-separate-domain
+-- https://github.com/yesodweb/yesod/wiki/i18n-messages-in-the-scaffolding
+
+-- * Email
+
+instance YesodSES App where
+    getSES = getsYesod $ appSES . appSettings
+
+appMailFooter :: Text
+appMailFooter = unlines
+    [ "\n\n-------------------------------"
+    , "This is an automatic email from funjong.org. You can reply to this"
+    , "address."
+    , ""
+    , "    http://funjong.org" ]
+
+instance Acc.AccountSendEmail App where
+    sendVerifyEmail username addr url = do
+        Entity _ User{..} <- runDB $ getBy404 $ UniqueUsername username
+
+        let subject = "Verify your email address"
+            body = unlines
+                [ "Welcome, " ++ userDisplayName ++ "!"
+                , ""
+                , "You have created an account at funjong.org. Your username is: " ++ userUsername
+                , "Follow the link below to verify your email address"
+                , ""
+                , "    " ++ url
+                , ""
+                , "If you have any questions, please contact 'info at funjong dot org' or"
+                , "file a support request at http://funjong.org/support."
+                , appMailFooter ]
+
+        let mail = Mime.simpleMail' (Address (Just userDisplayName) addr)
+                                  (error "supplied elsewhere") subject (fromStrict body)
+        renderSendMail [addr] mail
+
+    sendNewPasswordEmail username addr url = do
+        Entity _ User{..} <- runDB $ getBy404 $ UniqueUsername username
+
+        let subject = "Password reset request"
+            body = unlines
+                [ "Someone requested a password request for this address on funjong.org."
+                , ""
+                , "Click the link below to reset your password:"
+                , "\n    " ++ url ++ "\n"
+                , "If you did not request a password reset, you may safely ignore this email."
+                , appMailFooter ]
+
+        let mail = Mime.simpleMail' (Address (Just userDisplayName) addr)
+                                    (error "npplied elsewhere") subject (fromStrict body)
+        renderSendMail [addr] mail
+
+-- * Auth
+
+loggedIn :: Handler Bool
+loggedIn = isJust <$> maybeAuthId
+
+myLoginWidget :: Widget
+myLoginWidget = do
+        setTitleI Msg.LoginTitle
+        master <- getYesod
+        let [fb, acc] = map (flip apLogin AuthR) $ authPlugins master
+        [whamlet|
+<div.auth-wrapper>
+    ^{fb}
+    <hr>
+    ^{acc}
+|]
+
+requireUserId :: Handler UserId
+requireUserId = fmap (entityKey . snd) requireAuthPair
+
 instance YesodAuth App where
     type AuthId App = Acc.Username -- :: Text
     getAuthId (Creds "account" username _) = return (Just username)
@@ -172,16 +268,23 @@ instance YesodAuth App where
 
     loginDest _ = HomeR
     logoutDest _ = HomeR
-    authPlugins _ = [ myFacebookPlugin { apLogin = myFacebookLoginWidget }
-                    , Acc.accountPlugin { apLogin = myAccountLoginWidget }]
-      where
-        myFacebookPlugin = authFacebook ["email"]
-        myFacebookLoginWidget tm = do
-            [whamlet|
-<div.login-facebook>^{apLogin myFacebookPlugin tm}
-|]
-            -- toWidget [lucius|a {} |]
+    authPlugins _ = [ myFacebookPlugin, myAccountPlugin ]
+    loginHandler = lift . authLayout $ myLoginWidget
+    authHttpManager _ = error "No manager needed"
 
+    -- onLogin = setMessageI NowLoggedIn
+    onLogout = setMessage "You have logged out"
+    maybeAuthId = lookupSession credsKey
+
+instance YesodAuthPersist App where
+    type AuthEntity App = Entity User
+    getAuthEntity = runDB . getBy . UniqueUsername
+
+-- ** Account
+
+myAccountPlugin :: AuthPlugin App
+myAccountPlugin = Acc.accountPlugin { apLogin = myAccountLoginWidget }
+    where
         myAccountLoginWidget tm = do
             ((_,widget), enctype) <- liftHandlerT $ runFormPost $ renderDivs Acc.loginForm
             [whamlet|
@@ -194,64 +297,56 @@ instance YesodAuth App where
         <a.btn.btn-alt.btn-half href="@{tm Acc.resetPasswordR}">_{AccMsg.MsgForgotPassword}
 |]
 
-    loginHandler = lift . authLayout $ myLoginWidget
+myResetPasswordWidget :: Widget
+myResetPasswordWidget = do
+    muname <- liftHandlerT maybeAuthId
 
-    authHttpManager _ = error "No manager needed"
+    let myResetPasswordForm = areq textField userSettings muname
+        userSettings        = FieldSettings (SomeMessage AccMsg.MsgUsername) Nothing (Just "username") Nothing []
 
-    -- onLogin = setMessageI NowLoggedIn
-    maybeAuthId = lookupSession credsKey
-
-instance YesodAuthPersist App where
-    type AuthEntity App = Entity User
-    getAuthEntity = runDB . getBy . UniqueUsername
-
--- This instance is required to use forms. You can modify renderMessage to
--- achieve customized and internationalized form validation messages.
-instance RenderMessage App FormMessage where
-    renderMessage _ _ = defaultFormMessage
-
--- Useful when writing code that is re-usable outside of the Handler context.
--- An example is background jobs that send email.
--- This can also be useful for writing code that works across multiple Yesod applications.
-instance HasHttpManager App where
-    getHttpManager = appHttpManager
-
-unsafeHandler :: App -> Handler a -> IO a
-unsafeHandler = Unsafe.fakeHandlerGetLogger appLogger
-
--- Note: Some functionality previously present in the scaffolding has been
--- moved to documentation in the Wiki. Following are some hopefully helpful
--- links:
---
--- https://github.com/yesodweb/yesod/wiki/Sending-email
--- https://github.com/yesodweb/yesod/wiki/Serve-static-files-from-a-separate-domain
--- https://github.com/yesodweb/yesod/wiki/i18n-messages-in-the-scaffolding
-
--- * Extra authentication stuff
-
-requireUserId :: Handler UserId
-requireUserId = fmap (entityKey . snd) requireAuthPair
+    ((_,widget), enctype) <- liftHandlerT $ runFormPost $ renderDivs myResetPasswordForm
+    [whamlet|
+<div .auth-wrapper>
+  <h1>Reset password
+  <div .resetPasswordDiv>
+    <form method=post enctype=#{enctype} action=@{AuthR Acc.resetPasswordR}>
+        ^{widget}
+        <input.btn.btn-full type=submit value=_{Msg.SendPasswordResetEmail}>
+|]
 
 instance Acc.YesodAuthAccount (Acc.AccountPersistDB App User) App where
     runAccountDB = Acc.runAccountPersistDB
+    getNewAccountR = lift $ do
+        whenM loggedIn $ do setMessage "You are already logged in" >> redirect HomeR
+        ((_,widget), enctype) <- runFormPost $ renderDivs Acc.newAccountForm
+        authLayout $ do
+            setTitleI Msg.RegisterLong
+            [whamlet|
+<div.auth-wrapper>
+    ^{apLogin myFacebookPlugin AuthR}
+    <i>Or create a separate account below
+    <div .newaccountDiv>
+       <form method=post enctype=#{enctype} action=@{AuthR Acc.newAccountR}>
+           ^{widget}
+           <input .btn.btn-full type=submit value=_{Msg.Register}>
+    <a .btn.btn-alt.btn-full href=@{AuthR Acc.resetPasswordR}>Forgot password?
+|]
 
-instance Acc.AccountSendEmail App
+    getResetPasswordR = lift $ authLayout $ do
+        setTitleI Msg.PasswordResetTitle
+        myResetPasswordWidget
+
+-- ** Facebook
+
+myFacebookPlugin :: AuthPlugin App
+myFacebookPlugin = defPlugin
+    { apLogin = \tm -> [whamlet|
+<div.login-facebook>^{apLogin defPlugin tm}
+|] } where defPlugin = authFacebook ["email"]
 
 instance YF.YesodFacebook App where
     fbCredentials = appFacebookCredentials . appSettings
     fbHttpManager = getHttpManager
-
-myLoginWidget :: Widget
-myLoginWidget = do
-        setTitleI Msg.LoginTitle
-        master <- getYesod
-        let [fb, acc] = map (flip apLogin AuthR) $ authPlugins master
-        [whamlet|
-<div.login-options>
-    ^{fb}
-    <hr>
-    ^{acc}
-|]
 
 -- * Extra utilities
 
@@ -279,3 +374,22 @@ isNavOf "history" (Just (ViewR _ _ _ _)) = True
 isNavOf "personal" (Just PersonalR) = True
 
 isNavOf _ _ = False
+        
+userProfilePicture :: User -> Text
+userProfilePicture User{..}
+    | Just fbId <- userFbUserId = "http://graph.facebook.com/" ++ fbId ++ "/picture?type=square"
+    | otherwise                 = "http://www.gravatar.com/avatar/" ++ hashEmail userEmailAddress
+
+-- | for gravatar
+hashEmail :: Text -> Text
+hashEmail = md5sum . toLower . strip
+    where
+        md5sum :: Text -> Text
+        md5sum = tshow . md5 . C8.pack . unpack
+
+-- | List of text fields.
+textListField :: Field Handler [Text]
+textListField = Field
+    { fieldParse = \xs _ -> return (Right $ Just xs)
+    , fieldView  = error "Not viewable"
+    , fieldEnctype = UrlEncoded }

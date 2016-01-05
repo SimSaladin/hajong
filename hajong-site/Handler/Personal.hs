@@ -11,6 +11,7 @@
 module Handler.Personal where
 
 import           Import
+import           Yesod.Auth.Account (resetPasswordR)
 
 -- | User's pages
 getPersonalR :: Handler Html
