@@ -3,7 +3,7 @@ var game;                    // the elm game object
 var currentRoundState = "";  // updated from elm, used to save it to server on js side
 var socket;                  // WebSocket to game server
 
-var mainDiv    = document.getElementById('game');
+var mainDiv    = document.getElementById('game') || { hidden: true };
 var waitDiv    = document.getElementById('wait');
 var alertedDiv = document.getElementById('alerted');
 
@@ -11,6 +11,15 @@ var debug = localStorage.getItem("debug"); // set to true to debug events
 var debugEVS = [];                         // DEBUG: list of events
 
 var muted = localStorage.getItem("muted");
+
+var portConf = { downstream : "", profilePicturesInput : [] };
+
+window.onresize = function(ev) {
+  console.log(ev);
+}
+
+nick = #{maybe Null String muserName};
+if (nick === null) localStorage.removeItem("token");
 /* }}} */
 
 /* {{{ Commands */
@@ -47,7 +56,11 @@ function unmute() {
 mainDiv.hidden = true;
 
 function initElm() {
-  return Elm.embed(Elm.Main, mainDiv, { downstream : "", profilePicturesInput : [] });
+  if (#{Bool fullscreen}) {
+    return Elm.fullscreen(Elm.Main, portConf);
+  } else {
+    return Elm.embed(Elm.Main, mainDiv, portConf);
+  }
 }
 
 function startGame(doJoin) {
@@ -158,11 +171,9 @@ window.setInterval(function(){
   if (e) e.scrollTop = e.scrollHeight;
 }, 1000);
 
-$(function(){
-  if (token) { // join with cached creds
-    startGame({ "type": "join", "nick" : nick, "ident": ident, "token": token
-              , "game": joinToGame });
-  } else { // else go fetch token
-    window.location.replace("@{AuthTokenR}" + window.location.search.replace("", ""));
-  }
-});
+if (token) { // join with cached creds
+  startGame({ "type": "join", "nick" : nick, "ident": ident, "token": token
+            , "game": joinToGame });
+} else { // else go fetch token
+  window.location.replace("@{AuthTokenR}" + window.location.search.replace("", ""));
+}

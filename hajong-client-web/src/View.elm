@@ -60,7 +60,7 @@ newState = { status     = InLounge
            , resources = defaultResources
 
            , updated    = 0
-           , dimensions = (0, 0)
+           , dimensions = (500, 500) -- Needs to be refreshed
 
            , logging    = []
            }
@@ -96,7 +96,7 @@ type Input = AnEvent Event
            | ReceivedProfilePictures ProfilePictures 
 
 minDimensions : (Int, Int) -> (Int, Int)
-minDimensions (x, y) = (max x 360, max y 360)
+minDimensions (x, y) = (max x 260, max y 260)
 
 stepGame : Input -> GameState -> GameState
 stepGame x gs = case x of

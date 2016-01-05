@@ -11,14 +11,13 @@
 module Handler.Play where
 
 import           Import
+import Text.Hamlet          (hamletFile)
 import qualified GameServer   as G
 import qualified Hajong.Connections as G
 import qualified Mahjong      as G
 
-import           Data.Time (getCurrentTime)
 import qualified Data.Text    as T
 import qualified Data.UUID    as UUID
-import qualified Data.UUID.V4 as UUID
 
 -- | Attempt to join the game
 getPlayR :: Int -> Handler Html
@@ -31,14 +30,25 @@ getLobbyR = playLayout Nothing
 -- | Maybe game to join to.
 playLayout :: Maybe Int -> Handler Html
 playLayout mgid = do
-    mauth <- maybeAuthId
+    muserName <- maybeAuthId
+    fullscreen <- isJust <$> lookupGetParam "fullscreen"
     websocketURI <- hajongWs . appHajong . appSettings <$> getYesod
-    defaultLayout $ do
+    (if fullscreen then fullscreenLayout else defaultLayout) $ do
         setTitle "Playing"
         addScript $ StaticR js_howler_min_js
         addScript $ StaticR js_elm_js
         $(widgetFile "play")
 {-# INLINE playLayout #-}
+
+fullscreenLayout :: Widget -> Handler Html
+fullscreenLayout widget = do
+    pc <- widgetToPageContent $ do
+        addStylesheet $ StaticR css_normalize_css
+        addStylesheet $ StaticR css_main_css
+        addScript $ StaticR js_jquery_1_11_1_min_js
+        addScript $ StaticR js_modernizr_2_6_2_respond_1_1_0_min_js
+        widget
+    withUrlRenderer $(hamletFile "templates/fullscreen-layout.hamlet")
 
 -- * Create games
 

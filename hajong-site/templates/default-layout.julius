@@ -1,4 +1,0 @@
-nick = #{maybe Null String muser};
-
-if (nick === null) localStorage.removeItem("token");
-

@@ -78,10 +78,9 @@ input = mergeMany
    , GameInput                                `map` Game.userInput
    , LoungeInput                              `map` Lounge.userInput
    , MsgDialogInput                           `map` MsgDialog.userInput
-   , minDimensions >> Dimensions              `map` Window.dimensions
    , TimeDelta                                `map` Time.every Time.second
    , Dict.fromList >> ReceivedProfilePictures `map` profilePicturesInput
-   ] -- TODO too much racing in here; should move all but game/lounge/msg sum to a record
+   ]
 -- }}}
 
 -- {{{ Sounds -------------------------------------------------
@@ -111,5 +110,6 @@ soundFromTurnAction ta = case ta of
 -- main -------------------------------------------------------
 gameState : Signal GameState
 gameState = foldp stepGame newState input
+   |> Signal.map2 (\d st -> { st | dimensions = d }) Window.dimensions
 
 main = map display gameState

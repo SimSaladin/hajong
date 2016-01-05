@@ -23,7 +23,7 @@ import Html
 import Debug
 
 -- Dimensions
-t_w = 31 -- tile width
+t_w = 31 -- tile width, in source image
 t_h = 47 -- tile height
 offSpacer = 5
 
@@ -34,8 +34,6 @@ wallOffCenter = 3 * t_w + 3 * t_h + 2 * offSpacer
 handOffCenter = 3 * t_w + 4 * t_h + 3 * offSpacer
 playAreaWidth = 2 * handOffCenter + 2 * t_h
 playAreaHeight = playAreaWidth
-
--- TODO: hard-coded tile widths; some other measures are also hard-coded
 
 -- {{{ State, input and events ---------------------------------------
 
@@ -204,45 +202,68 @@ shoutChooseTile = mailbox Nothing
 -- {{{ Display: main -------------------------------------------------
 
 display : State a -> Element
-display st = let propY = Debug.watch "propY" <| toFloat (snd st.dimensions) / toFloat playAreaHeight
+display st = let propY = toFloat (fst st.dimensions) / playAreaHeight
+                 propX = toFloat (snd st.dimensions) / playAreaWidth
+                 factor = min 1 <| min propY propX
+                 x     = Debug.watch "Dimensions" <| st.dimensions
              in
    container (fst st.dimensions) (snd st.dimensions) middle
    <| color gray
-   <| collage (snd st.dimensions) (snd st.dimensions)
-   <| (\x -> [x])
-   <| scale propY
-   <| group
 
-    [ dispInfoBlock st
+   <| collage (fst st.dimensions) (snd st.dimensions)
+   [ scale factor <| group
+       [ dispInfoBlock st
+       , dispDiscards st
+       , dispOthersHands st
+       , dispPlayerInfos st
 
-    , dispDiscards st
+       , group <| map (fst >> \k -> moveRotateKaze (riichiBetsOffCenter, 0) st.rs.mypos k (playerRiichi st))
+               <| List.filter (snd >> .riichiState >> \x -> x /= NoRiichi) st.rs.hands
 
-    , dispOthersHands st
+       , maybe (toForm empty) (dispResults st) st.rs.results
+       , maybe (toForm empty) (dispFinalPoints st) st.gameFinalPoints
 
-    , dispPlayerInfos st
-
-    , group <| map (fst >> \k -> moveRotateKaze (riichiBetsOffCenter, 0) st.rs.mypos k (playerRiichi st))
-            <| List.filter (snd >> .riichiState >> \x -> x /= NoRiichi) st.rs.hands
-
-    , maybe (toForm empty) (dispResults st) st.rs.results
-    , maybe (toForm empty) (dispFinalPoints st) st.gameFinalPoints
-
-    -- action buttons
-    , moveY (-handOffCenter + t_h) <| toForm <| container playAreaWidth 40 midTop <| flow right
-       <| (
-          maybe [] (snd >> displayShoutButtons st) (st.waitShout)
-           ++ shouminkanButtons st.rs "Shouminkan"
-           ++ [ ankanButton st.rs "Ankan"
-              , nocareButton st.waitShout "Pass" ]
-           ++ riichiButtons st.rs st.riichiWith
-           ++ [ tsumoButton st.rs.myhand.canTsumo ]
-           )
-
-    -- my hand
-    , moveY (-handOffCenter) <| toForm <| dispHand st.rs.mypos st st.rs.myhand
+       -- action buttons
+       , moveY (-handOffCenter + t_h) <| toForm <| container playAreaWidth 40 midTop <| flow right
+          <| (
+             maybe [] (snd >> displayShoutButtons st) (st.waitShout)
+              ++ shouminkanButtons st.rs "Shouminkan"
+              ++ [ ankanButton st.rs "Ankan"
+                 , nocareButton st.waitShout "Pass" ]
+              ++ riichiButtons st.rs st.riichiWith
+              ++ [ tsumoButton st.rs.myhand.canTsumo ]
+              )
+       ]
+    , dispHand st.rs.mypos st st.rs.myhand
+         |> fitToViewX st.dimensions
+         |> moveY (-handOffCenter * factor)
     ]
 
+fitToViewX : (Int, Int) -> Element -> Form
+fitToViewX (w,_) e = scale (min 1 <| toFloat w / toFloat (widthOf e)) <| toForm e
+
+dispPlayerInfos : State a -> Form
+dispPlayerInfos st = [Ton, Nan, Shaa, Pei]
+   |> List.concatMap (\k ->
+      [ dispPlayerInfo st k |> moveRotateKaze (handOffCenter-t_h,-playAreaWidth / 4) st.rs.mypos k
+      , kazeImage st k |> toForm |> scale 0.7 |> moveRotateKaze (2.5 * t_w, 0) st.rs.mypos k ]
+   )
+   |> group
+
+dispPlayerInfo : State a -> Kaze -> Form
+dispPlayerInfo st k =
+   let (p, points, name) = Util.listFind k st.rs.players
+       playerName        = if name == "" then T.fromString "(bot)" else T.fromString name |> T.bold
+   in
+      Html.toElement 30 30 (Lounge.smallPlayerInfo st name)
+         `beside` spacer 5 5
+         `beside` (centered playerName `above` show points)
+         |> container infoBlockWidth 50 topLeft
+         |> toForm
+
 -- }}}
+
+-- {{{ DIsplay: FinalPoints screen ----------------------------------
 
 dispFinalPoints : State a -> FinalPoints -> Form
 dispFinalPoints st res =
@@ -255,7 +276,9 @@ dispFinalPoints st res =
       |> color green
       |> toForm
 
--- {{{ Display: per-player -------------------------------------------
+-- }}}
+
+-- {{{ Display: Public Hand Info -------------------------------------
 
 dispOthersHands : State a -> Form
 dispOthersHands st = [Ton, Nan, Shaa, Pei]
@@ -283,6 +306,7 @@ dispDiscards st = group <| map
 -- }}}
 
 -- {{{ Display: info block in the center -----------------------------
+
 dispInfoBlock : State a -> Form
 dispInfoBlock st =
    toForm
@@ -296,14 +320,6 @@ dispInfoBlock st =
       , riichiInTableIndicator st.rs.inTable
       , moveY (-t_h) <| toForm <| centered <| T.fromString <| toString st.rs.tilesleft
       ]
-
-dispPlayerInfos : State a -> Form
-dispPlayerInfos st = [Ton, Nan, Shaa, Pei]
-   |> List.concatMap (\k ->
-      [ dispPlayerInfo st k |> moveRotateKaze (handOffCenter-t_h,-playAreaWidth / 4) st.rs.mypos k
-      , kazeImage st k |> toForm |> scale 0.7 |> moveRotateKaze (2.5 * t_w, 0) st.rs.mypos k ]
-   )
-   |> group
 
 dealAndRoundIndicator st = toForm <| kazeImage st (st.rs.round.kaze) `beside` centered (T.fromString (toString <| st.rs.round.round_rot))
 
@@ -324,20 +340,6 @@ honbaIndicator h = if h > 0 then move (-60,-60) <| toForm <| centered <| T.fromS
 
 riichiInTableIndicator n = if n > 0 then move (-30, -60) <| toForm <| centered <| T.color red <| T.fromString <| toString (n / 1000) ++ "R"
                                     else toForm empty
-
-dispPlayerInfo : State a -> Kaze -> Form
-dispPlayerInfo st k =
-   let (p, points, name) = Util.listFind k st.rs.players
-       playerName        = if name == "" then T.fromString "(bot)" else T.fromString name |> T.bold
-   in
-      collage infoBlockWidth 30
-         [ Html.toElement 30 30 (Lounge.smallPlayerInfo st name)
-             |> toForm |> moveX (-infoBlockWidth / 3)
-
-         , centered playerName |> toForm |> moveX (-30)
-
-         , show points |> toForm |> moveX 60 ]
-         |> toForm
 -- }}}
 
 -- {{{ Display: Utility ----------------------------------------------
