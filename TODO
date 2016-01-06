@@ -1,7 +1,10 @@
 x = done, / = half done, ! = needs testing
 
-[ ] favicon
-[x] Set up logging to file in hajong-server
+[ ] riichi is deducted from payer on ron
+[ ] on tsumo, agari is not displayed at all
+[ ] uradorat ei toimi? näytä ura-indikaattorit pelin lopussa
+[ ] add clickables via elm-html
+[ ] add favicon
 [ ] display uradora on win
 [ ] reloading when kyoku has ended goes to lobby; should send the roundstate then too
 [ ] https
@@ -11,9 +14,9 @@ x = done, / = half done, ! = needs testing
 [!] huudettu tiili näkyy väärällä puolella mentsussa, aina?
 [!] monta doraa ei näy
 [!] aka ei aina poistu kädestä huudon yhteydessä?
-[!] uradorat ei toimi
-[!] riichi-nappula liian iso
 [!] discard hovered/shout-indicator info after that's not relevant; bugs at leat mobile devices
+[x] riichi-nappula liian iso
+[x] Set up logging to file in hajong-server
 
 [x] [Error] Game 128 errored! unsafeRoundM: unexpected Left: Hand state was DrawNone, but expected DrawFromWanpai @(hajon_58UM7JvDhFX6fY2cDWnlc6:Hajong.Server src/Hajong/Server.hs:238:21)
 [x] homepage: move aside up in mobile view
