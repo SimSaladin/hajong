@@ -1,23 +1,24 @@
 x = done, / = half done, ! = needs testing
 
-[ ] riichi is deducted from payer on ron
-[ ] on tsumo, agari is not displayed at all
-[ ] uradorat ei toimi? näytä ura-indikaattorit pelin lopussa
-[ ] add clickables via elm-html
-[ ] add favicon
-[ ] display uradora on win
-[ ] reloading when kyoku has ended goes to lobby; should send the roundstate then too
-[ ] https
-[ ] restyle kyoku results and final points views
-[ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
-[ ] after a game has ended, make it possible to go back to lobby.
-[!] huudettu tiili näkyy väärällä puolella mentsussa, aina?
-[!] monta doraa ei näy
-[!] aka ei aina poistu kädestä huudon yhteydessä?
-[!] discard hovered/shout-indicator info after that's not relevant; bugs at leat mobile devices
+## open tasks
+[ ] [game] riichi is deducted from payer on ron
+[ ] [elm/game] display uradora on win. They're in roundstate .flags when someone has won (or at least, should be)
+[ ] [elm/game] uradorat ei toimi? näytä ura-indikaattorit pelin lopussa
+[ ] [elm/game] new dora are not updated from server? at least, not displayed in elm without a refresh. see the flipped-dora event.
+[ ] [elm] on tsumo, agari is not displayed at all. it is in hand-picks and those are not displayed atm
+[ ] [elm] add clickables via elm-html. That is, tiles in hand and shouts. The Graphics.Input.clickable has major problems with at least android tablets
+[ ] [elm] restyle kyoku results and final points views. they're crappy at best.  Perhaps should fit into the info block in the center? and the winning hand(s) could be displayed as the hand of the winning player(s).
+[!] [elm] should discard the hovered/shout-indicator hovers after they're no longer relevant (bugs at leat mobile devices). Would discarding them after turn changes be enough?
+[ ] [elm] after a game has ended (final points shown), make it possible to go back to lobby.
+[ ] [gameserver] reloading when kyoku has ended and is in waiting state, goes to lobby; then should send the roundstate immediately instead of waiting for the threadDelay finish.
+[ ] [site/gameserver] https
+[ ] [site] add favicon
+[ ] [other] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
+
 [x] riichi-nappula liian iso
 [x] Set up logging to file in hajong-server
-
+[x] huudettu tiili näkyy väärällä puolella mentsussa, aina?
+[x] aka ei aina poistu kädestä huudon yhteydessä?
 [x] [Error] Game 128 errored! unsafeRoundM: unexpected Left: Hand state was DrawNone, but expected DrawFromWanpai @(hajon_58UM7JvDhFX6fY2cDWnlc6:Hajong.Server src/Hajong/Server.hs:238:21)
 [x] homepage: move aside up in mobile view
 [x] when third player joins he may get the place of second player; possibly second player had left and reconnected only after third player joined
