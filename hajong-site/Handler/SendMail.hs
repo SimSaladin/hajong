@@ -1,4 +1,4 @@
-{-# GHCOPT -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE CPP #-}
 ------------------------------------------------------------------------------
 -- | 

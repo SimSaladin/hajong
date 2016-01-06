@@ -7,19 +7,49 @@
 -- Maintainer     : Samuli Thomasson <samuli.thomasson@paivola.fi>
 -- Stability      : experimental
 -- Portability    : non-portable
--- File Created   : 2016-01-03T20:30:37+0200
+--
+-- Internal module, see "Hajong.Database" for usage.
 ------------------------------------------------------------------------------
 module Hajong.Database.Queries where
 
 import           Hajong.Database.Types
+import           Hajong.Connections (Nick)
 ------------------------------------------------------------------------------
 import           Mahjong
 ------------------------------------------------------------------------------
 import           Data.Acid
+import           Data.SafeCopy
 import           Data.ReusableIdentifiers
 import           Data.UUID                  (UUID)
 import           Data.Time.Clock (secondsToDiffTime)
 ------------------------------------------------------------------------------
+
+-- | This is the root ACID type.
+--
+-- Players are identified with unique Ints. When joining the server, they
+-- may opt for a new *anonymous* identifier or provide their previous
+-- identifier and a passphrase.
+data ServerDB = ServerDB
+    { _sePlayerRecord  :: Record
+    -- ^ Record of used and free integral player (client) identifiers. The
+    -- pool is bounded in size, see @Record@.
+    , _seReserved      :: IntMap ClientRecord
+    -- ^ Player identifiers mapped to @ClientRecord@s. If an identifier is
+    -- reserved in _sePlayerRecord, then it must also have a record in this
+    -- map.
+    , _seNicks         :: Map Nick Int
+    -- ^ This is related to anonymous clients which are not working at the
+    -- moment. Usernames and visible names are managed on the webapp side.
+    , _seGameRecord    :: Record
+    -- ^ Integral game identifiers.
+    , _seGames         :: IntMap Game
+    -- ^ Games that are running at the moment, analogous to @_seReserved@. 
+    , _seHistory       :: Map UUID PastGame
+    -- ^ History of games that have finished.
+    } deriving (Show, Typeable)
+
+deriveSafeCopy 0 'base ''ServerDB
+makeLenses ''ServerDB
 
 -- * Clients
 
@@ -99,6 +129,8 @@ getGames = view seGames
 getGame :: Int -> Query ServerDB (Maybe Game)
 getGame i = view (seGames.at i)
 
+-- ** Updates
+
 insertGame :: Game -> Update ServerDB (Either Text Int)
 insertGame game = do
     rec <- use seGameRecord
@@ -126,7 +158,12 @@ setPlayerGame :: Int -- ^ Game ID
               -> Update ServerDB ()
 setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
 
--- * Updates
+-- * Worker logs
+
+getWorkerResultLog :: Query ServerDB (Map UUID PastGame)
+getWorkerResultLog = view seHistory
+
+-- ** Updates
 
 logWorkerResult :: PastGame -> Update ServerDB ()
 logWorkerResult pg = seHistory.at (_gameUUID $ _pgGameState pg) .= Just pg
@@ -134,11 +171,15 @@ logWorkerResult pg = seHistory.at (_gameUUID $ _pgGameState pg) .= Just pg
 flushWorkerLog :: Update ServerDB ()
 flushWorkerLog = seHistory .= mempty
 
-getWorkerResultLog :: Query ServerDB (Map UUID PastGame)
-getWorkerResultLog = view seHistory
-
-
 -- * Debug
 
 dumpDB :: Query ServerDB ServerDB
 dumpDB = ask
+
+---------------------------------------------------------------------
+
+$(makeAcidic ''ServerDB
+    [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB, 'connectClient,
+    'partClient, 'registerAnonymousPlayer, 'registerLoggedInPlayer,
+    'setPlayerGame, 'insertGame, 'setGame, 'destroyGame, 'logWorkerResult,
+    'getWorkerResultLog, 'flushWorkerLog ])

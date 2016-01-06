@@ -1,5 +1,5 @@
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-} -- XXX: get rid of this
 
 ------------------------------------------------------------------------------
 -- | 
@@ -10,46 +10,17 @@
 -- Stability      : experimental
 -- Portability    : non-portable
 -- File Created   : 2016-01-03T20:21:10+0200
+--
+-- The root type, @ServerDB@ is defined at "Hajong.Database".
 ------------------------------------------------------------------------------
 module Hajong.Database.Types where
 
 ------------------------------------------------------------------------------
-import           Hajong.Connections
 import           Mahjong
 ------------------------------------------------------------------------------
 import           Data.SafeCopy
-import           Data.ReusableIdentifiers
-import           Data.UUID                  (UUID)
-import qualified Data.UUID                  as UUID
+import qualified Data.UUID as UUID
 ------------------------------------------------------------------------------
-
--- | This is the root ACID type.
---
--- Players are identified with unique Ints. When joining the server, they
--- may opt for a new *anonymous* identifier or provide their previous
--- identifier and a passphrase.
-data ServerDB = ServerDB
-    { _sePlayerRecord  :: Record
-    -- ^ Record of used and free integral player (client) identifiers. The
-    -- pool is bounded in size, see @Record@.
-    , _seReserved      :: IntMap ClientRecord
-    -- ^ Player identifiers mapped to @ClientRecord@s. If an identifier is
-    -- reserved in _sePlayerRecord, then it must also have a record in this
-    -- map.
-    , _seNicks         :: Map Nick Int
-    -- ^ This is related to anonymous clients which are not working at the
-    -- moment. Usernames and visible names are managed on the webapp side.
-    , _seGameRecord    :: Record
-    -- ^ Integral game identifiers.
-    , _seGames         :: IntMap Game
-    -- ^ Games that are running at the moment, analogous to @_seReserved@. 
-    , _seHistory       :: Map UUID PastGame
-    -- ^ History of games that have finished.
-    } deriving (Show, Typeable)
-
--- | Initialize an empty database. Allows 1024 active clients and 256 running games.
-emptyDB :: ServerDB
-emptyDB = ServerDB (newRecord 1024) mempty mempty (newRecord 256) mempty mempty
 
 -- | A record of a client connected or previously connected.
 data ClientRecord = ClientRecord
@@ -80,7 +51,6 @@ data PastGame = PastGame
     , _pgLastMachine   :: Machine
     } deriving (Show, Typeable)
 
-$(deriveSafeCopy 0 'base ''ServerDB)
 $(deriveSafeCopy 0 'base ''ClientRecord)
 $(deriveSafeCopy 0 'base ''FinalPoints)
 $(deriveSafeCopy 0 'base ''PastGame)
@@ -151,5 +121,4 @@ instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
 -- * Lenses
 
 --
-makeLenses ''ServerDB
 makeLenses ''ClientRecord

@@ -21,8 +21,8 @@ module Mahjong.Hand
     , module Mahjong.Hand.Yaku
 
     -- * Types and lenses
-    , Hand(..), HandA, HandP, Discard(..), RiichiState(..), DrawState(..),
-    , PickedTile(..), FuritenState(..), HandFlag(..),
+    , Hand(..), HandA, HandP, Discard(..), RiichiState(..), DrawState(..)
+    , PickedTile(..), FuritenState(..), HandFlag(..)
 
     -- ** lenses
     , handCalled   
@@ -243,17 +243,17 @@ shoutsOn np t p hand
     canChi            = succCirc np == p
     ih                = sort (runIdentity $ _handConcealed hand) -- NOTE: sort
     akaIh             = filter isAka ih
-    toShout (mk, xs)  = do
+    toShout (mk, st)  = do
 
         -- Tiles to shout with must be in our hand. *Uses semantic Eq*
-        guard $ xs `isSubListOf` ih
+        guard $ st `isSubListOf` ih
 
         -- Set aka information to the shoutTo tiles, for as many as
         -- possible.
-        let goAka akas (t:ts) | t `elem` akas = setAka t : goAka (L.delete t akas) ts
-                              | otherwise     =        t : goAka             akas  ts
+        let goAka akas (x:xs) | x `elem` akas = setAka t : goAka (L.delete t akas) xs
+                              | otherwise     =        t : goAka             akas  xs
             goAka _        []                 = []
-            tiles = goAka akaIh xs
+            tiles = goAka akaIh st
 
         s <- case mk of
                 Jantou  -> [Ron]

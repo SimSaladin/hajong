@@ -1,6 +1,5 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiWayIf #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 ------------------------------------------------------------------------------
 -- |
 -- Module         : Hajong.Server
@@ -17,6 +16,8 @@ module Hajong.Server where
 
 ------------------------------------------------------------------------------
 import           Mahjong
+import           Hajong.Server.Config
+import           Hajong.Server.Internal
 import           Hajong.Database
 import           Hajong.Connections
 import           Hajong.Client
@@ -25,80 +26,63 @@ import           Hajong.Worker
 import           Prelude (read)
 import           Control.Monad.Logger
 import           Control.Monad.Trans.Control        (MonadBaseControl(..))
-import           Control.Monad.Base                 (MonadBase)
 import           Control.Concurrent
-import           Data.Acid
+import           Data.Acid                          (AcidState, openLocalState)
 import           Data.Acid.Remote
-import           Data.SafeCopy
-import           Data.Set                   (mapMonotonic)
-import qualified Network.WebSockets         as WS
-import           Data.UUID                  (UUID)
-import qualified Data.UUID                  as UUID
-import           Data.Time.Clock (secondsToDiffTime)
+import           Data.Set                           (mapMonotonic)
+import qualified Network.WebSockets              as WS
+import qualified Data.UUID                       as UUID
 import           Network
-import           System.Log.FastLogger (LoggerSet, pushLogStr)
-import           System.Directory (removeFile)
+import           System.Log.FastLogger
+import           System.Directory (removeFile, doesDirectoryExist, createDirectory)
 import           System.Random
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 ------------------------------------------------------------------------------
 
--- | Server logic monad.
-newtype Server a = Server { unServer :: ReaderT ServerSt IO a }
-    deriving ( Functor, Applicative, Monad, MonadIO, MonadReader ServerSt, MonadBase IO )
+-- | Open and read the config at config/settings.yml or $1
+serverMain :: IO ()
+serverMain = do
+    args <- getArgs
+    let configFile | [x] <- args = unpack x
+                   | otherwise   = "config/settings.yml"
 
--- * State
+    conf@ServerConfig{..} <- readConfigFile configFile (Just "hajong")
 
--- | Server logic Reader value.
-data ServerSt = ServerSt
-    { _db              :: AcidState ServerDB
-    , _seCtrlSecret    :: Text                      -- ^ Secret key required to authenticate a client for server control.
-    , _seWsPort        :: Int                       -- ^ Which port we are listening on.
-    , _seConnections   :: TVar (IntMap Client)      -- ^ Everyone connected
-    , _seLounge        :: TVar (Set Client)         -- ^ Lounge
-    , _seWatcher       :: TChan (Int, WorkerResult) -- ^ Worker watcher, **broadcast chan**.
-    , _seLoggerSet     :: LoggerSet                 -- ^ Fed to new workers
-    , _seClient        :: Client                    -- ^ When serving a single client
-    , _seWorkers       :: TVar (IntMap RunningGame) -- ^ Running workers
-    } deriving (Typeable)
+    unlessM (doesDirectoryExist _logDirectory) (createDirectory _logDirectory)
+    lgr                   <- newFileLoggerSet defaultBufSize $ _logDirectory </> "server.log"
+    st                    <- makeServerSt conf lgr
 
--- | Game worker thread.
-data RunningGame = RunningGame
-    { _gWorker         :: WorkerData
-    , _gThread         :: ThreadId
-    , _gClients        :: IntMap Client
-    } deriving (Typeable)
-
--- | Disconnecting websocket client.
-data PartedException = PartedException Text deriving (Show, Typeable)
-instance Exception PartedException
-
--- * Lenses
-
---
-makeLenses ''RunningGame
-makeLenses ''ServerSt
-
--- Instances
-
-instance MonadBaseControl IO Server where
-    type StM Server a = a
-    liftBaseWith f    = Server $ liftBaseWith $ \q -> f (q . unServer)
-    restoreM          = Server . restoreM
-
-instance MonadLogger Server where
-    monadLoggerLog loc src lvl msg = do
-        lgr <- view seLoggerSet
-        let out = defaultLogStr loc src lvl (toLogStr msg)
-        liftIO $ pushLogStr lgr out
-
--- * Entry points
-
--- | Invoke the 'workerWatcher' and the websocket 'app'.
-runServerMain :: ServerSt -> IO ()
-runServerMain st = do
     runServer st restartGames
     void . forkIO $ runServer st workerWatcher
-    WS.runServer "0.0.0.0" (_seWsPort st) $ wsApp st
+    void . forkIO $ WS.runServer _websocketHost _websocketPort (wsApp st)
+
+    finalizer <- forkServerAcidRemote st (UnixSocket _databaseSocket)
+    -- XXX: We open the debugger here on no conditions
+    runServer st serverDebugger `finally` finalizer
+
+makeServerSt :: ServerConfig -> LoggerSet -> IO ServerSt
+makeServerSt conf lgr = do
+    ServerSt
+        <$> openLocalState emptyDB
+        <*> pure conf
+        <*> newTVarIO mempty -- no-one is connected
+        <*> newTVarIO mempty -- in lounge either
+        <*> newBroadcastTChanIO
+        <*> pure lgr
+        <*> pure (error "No client")
+        <*> newTVarIO mempty
+
+restartGames :: Server ()
+restartGames = do
+    ss <- ask
+    void $ query GetGames >>= imapM startGame >>= atomically . swapTVar (ss^.seWorkers)
+
+startGame :: GID -> Game -> Server RunningGame
+startGame gid game = do
+    $logInfo $ "Starting game worker (" <> tshow gid <> ")"
+    makeWorkerData game >>= forkWorker gid
+
+-- * ACID Database
 
 -- | Returns the finalizer
 forkServerAcidRemote :: ServerSt -> PortID -> IO (IO ())
@@ -113,66 +97,43 @@ forkServerAcidRemote st port = do
 openServerDB :: PortID -> IO (AcidState ServerDB)
 openServerDB = openRemoteState skipAuthenticationPerform "127.0.0.1"
 
--- * Initialize state
+-- * Workers
 
-initServer :: Int       -- ^ Port to listen on
-           -> Text      -- ^ Control client secret key
-           -> LoggerSet -- ^ Logger to use
-           -> IO ServerSt
-initServer port secret lgr = do
-    sdb <- openLocalState emptyDB
-    chan <- newBroadcastTChanIO
-    ServerSt sdb secret port
-        <$> newTVarIO mempty -- no-one is connected
-        <*> newTVarIO mempty -- in lounge either
-        <*> pure chan
-        <*> pure lgr
-        <*> pure (error "No client")
-        <*> newTVarIO mempty
+-- | Game identifier
+type GID = Int
 
--- * Run Servers
+-- | User identifier
+type UID = Int
 
-runServer :: ServerSt -> Server a -> IO a
-runServer st ma = runReaderT (unServer ma) st
-
-runClient :: Client -> ServerSt -> Server a -> IO a
-runClient client st = runServer (st&seClient.~client)
-
-withClient :: Client -> Server a -> Server a
-withClient c = local (seClient.~c)
-
--- * Games and workers
-
-restartGames :: Server ()
-restartGames = do
-    ss <- ask
-    void $ query' GetGames >>= imapM startGame >>= atomically . swapTVar (ss^.seWorkers)
-
-startGame :: Int -> Game -> Server RunningGame
-startGame gid game = do
-    $logInfo $ "Starting game worker (" <> tshow gid <> ")"
-    createWorker game >>= forkWorker gid
-
-createWorker :: Game -> Server WorkerData
-createWorker game = WorkerData
+makeWorkerData :: Game -> Server WorkerData
+makeWorkerData game = WorkerData
     <$> (liftIO . newTVarIO =<< attachClients game)
     <*> (liftIO $ newTVarIO $ NotBegun 5)
     <*> liftIO newEmptyTMVarIO
-    <*> view seLoggerSet
+    <*> getWorkerLoggerSet game
 
-attachClients :: GameState Int -> Server (GameState Client)
-attachClients gs = do
-    cs <- rview seConnections
-    return $ gs <&> \i -> fromMaybe (dummyClient "") (lookup i cs)
+getWorkerLoggerSet :: Game -> Server LoggerSet
+getWorkerLoggerSet game = do
+    logdir <- view $ serverConf.logDirectory.to unpack
+    liftIO $ newFileLoggerSet defaultBufSize $ logdir </> "worker-" <> UUID.toString (_gameUUID game) <> ".log"
 
-forkWorker :: Int -> WorkerData -> Server RunningGame
+forkWorker :: GID -> WorkerData -> Server RunningGame
 forkWorker gid wd = do
     chan     <- view seWatcher
     let die   = atomically . writeTChan chan . (gid,)
     threadId <- liftIO $ startWorker die wd
     return $ RunningGame wd threadId mempty
 
--- * Websocket app
+attachClients :: GameState UID -> Server (GameState Client)
+attachClients gs = do
+    cs <- rview seConnections
+    return $ gs <&> \i -> fromMaybe (dummyClient "") (lookup i cs)
+
+-- * Websocket
+
+-- | Disconnecting websocket client.
+data PartedException = PartedException Text deriving (Show, Typeable)
+instance Exception PartedException
 
 -- | On every new request, parse the first 'Event' and check whether it is
 -- a 'JoinServer' event and the nick isn't taken. Invoke 'clientListener'
@@ -201,7 +162,7 @@ handshake token mgame = do
 
     $logInfo $ "New client " <> tshow (getIdent c) <> " (" <> getNick c <> ")"
 
-    res <- update' $ ConnectClient time (getIdent c) token
+    res <- update $ ConnectClient time (getIdent c) token
     case res of
         Left err -> uniError $ "Handshake failed: " <> err
         Right (i, cr)
@@ -222,6 +183,21 @@ afterHandshake cr = do
             x                   -> throwIO (PartedException (tshow x))
         ) `catch` (go . disconnects)
 
+-- ** Internal connect
+
+-- | The WS listener of an internal connection.
+internalConnect :: Text -> Server ()
+internalConnect secret = do
+    -- XXX: This could use handshaking before the websocket connection is
+    -- accepted
+    required <- view $ serverConf.websocketCtrlSecret
+    if required /= secret
+        then uni ("Error: wrong secret key" :: Text)
+        else do c <- view seClient
+                uni ("success" :: Text)
+                forever $ receive c >>= \case
+                    InternalNewGame settings -> createGame settings
+
 -- * Worker Watcher
 
 workerWatcher :: Server ()
@@ -238,7 +214,7 @@ workerDied gid res = do
         Left err -> $logError $ "Game " ++ tshow gid ++ " errored! " ++ tshow err
         Right x  -> $logInfo  $ "Game " ++ tshow gid ++ " finished. " ++ tshow x
 
-    removedClients <- update' $ DestroyGame gid -- TODO acid EventResult: should it be checked?
+    removedClients <- update $ DestroyGame gid -- TODO acid EventResult: should it be checked?
     $logInfo $ "Players " ++ tshow removedClients ++ " free'd"
 
     -- atomic
@@ -261,57 +237,9 @@ workerDied gid res = do
     forM_ clients $ \c -> safeUnicast c (PartGame (getNick c))
 
     -- Log the game
-    update' $ LogWorkerResult pg
+    update $ LogWorkerResult pg
 
 ------------------------------------------------------------------------------
-
--- * Utility
-
-putWorker :: RunningGame -> WorkerInput -> Server ()
-putWorker rg = atomically . putTMVar (rg^.gWorker.wInput)
-
-putLounge :: Event -> Server ()
-putLounge ev = rview seLounge >>= mapM_ (`safeUnicast` ev)
-
-uni :: (Show e, WS.WebSocketsData e) => e -> Server ()
-uni ev = view seClient >>= (`safeUnicast` ev)
-
-uniError :: Text -> Server ()
-uniError txt = view seClient >>= (`unicastError` txt)
-
--- Writing typesigs for these helpers would require types from the
--- acid-state package that are not exposed in the API.
-update' ev = view db >>= \d -> liftIO (update d ev)
-query'  ev = view db >>= \d -> liftIO (query d ev)
-
-multicast :: (MonadLogger m, MonadBaseControl IO m, MonadIO m) => GameState Client -> Event -> m ()
-multicast gs event = mapM_ (`safeUnicast` event) (gs^.gamePlayers^..each)
-
--- | Send updated lounge to everyone there
-updateLounge :: Server ()
-updateLounge = do
-    lounge <- rview seLounge
-    games  <- query' GetGames
-    nicks  <- rview seWorkers <&> map (\x -> setFromList $ x^..gClients.folded.to getNick)
-
-    let gameInfos  = intersectionWithMap (\g ns -> (g^.gameSettings, ns, g^.gameUUID.to UUID.toText)) games nicks
-        loungeInfo = LoungeInfo $ Lounge (mapMonotonic getNick lounge) gameInfos
-
-    forM_ lounge (`safeUnicast` loungeInfo)
-
-withInGame :: (Int -> Server ()) -> Server ()
-withInGame f = do
-    c        <- view seClient
-    Just res <- query' $ GetClientRecord (getIdent c)
-    maybe (uniError "You are not in a game") f (res^.cInGame)
-
-withRunningGame :: Int -> (RunningGame -> Server ()) -> Server ()
-withRunningGame gid f = do
-    res <- rview seWorkers <&> view (at gid)
-    maybe (uniError $ "Game " <> tshow gid <> " not found!") f res
-
-randomToken :: IO Text
-randomToken = liftM pack $ replicateM 16 $ randomRIO ('A', 'Z')
 
 -- * Clients
 
@@ -347,7 +275,7 @@ disconnects (PartedException reason) = do
     cleanupClient reason
 
     ss <- ask
-    Just cr <- query' $ GetClientRecord i
+    Just cr <- query $ GetClientRecord i
     atomically $ do
         modifyTVar' (ss^.seConnections) (at i .~ Nothing)
         modifyTVar' (ss^.seLounge) (deleteSet c)
@@ -366,7 +294,7 @@ cleanupClient :: Text -> Server ()
 cleanupClient reason = do
     c <- view seClient
     time <- liftIO getCurrentTime
-    _ <- update' $ PartClient time (c&getIdent) -- TODO EventResult: should this be checked?
+    _ <- update $ PartClient time (c&getIdent) -- TODO EventResult: should this be checked?
     putLounge $ Message "" (getNick c <> " has left the server [" <> reason <> "]")
 
 handleEventOf :: Client -> Event -> Server ()
@@ -376,7 +304,7 @@ handleEventOf c event = case event of
     JoinGame n _      -> joinGame n
     ForceStart n      -> forceStart n
     InGameAction a    -> handleGameAction a
-    Message _ msg     -> do mgid <- query' (GetClientRecord $ getIdent c) <&> (>>= _cInGame)
+    Message _ msg     -> do mgid <- query (GetClientRecord $ getIdent c) <&> (>>= _cInGame)
                             let m = Message (getNick c) msg
                             maybe (putLounge m) (flip withRunningGame $ mapM_ (flip safeUnicast m) . _gClients) mgid
     _                 -> uniError $ "Event not allowed or not implemented (" <> tshow event <> ")"
@@ -388,7 +316,7 @@ joinGame gid = do
     c  <- view seClient
     $logInfo $ "Nick " <> getNick c <> " joins game " <> tshow gid
 
-    Just cr <- query' $ GetClientRecord (getIdent c)
+    Just cr <- query $ GetClientRecord (getIdent c)
     case cr^.cInGame of
         Just gid' | gid' /= gid -> uniError "You are already in some other game. You cannot join multiple games simultaneously."
         _                       -> withRunningGame gid (handleJoinGame gid)
@@ -401,8 +329,8 @@ handleJoinGame gid rg = do
     putWorker rg $ WorkerAddPlayer c $ \gs -> do
         multicast gs (JoinGame gid nick)
         liftIO $ runServer ss $ do
-            update' $ SetPlayerGame gid (getIdent c)
-            update' $ SetGame gid (getIdent <$> gs)
+            update $ SetPlayerGame gid (getIdent c)
+            update $ SetGame gid (getIdent <$> gs)
             atomically $ do modifyTVar' (ss^.seLounge) (deleteSet c)
                             modifyTVar' (ss^.seWorkers) (ix gid.gClients.at (getIdent c) .~ Just c)
             putLounge (JoinGame gid nick)
@@ -421,7 +349,7 @@ createGame :: GameSettings -> Server ()
 createGame settings = do
     uuid <- liftIO randomIO
     let game = newEmptyGS 0 uuid settings
-    res <- update' (InsertGame game)
+    res <- update (InsertGame game)
     case res of
         Left err -> uni $ InternalError err
         Right g  -> do rg <- startGame g game
@@ -429,18 +357,48 @@ createGame settings = do
                        atomically $ modifyTVar ws (insertMap g rg)
                        uni $ InternalGameCreated g 
 
--- * Internal
+-- * Utility
 
--- | The WS listener of an internal connection.
-internalConnect :: Text -> Server ()
-internalConnect secret = do
-    real <- view seCtrlSecret
-    if real /= secret
-        then uni ("Error: wrong secret key" :: Text)
-        else do c <- view seClient
-                uni ("success" :: Text)
-                forever $ receive c >>= \case
-                    InternalNewGame settings -> createGame settings
+putWorker :: RunningGame -> WorkerInput -> Server ()
+putWorker rg = atomically . putTMVar (rg^.gWorker.wInput)
+
+putLounge :: Event -> Server ()
+putLounge ev = rview seLounge >>= mapM_ (`safeUnicast` ev)
+
+uni :: (Show e, WS.WebSocketsData e) => e -> Server ()
+uni ev = view seClient >>= (`safeUnicast` ev)
+
+uniError :: Text -> Server ()
+uniError txt = view seClient >>= (`unicastError` txt)
+
+multicast :: (MonadLogger m, MonadBaseControl IO m, MonadIO m) => GameState Client -> Event -> m ()
+multicast gs event = mapM_ (`safeUnicast` event) (gs^.gamePlayers^..each)
+
+-- | Send updated lounge to everyone there
+updateLounge :: Server ()
+updateLounge = do
+    lounge <- rview seLounge
+    games  <- query GetGames
+    nicks  <- rview seWorkers <&> map (\x -> setFromList $ x^..gClients.folded.to getNick)
+
+    let gameInfos  = intersectionWithMap (\g ns -> (g^.gameSettings, ns, g^.gameUUID.to UUID.toText)) games nicks
+        loungeInfo = LoungeInfo $ Lounge (mapMonotonic getNick lounge) gameInfos
+
+    forM_ lounge (`safeUnicast` loungeInfo)
+
+withInGame :: (Int -> Server ()) -> Server ()
+withInGame f = do
+    c        <- view seClient
+    Just res <- query $ GetClientRecord (getIdent c)
+    maybe (uniError "You are not in a game") f (res^.cInGame)
+
+withRunningGame :: Int -> (RunningGame -> Server ()) -> Server ()
+withRunningGame gid f = do
+    res <- rview seWorkers <&> view (at gid)
+    maybe (uniError $ "Game " <> tshow gid <> " not found!") f res
+
+randomToken :: IO Text
+randomToken = liftM pack $ replicateM 16 $ randomRIO ('A', 'Z')
 
 ------------------------------------------------------------------------------
 
@@ -458,7 +416,7 @@ serverDebugger = forever $ do
     inp <- getLine <&> asText
     case inp of
         ""  -> return ()
-        "d" -> print =<< query' DumpDB
+        "d" -> print =<< query DumpDB
         "c" -> do print' "connections: " =<< rview seConnections
                   print' "lounge:      " =<< rview seLounge
         "g" -> mapM_ debugGameShow . itoList =<< rview seWorkers

@@ -1,11 +1,12 @@
 x = done, / = half done, ! = needs testing
 
+[ ] favicon
+[x] Set up logging to file in hajong-server
 [ ] display uradora on win
 [ ] reloading when kyoku has ended goes to lobby; should send the roundstate then too
 [ ] https
 [ ] restyle kyoku results and final points views
 [ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
-[ ] Set up logging from workers to a file.
 [ ] after a game has ended, make it possible to go back to lobby.
 [!] huudettu tiili näkyy väärällä puolella mentsussa, aina?
 [!] monta doraa ei näy

@@ -12,14 +12,14 @@ support-to:
    - "someone@example.org"
 
 # hajong server settings
+# NOTE: these are read also by hajong which doesn't understand _env's
 hajong:
-   server_ws:     "_env:SERVER_WS:ws://localhost:8001"
-   ws_secret:     "_env:HAJONG_WS_SECRET:secret"
-   server_binary: "_env:SERVER_BINARY:hajong-server" # in path or absolute
-   server_socket: "_env:SERVER_SOCKET:/tmp/hajong.socket"
-   server_log:    "_env:SERVER_LOG:game-devel.log"
-   server_args:
-     - "--verbose"
+   websocket-addr: "0.0.0.0"
+   websocket-port: 8001
+   websocket-external-host: "localhost" # site only
+   ctrl-secret-ws: "secret"
+   db-socket-file: "gameserver.socket"
+   logs-directory: "game-logs"
 
 # Database
 postgres_database:

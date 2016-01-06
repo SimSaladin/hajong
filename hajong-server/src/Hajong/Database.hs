@@ -11,38 +11,22 @@
 ------------------------------------------------------------------------------
 module Hajong.Database
     ( 
-    emptyDB,
-    -- * Queries
-
-    -- ** Clients and players
-    getClientRecord, connectClient, partClient, registerAnonymousPlayer,
-    registerLoggedInPlayer, setPlayerGame,
-
-    -- ** Games
-    getGame, getGames, insertGame, destroyGame,
-
-    -- ** Workers
-    logWorkerResult, getWorkerResultLog, flushWorkerLog,
-
-    -- ** Other
-    dumpDB,
-
-    -- * The ACID constructors
     module Hajong.Database,
+
+    -- * Queries
+    module Hajong.Database.Queries,
 
     -- * Data types and lenses
     module Hajong.Database.Types
-
     ) where
 
+import           Import
 import           Hajong.Database.Types
 import           Hajong.Database.Queries
 ------------------------------------------------------------------------------
-import           Data.Acid
+import           Data.ReusableIdentifiers
 ------------------------------------------------------------------------------
 
-$(makeAcidic ''ServerDB
-    [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB, 'connectClient,
-    'partClient, 'registerAnonymousPlayer, 'registerLoggedInPlayer,
-    'setPlayerGame, 'insertGame, 'setGame, 'destroyGame, 'logWorkerResult,
-    'getWorkerResultLog, 'flushWorkerLog ])
+-- | Initialize an empty database. Allows 1024 active clients and 256 running games.
+emptyDB :: ServerDB
+emptyDB = ServerDB (newRecord 1024) mempty mempty (newRecord 256) mempty mempty

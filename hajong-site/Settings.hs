@@ -22,6 +22,8 @@ import Yesod.Default.Util          (WidgetFileSettings, widgetFileNoReload,
 import Handler.SendMail (SES)
 import qualified Facebook as FB
 
+import qualified Hajong.Server.Config as HC
+
 -- | Runtime settings to configure this application. These settings can be
 -- loaded from various sources: defaults, environment variables, config files,
 -- theoretically even a database.
@@ -64,16 +66,6 @@ data AppSettings = AppSettings
     -- ^ Where support request mails should be sent
     }
 
--- TODO This should be in Hajong.Configuration
-data HajongConf = HajongConf
-    { hajongWs     :: Text
-    , hajongBinary :: FilePath
-    , hajongSocket :: FilePath
-    , hajongArgs   :: [String]
-    , hajongLog    :: FilePath
-    , hajongCtrlSecret :: Text
-    }
-
 instance FromJSON AppSettings where
     parseJSON = withObject "AppSettings" $ \o -> do
         let defaultDev =
@@ -107,14 +99,21 @@ instance FromJSON AppSettings where
 
         return AppSettings {..}
 
+data HajongConf = HajongConf
+    { hajongWs         :: Text -- ^ WS connect string, built from websocket-external-host and -port
+    , hajongSocket     :: FilePath
+    , hajongCtrlSecret :: Text
+    }
+
 instance FromJSON HajongConf where
     parseJSON = withObject "HajongConf" $ \o -> do
-        hajongWs          <- o .: "server_ws"
-        hajongBinary      <- o .: "server_binary"
-        hajongSocket      <- o .: "server_socket"
-        hajongArgs        <- o .: "server_args"
-        hajongLog         <- o .: "server_log"
-        hajongCtrlSecret  <- o .: "ws_secret"
+        HC.ServerConfig{..} <- parseJSON (Object o)
+
+        extHost           <- o .: "websocket-external-host"
+
+        let hajongWs = "ws://" ++ extHost ++ ":" ++ tshow _websocketPort
+            hajongSocket = _databaseSocket
+            hajongCtrlSecret  = _websocketCtrlSecret
         return HajongConf{..}
 
 -- | Settings for 'widgetFile', such as which template languages to support and

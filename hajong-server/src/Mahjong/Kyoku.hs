@@ -225,12 +225,12 @@ maybeGameResults kyoku@Kyoku{..}
     score = finalPoints $ mapFromList $ _pPlayers ^.. each.to (\(p,ps,_) -> (p, ps))
 
 nextRound :: Kyoku -> Round
-nextRound Kyoku{..} -- XXX: with GHC 7.10.2, this produces a non-exhaustiveness error.. not sure why.
-    | Just DealAbort{..} <- _pResults = _pRound & _3 +~ 1
-    | Just DealDraw{..}  <- _pResults = _pRound & if elemOf (each._1) Ton dTenpais then _3 +~ 1 else set _3 (_pRound^._3 + 1) . roundRotates
-    | Just DealRon{..}   <- _pResults = _pRound & if elemOf (each._1) Ton dWinners then _3 +~ 1 else roundRotates
-    | Just DealTsumo{..} <- _pResults = _pRound & if elemOf (each._1) Ton dWinners then _3 +~ 1 else roundRotates
-    | Nothing            <- _pResults = _pRound
+nextRound Kyoku{..} = case _pResults of
+    Just DealAbort{..} -> _pRound & _3 +~ 1
+    Just DealDraw{..}  -> _pRound & if elemOf (each._1) Ton dTenpais then _3 +~ 1 else set _3 (_pRound^._3 + 1) . roundRotates
+    Just DealRon{..}   -> _pRound & if elemOf (each._1) Ton dWinners then _3 +~ 1 else roundRotates
+    Just DealTsumo{..} -> _pRound & if elemOf (each._1) Ton dWinners then _3 +~ 1 else roundRotates
+    Nothing            -> _pRound
   where
     roundRotates (k, 4, _) = (succCirc k, 1, 0)
     roundRotates (k, r, _) = (k, r + 1, 0)
@@ -716,7 +716,6 @@ couldContainYaku (k, s)
         vh <- valueHand k <$> meldTo s (fromShout s) h <*> get
         return $ length (vh^..vhValue.vaYaku.each.filtered yakuNotExtra) /= 0
     | otherwise = return True
-
 
 toWaitShouts :: InKyoku m => [(Kaze, Shout)] -> m [WaitShout]
 toWaitShouts shouts = do

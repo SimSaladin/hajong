@@ -75,7 +75,7 @@ runRoundM m gs = maybe (Left "No active round!") (flip runKyoku m) (_gameKyoku g
 -- | Run action and apply gameveents.
 runKyoku :: Kyoku -> RoundM a -> Either Text (a, Kyoku, [GameEvent])
 runKyoku k m = fmap logEvents $ runRWST m k k
-    where logEvents (res, k, evs) = (res, k & sEventHistory %~ mappend evs, evs)
+    where logEvents (res, k', evs) = (res, k' & sEventHistory %~ mappend evs, evs)
 
 ------------------------------------------------------------------------------
 
