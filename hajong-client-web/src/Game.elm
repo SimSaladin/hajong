@@ -205,15 +205,7 @@ display st =
                 , maybe (toForm empty) (dispFinalPoints st) st.gameFinalPoints
 
                 -- action buttons
-                , moveY (-handOffCenter + t_h) <| toForm <| container playAreaWidth 40 midTop <| flow right
-                   <| (
-                      maybe [] (snd >> displayShoutButtons st) (st.waitShout)
-                       ++ shouminkanButtons st.rs "Shouminkan"
-                       ++ [ ankanButton st.rs "Ankan"
-                          , nocareButton st.waitShout "Pass" ]
-                       ++ riichiButtons st.rs st.riichiWith
-                       ++ [ tsumoButton st.rs.myhand.canTsumo ]
-                       )
+                , moveY (-handOffCenter + t_h) <| toForm <| container playAreaWidth 40 midTop <| displayActionButtons st
                 ]
              , dispHand st.rs.mypos st st.rs.myhand
                   |> fitToViewX st.dimensions
@@ -223,10 +215,24 @@ display st =
    in container (fst st.dimensions) (snd st.dimensions) middle gameDisplay
          |> color gray
 
+-- TODO: Side-bar not done yet.
 asSideBar : GameState -> Element
 asSideBar st = container 300 (snd st.dimensions) middle
    <| color black
    <| MsgDialog.dialog st
+
+-- | Shouts and so on, as boxes above own hand.
+displayActionButtons : GameState -> Element
+displayActionButtons st = flow right <|
+   -- shout-related
+   maybe [] (snd >> displayShoutButtons st) (st.waitShout) ++ [ nocareButton st.waitShout "Pass" ]
+   -- own turn
+   ++ if st.rs.turn == st.rs.mypos
+         then shouminkanButtons st.rs "Shouminkan"
+              ++ [ ankanButton st.rs "Ankan" ]
+              ++ riichiButtons st.rs st.riichiWith
+              ++ [ tsumoButton st.rs.myhand.canTsumo ]
+         else []
 
 fitToViewX : (Int, Int) -> Element -> Form
 fitToViewX (w,_) e = scale (min 1 <| toFloat w / toFloat (widthOf e)) <| toForm e
@@ -499,11 +505,16 @@ dispShout st k m s =
           if s.shoutKind == Pon && m.mentsuKind == Kantsu -- shouminkan?
              then collage t_h (2*t_w) [moveY (t_w / 2) rotated, moveY (-t_w / 2) rotated]
              else collage t_h t_w [rotated]
+       nth_from = kazeNth s.shoutFrom
+       nth_me   = kazeNth k
 
-   in flow right <| case abs (kazeNth s.shoutFrom - kazeNth k) of
-      1 -> List.take 2 myTiles ++ [shoutPos] ++ List.drop 2 myTiles
-      2 -> List.take 1 myTiles ++ [shoutPos] ++ List.drop 1 myTiles
-      _ -> shoutPos :: myTiles
+   in flow right <|
+         if (nth_from + 1) % 4 == nth_me then --left side
+            shoutPos :: myTiles
+         else if (nth_me + 1) % 4 == nth_from then -- right side
+            List.take 2 myTiles ++ [shoutPos] ++ List.drop 2 myTiles
+         else -- center
+            List.take 1 myTiles ++ [shoutPos] ++ List.drop 1 myTiles
 
 -- }}}
 
@@ -561,7 +572,7 @@ shoutButton s =
       , toString s.shoutKind |> T.fromString |> centered |> toForm ]
       -- TODO multiple chii identify
 
-shouminkanButtons : RoundState -> String -> [Element]
+shouminkanButtons : RoundState -> String -> List Element
 shouminkanButtons rs str = findShouminkan rs.myhand
    |> map (\t -> clickable (message shouminkan.address (Just t)) <| buttonElem' str blue)
 

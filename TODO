@@ -1,25 +1,26 @@
 x = done, / = half done, ! = needs testing
 
-[ ] shouminkan jää näkyviin, kun huutaa ponin
-[ ] uradorat ei toimi
-[ ] riichi-nappula liian iso
 [ ] display uradora on win
-[ ] monta doraa ei näy
-[ ] aka ei aina poistu kädestä huudon yhteydessä?
-[ ] huudettu tiili näkyy väärällä puolella mentsussa, aina?
-[x] [Error] Game 128 errored! unsafeRoundM: unexpected Left: Hand state was DrawNone, but expected DrawFromWanpai @(hajon_58UM7JvDhFX6fY2cDWnlc6:Hajong.Server src/Hajong/Server.hs:238:21)
-[x] when third player joins he may get the place of second player; possibly second player had left and reconnected only after third player joined
-[ ] discard hovered/shout-indicator info after that's not relevant; bugs at leat mobile devices
-[x] homepage: move aside up in mobile view
 [ ] reloading when kyoku has ended goes to lobby; should send the roundstate then too
-[x] setup sending email: support and auth-account
 [ ] https
 [ ] restyle kyoku results and final points views
 [ ] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
-[x] Rework lobby: better listing of user names perhaps with facebook profile pics / gravatars
 [ ] Set up logging from workers to a file.
-[x] refactoring: split H.Server to H.{Server.State,Server.Internal,Database,Database.Query} modules
 [ ] after a game has ended, make it possible to go back to lobby.
+[!] huudettu tiili näkyy väärällä puolella mentsussa, aina?
+[!] monta doraa ei näy
+[!] aka ei aina poistu kädestä huudon yhteydessä?
+[!] uradorat ei toimi
+[!] riichi-nappula liian iso
+[!] discard hovered/shout-indicator info after that's not relevant; bugs at leat mobile devices
+
+[x] [Error] Game 128 errored! unsafeRoundM: unexpected Left: Hand state was DrawNone, but expected DrawFromWanpai @(hajon_58UM7JvDhFX6fY2cDWnlc6:Hajong.Server src/Hajong/Server.hs:238:21)
+[x] homepage: move aside up in mobile view
+[x] when third player joins he may get the place of second player; possibly second player had left and reconnected only after third player joined
+[x] setup sending email: support and auth-account
+[x] Rework lobby: better listing of user names perhaps with facebook profile pics / gravatars
+[x] refactoring: split H.Server to H.{Server.State,Server.Internal,Database,Database.Query} modules
+[x] shouminkan jää näkyviin, kun huutaa ponin
 
 # mechanics
 [x] add test: riichi score is transferred on ron

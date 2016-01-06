@@ -12,15 +12,19 @@
 -- (@Hand@), and functions that operate on a hand.
 ------------------------------------------------------------------------------
 module Mahjong.Hand
-    ( Hand(..), HandA, HandP
-    , Discard(..)
-    , RiichiState(..), DrawState(..), PickedTile(..), FuritenState(..), HandFlag(..)
-    , module Mahjong.Hand
+    ( module Mahjong.Hand
+
+    -- * Hand sub-modules
     , module Mahjong.Hand.Algo
     , module Mahjong.Hand.Mentsu
     , module Mahjong.Hand.Value
     , module Mahjong.Hand.Yaku
-    -- * Lenses
+
+    -- * Types and lenses
+    , Hand(..), HandA, HandP, Discard(..), RiichiState(..), DrawState(..),
+    , PickedTile(..), FuritenState(..), HandFlag(..),
+
+    -- ** lenses
     , handCalled   
     , handDiscards 
     , handRiichi   
@@ -31,7 +35,6 @@ module Mahjong.Hand
     , handFuriten  
     , handCanTsumo 
     , handFlags
-
     , dcTile, dcRiichi, dcTo
     ) where
 
