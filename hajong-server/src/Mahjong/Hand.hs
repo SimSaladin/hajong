@@ -250,7 +250,7 @@ shoutsOn np t p hand
 
         -- Set aka information to the shoutTo tiles, for as many as
         -- possible.
-        let goAka akas (x:xs) | x `elem` akas = setAka x : goAka (L.delete t akas) xs
+        let goAka akas (x:xs) | x `elem` akas = setAka x : goAka (L.delete x akas) xs
                               | otherwise     =        x : goAka             akas  xs
             goAka _        []                 = []
             tiles = goAka akaIh st
@@ -288,11 +288,11 @@ setAgari ms h = h & handPicks %~ agari
 handGetAgari :: HandA -> [Tile]
 handGetAgari = L.nub . concatMap getAgari . tenpaiGroupings
 
--- | Take the tile from hand if possible
+-- | Take the tile from hand if possible.
 tileFromHand :: CanError m => Tile -> HandA -> m HandA
 tileFromHand tile hand
-    | pick : _ <- filter ((==~ tile).pickedTile) (hand^.handPicks) = return $ handPicks %~ L.deleteBy ((==~) `on` pickedTile) pick $ hand
-    | (xs, _ : ys) <- break (== tile) (runIdentity $ _handConcealed hand) = return $ handConcealed._Wrapped .~ (xs ++ ys) $ hand
+    | pick : _ <- filter ((==@ tile).pickedTile) (hand^.handPicks) = return $ handPicks %~ L.deleteBy ((==@) `on` pickedTile) pick $ hand
+    | (xs, _ : ys) <- break (==@ tile) (hand^.handConcealed._Wrapped) = return $ handConcealed._Wrapped .~ (xs ++ ys) $ hand
     | otherwise                                                   = throwError "Tile not in hand"
 
 -- |
