@@ -1,6 +1,11 @@
-# Hajong - Riichi mahjong suite
+# Hajong - Riichi Mahjong in Haskell
 
-See http://funktionaali.com/2014-05-04-Riichi.html
+Implementation of the popular Japanese mahjong game in Elm and Haskell.
+Online, so you can play with others.
+
+Live at http://funjong.org
+
+See also http://funktionaali.com/2014-05-04-Riichi.html
 
 Installation
 ============
@@ -10,6 +15,7 @@ This section outlines development setup.
 1. Build the web play client
    1. Install Elm-Platform 0.16
    2. `hajong-client-web/build.sh`
+
 2. Build game server and the site
    1. Install `stack`
    2. `./build.sh`
@@ -19,14 +25,18 @@ This section outlines development setup.
       sudo -u postgres createuser hajong-site
       sudo -u postgres createdb -O hajong-site hajong-site
       ```
+
 3. Start game server in `hajong-site` directory
    ```
    cd hajong-site
    stack exec hajong-server
    ```
+
    By default, logs go to `./logs`, game server state is stored at `./state` and
    `hajong-server` reads configuration at `./config/settings.yml`.
+
 4. In another terminal, start the site in development mode
+
    ```
    stack install yesod-bin
    cd hajong-site
