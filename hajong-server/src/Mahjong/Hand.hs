@@ -250,8 +250,8 @@ shoutsOn np t p hand
 
         -- Set aka information to the shoutTo tiles, for as many as
         -- possible.
-        let goAka akas (x:xs) | x `elem` akas = setAka t : goAka (L.delete t akas) xs
-                              | otherwise     =        t : goAka             akas  xs
+        let goAka akas (x:xs) | x `elem` akas = setAka x : goAka (L.delete t akas) xs
+                              | otherwise     =        x : goAka             akas  xs
             goAka _        []                 = []
             tiles = goAka akaIh st
 
