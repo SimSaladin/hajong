@@ -561,6 +561,7 @@ shoutButton s =
       , toString s.shoutKind |> T.fromString |> centered |> toForm ]
       -- TODO multiple chii identify
 
+shouminkanButtons : RoundState -> String -> [Element]
 shouminkanButtons rs str = findShouminkan rs.myhand
    |> map (\t -> clickable (message shouminkan.address (Just t)) <| buttonElem' str blue)
 

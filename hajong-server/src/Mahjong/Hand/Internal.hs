@@ -15,8 +15,13 @@ import           Mahjong.Tiles
 import           Mahjong.Hand.Mentsu
 ------------------------------------------------------------------------------
 
+-- XXX: Should be a flag
 data RiichiState = NoRiichi | Riichi | DoubleRiichi
                  deriving (Show, Read, Eq)
+
+-- XXX: Should be flag
+data FuritenState = NotFuriten | Furiten | TempFuriten
+                  deriving (Show, Read, Eq)
 
 data DrawState = DrawFromWanpai | DrawFromWall | DrawNone
                deriving (Show, Read, Eq)
@@ -50,11 +55,12 @@ pickedTileInHand (AgariCall s) | null (shoutTo s) = Just (shoutTile s)
                                | otherwise        = Nothing
 pickedTileInHand x                                = Just $ pickedTile x
 
+-- * Flags
+
 data HandFlag = HandFirsRoundUninterrupted
               deriving (Show, Read, Eq, Ord)
 
-data FuritenState = NotFuriten | Furiten | TempFuriten
-                  deriving (Show, Read, Eq)
+-- * Discards
 
 data Discard = Discard
     { _dcTile          :: Tile
@@ -62,19 +68,19 @@ data Discard = Discard
     , _dcRiichi        :: Bool
     } deriving (Show, Read)
 
-data Hand m = Hand
-    { _handCalled      :: [Mentsu]                -- ^ Open mentsu
-    , _handDiscards    :: [Discard]               -- ^ Discard pool, annotated with tiles called by others
-    , _handRiichi      :: RiichiState             -- ^ Maybe in riichi
-    , _handIppatsu     :: Bool                    -- ^ Is this ippatsu round
-    , _handState       :: DrawState               -- ^ Maybe should draw
-    , _handPicks       :: [PickedTile m]          -- ^ Drawn tiles in draw order. True for wanpai.
+-- * Hand
 
-    , _handConcealed   :: m [Tile]                -- ^ Concealed tiles
-    -- TODO these should be flags
-    , _handFuriten     :: m FuritenState          -- ^ TODO updating this field
-    , _handCanTsumo    :: m Bool                  -- ^ Has concealed complete hand
-    , _handFlags       :: m (Set HandFlag)
+data Hand m = Hand
+    { _handCalled      :: [Mentsu]         -- ^ Open mentsu
+    , _handDiscards    :: [Discard]        -- ^ Discard pool, annotated with tiles called by others
+    , _handRiichi      :: RiichiState      -- ^ Maybe in riichi
+    , _handIppatsu     :: Bool             -- ^ Is this ippatsu round
+    , _handState       :: DrawState        -- ^ Maybe should draw
+    , _handPicks       :: [PickedTile m]   -- ^ Drawn tiles in draw order. True for wanpai.
+    , _handConcealed   :: m [Tile]         -- ^ Concealed tiles
+    , _handFuriten     :: m FuritenState   -- XXX: should be flag
+    , _handCanTsumo    :: m Bool           -- XXX: should be flag
+    , _handFlags       :: m (Set HandFlag) -- ^ A set of flags active in the hand
     }
 deriving instance Show (Hand Maybe)
 deriving instance Read (Hand Maybe)

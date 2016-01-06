@@ -1,3 +1,10 @@
+-- XXX: The genericity in this function is somehow toxic and blows the elm
+-- compiler.. The specialized version is in Lounge.
+--
+-- getInfoWithDefault : ST a -> a -> (PlayerInfo -> a) -> String -> a
+-- getInfoWithDefault st def f k = Dict.get k st.playerInfo
+--    |> Maybe.map f
+--    |> Maybe.withDefault def
 module PlayerInfo where
 
 import Http
@@ -21,14 +28,6 @@ type alias PlayerInfo =
    }
 
 type alias ST a = { a | playerInfo : InfoDict }
-
--- XXX: The genericity in this function is somehow toxic and blows the elm
--- compiler.. The specialized version is in Lounge.
---
--- getInfoWithDefault : ST a -> a -> (PlayerInfo -> a) -> String -> a
--- getInfoWithDefault st def f k = Dict.get k st.playerInfo
---    |> Maybe.map f
---    |> Maybe.withDefault def
 
 updates : Signal.Mailbox (ST a -> ST a)
 updates = Signal.mailbox identity

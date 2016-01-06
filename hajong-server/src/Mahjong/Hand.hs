@@ -49,6 +49,15 @@ import           Mahjong.Hand.Yaku
 import           Mahjong.Hand.Internal
 ------------------------------------------------------------------------------
 
+-- * Functions
+
+-- | Automatically execute a discard necessary to advance the game (in case
+-- of inactive players).
+handAutoDiscard :: CanError m => HandA -> m Discard
+handAutoDiscard hand
+    | p : _ <- _handPicks hand = return $ Discard (pickedTile p) Nothing False
+    | otherwise                = return $ Discard (hand ^?! handConcealed._Wrapped._last) Nothing False
+
 -- | Hide private info from the data type.
 maskPublicHand :: HandA -> HandP
 maskPublicHand hand =
@@ -77,24 +86,41 @@ convertHand hand = hand { _handPicks     = map convertPickedTile (_handPicks han
         convertPickedTile (AgariCall s)        = AgariCall s
         convertPickedTile (AgariTsumoWanpai t) = AgariTsumoWanpai t
 
--- * Draw
+valueHand :: Kaze -> HandA -> Kyoku -> ValuedHand
+valueHand player h deal = ValuedHand (h^.handCalled) (h^.handConcealed._Wrapped) (getValue vi)
+  where vi = ValueInfo deal player h
+
+-- | Tiles the hand can discard for a riichi.
+handCanRiichiWith :: HandA -> [Tile]
+handCanRiichiWith h
+    | h^.handRiichi /= NoRiichi = []
+    | otherwise                 = h^.handConcealed._Wrapped.to (mapMaybe f)
+    where f t = guard (canRiichiWith t h) >> return t
+
+canRiichiWith :: Tile -> HandA -> Bool
+canRiichiWith t h = null (h^.handCalled) && tenpai (L.delete t tiles)
+    where tiles = h^.handConcealed._Wrapped ++ map pickedTile (h^.handPicks)
+
+furiten :: HandA -> Bool
+furiten h = any (`elem` (h^..handDiscards.each.dcTile)) . concatMap getAgari
+          . filter tenpai $ getGroupings h
+
+handInNagashi :: HandA -> Bool
+handInNagashi h = all id [ h^.handCalled == []
+                         , null $ h^..handDiscards.traversed.filtered (isJust . _dcTo)
+                         , null $ h^..handDiscards.traversed.filtered (isSuited . _dcTile) ]
+
+-- * Player actions
 
 toHand :: CanError m => Tile -> HandA -> m HandA
 toHand t h = do
     unless (h^.handState == DrawFromWall) $ throwError $ "Hand state was " <> tshow (h^.handState) <> ", but expected " <> tshow DrawFromWall
-    return $ setPickAndTsumo (FromWall $ pure t) h
+    return $ updateAfterPick (FromWall $ pure t) h
 
 toHandWanpai :: CanError m => Tile -> HandA -> m HandA
 toHandWanpai t h = do
     unless (h^.handState == DrawFromWanpai) $ throwError $ "Hand state was " <> tshow (h^.handState) <> ", but expected " <> tshow DrawFromWanpai
-    return $ setPickAndTsumo (FromWanpai $ pure t) h
-
-setPickAndTsumo :: PickedTile Identity -> HandA -> HandA
-setPickAndTsumo pick h =
-    let h' = handPicks %~ (++ [pick]) $ handState.~DrawNone $ h
-        in if' (complete h') (handCanTsumo .~ pure True) id h'
-
--- * Discard
+    return $ updateAfterPick (FromWanpai $ pure t) h
 
 -- | Discard a tile; fails if
 --
@@ -109,29 +135,7 @@ discard d@Discard{..} hand
 
     | hand^.handRiichi /= NoRiichi, p : _ <- hand^.handPicks, pickedTile p /= _dcTile
                                                   = throwError "Cannot change wait in riichi" 
-    | otherwise = updateFlags . updateFuriten . setRiichi . setIppatsu . setNoTsumo . movePicks . setDiscard <$> tileFromHand _dcTile hand
-  where
-    movePicks h = h & handConcealed._Wrapped %~ (++ map pickedTile (_handPicks h)) & handPicks .~ []
-    setDiscard  = handDiscards %~ (|> d)
-    setNoTsumo  = handCanTsumo._Wrapped .~ False
-    setRiichi
-        | _dcRiichi, null (hand^.handDiscards) = handRiichi .~ DoubleRiichi
-        | _dcRiichi                            = handRiichi .~ Riichi
-        | otherwise                            = id
-    setIppatsu = handIppatsu .~ if _dcRiichi then True else False
-    updateFlags = handFlags._Wrapped %~ deleteSet HandFirsRoundUninterrupted
-
-updateFuriten :: HandA -> HandA
-updateFuriten h = h & handFuriten._Wrapped .~ if' (furiten h) Furiten NotFuriten
-
--- | Automatically execute a discard necessary to advance the game (in case
--- of inactive players).
-handAutoDiscard :: CanError m => HandA -> m Discard
-handAutoDiscard hand
-    | p : _ <- _handPicks hand = return $ Discard (pickedTile p) Nothing False
-    | otherwise                = return $ Discard (hand ^?! handConcealed._Wrapped._last) Nothing False
-
--- * Winning
+    | otherwise                                   = updateAfterDiscard d <$> tileFromHand _dcTile hand
 
 -- | The hand goes out with tsumo (ms=Nothing) or with a shout (ms=Just
 -- shout).
@@ -141,8 +145,6 @@ handWin ms h
     -- Just s <- ms, [] <- shoutTo s                    = return $ setAgari ms h -- XXX: for kokushi tenpai
     | not $ complete $ setAgari ms h                                 = throwError $ "Cannot win with an incomplete hand: " ++ tshow (ms, h)
     | otherwise                                        = return $ setAgari ms h
-
--- * Kan
 
 -- | Ankan on the given tile if possible.
 --
@@ -172,7 +174,32 @@ shouminkanOn tile hand = do
                           $ handState .~ DrawFromWanpai
                           $ hand'
 
--- * Call
+-- ** State changes from actions
+
+updateAfterDiscard :: Discard -> HandA -> HandA
+updateAfterDiscard d@Discard{..} hand = updateFlags
+    . updateFuriten                                      -- If the discard brought us to furiten state set a flag -- XXX: should be a flag
+    . setRiichi                                          -- If we riichi with the discard, set a flag -- XXX: should be a flag
+    . set handIppatsu (if' _dcRiichi True False)         -- Ippatsu-flag is set here XXX: should be a flag
+    . set (handCanTsumo._Wrapped) False                  -- tsumo possible at least after discard
+    . over handDiscards (|> d)                           -- Discard to discard pool
+    $ movePicks hand                                     -- handPicks -> handConcealed
+  where
+    setRiichi
+        | _dcRiichi, null (hand^.handDiscards) = handRiichi .~ DoubleRiichi
+        | _dcRiichi                            = handRiichi .~ Riichi
+        | otherwise                            = id
+    updateFlags                                = handFlags._Wrapped %~ deleteSet HandFirsRoundUninterrupted
+    movePicks                                  = over (handConcealed._Wrapped) (++ map pickedTile (_handPicks hand)) . set handPicks []
+    updateFuriten                              = handFuriten._Wrapped .~ if' (furiten hand) Furiten NotFuriten
+
+-- | Update hand state after picked tile
+updateAfterPick :: PickedTile Identity -> HandA -> HandA
+updateAfterPick pick h = if' (complete h') (handCanTsumo .~ pure True) id h'
+  where
+     h' = handPicks %~ (++ [pick]) $ handState.~DrawNone $ h
+
+-- * Calling
 
 -- | Meld the mentsu to the hand. on win sets the agari info
 --
@@ -191,19 +218,12 @@ meldTo shout mentsu hand -- TODO why must the shout be passed separetely?
     moveFromConcealed           = over handCalled (|> mentsu) . over (handConcealed._Wrapped) removeTiles
     removeTiles ih              = let (aka, notaka) = partition isAka ih in (aka ++ notaka) L.\\ tilesFromHand -- XXX: this is needed because Eq on Tile is warped
 
+-- XXX: This should return only a HandA
 shoutFromHand :: CanError m => Kaze -> Shout -> HandA -> m (Mentsu, HandA)
 shoutFromHand sk shout hand
     | shoutKind shout == Chankan                     = return (fromShout shout, hand)
     | Just Discard{..} <- hand ^? handDiscards._last = return (fromShout shout, hand & handDiscards._last.dcTo .~ Just sk)
     | otherwise                                      = throwError "shoutFromHand: There were no discards on the hand."
-
--- * Valued hand
-
-valueHand :: Kaze -> HandA -> Kyoku -> ValuedHand
-valueHand player h deal = ValuedHand (h^.handCalled) (h^.handConcealed._Wrapped) (getValue vi)
-  where vi = ValueInfo deal player h
-
--- * Utility
 
 -- | All mentsu that could be melded with hand given some tile.
 shoutsOn :: Kaze -- ^ Shout from (player in turn)
@@ -212,48 +232,46 @@ shoutsOn :: Kaze -- ^ Shout from (player in turn)
          -> HandA -- ^ shouter's
          -> [Shout]
 shoutsOn np t p hand
-    | np == p                  = [] -- You're not shouting the thing you just discarded from yourself, right?
+    | np == p                   = [] -- You're not shouting the thing you just discarded from yourself, right?
     | Just x <- kokushiAgari (hand^.handConcealed._Wrapped)
-    , either (== t) (elem t) x = [Shout Ron np t []]
-    | otherwise                = concatMap toShout $ possibleShouts t
+    , either (==~ t) (elem t) x = [Shout Ron np t []] -- Ron kokushi
+    | otherwise                 = concatMap toShout $ possibleShouts t
   where
-    normalShuntsu     = succCirc np == p
+    canChi            = succCirc np == p
     ih                = sort (runIdentity $ _handConcealed hand) -- NOTE: sort
-    aka               = filter isAka ih
+    akaIh             = filter isAka ih
     toShout (mk, xs)  = do
+
+        -- Tiles to shout with must be in our hand. *Uses semantic Eq*
         guard $ xs `isSubListOf` ih
-        let tiles = map (\x -> if x `elem` aka then setAka x else x) xs -- XXX: Prioritize aka tiles
+
+        -- Set aka information to the shoutTo tiles, for as many as
+        -- possible.
+        let goAka akas (t:ts) | t `elem` akas = setAka t : goAka (L.delete t akas) ts
+                              | otherwise     =        t : goAka             akas  ts
+            goAka _        []                 = []
+            tiles = goAka akaIh xs
+
         s <- case mk of
                 Jantou  -> [Ron]
                 Kantsu  -> [Kan]
                 Koutsu  -> [Pon, Ron]
                 Shuntsu -> [Chi, Ron]
-        when (s == Chi) $ guard normalShuntsu
+
+        -- require Chi is from previous player
+        when (s == Chi) $ guard canChi
+
+        -- if riichi, only winning shouts. NOTE: chankan is handled after
+        -- the shoutsOn function.
         when (hand^.handRiichi /= NoRiichi) $ guard (s == Ron)
-        guard $ if s == Ron
-            then complete ( toMentsu mk t tiles : (hand^.handCalled), hand^.handConcealed._Wrapped L.\\ tiles)
-            else mk /= Jantou
+
+        when (s == Ron) $ guard $ complete
+            -- XXX: This looks fragile...
+            (toMentsu mk t tiles : (hand^.handCalled), hand^.handConcealed._Wrapped L.\\ tiles)
+
         return $ Shout s np t tiles
 
--- | Tiles the hand can discard for a riichi.
-handCanRiichiWith :: HandA -> [Tile]
-handCanRiichiWith h
-    | h^.handRiichi /= NoRiichi = []
-    | otherwise                 = h^.handConcealed._Wrapped.to (mapMaybe f)
-    where f t = guard (canRiichiWith t h) >> return t
-
-canRiichiWith :: Tile -> HandA -> Bool
-canRiichiWith t h = null (h^.handCalled) && tenpai (L.delete t tiles)
-    where tiles = h^.handConcealed._Wrapped ++ map pickedTile (h^.handPicks)
-
-furiten :: HandA -> Bool
-furiten h = any (`elem` (h^..handDiscards.each.dcTile)) . concatMap getAgari
-          . filter tenpai $ getGroupings h
-
-handInNagashi :: HandA -> Bool
-handInNagashi h = all id [ h^.handCalled == []
-                         , null $ h^..handDiscards.traversed.filtered (isJust . _dcTo)
-                         , null $ h^..handDiscards.traversed.filtered (isSuited . _dcTile) ]
+-- * Utility
 
 -- | Set PickedTile from a agari call
 setAgari :: Maybe Shout -> HandA -> HandA

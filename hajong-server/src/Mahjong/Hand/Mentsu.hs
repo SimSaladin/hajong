@@ -29,7 +29,7 @@ module Mahjong.Hand.Mentsu
 import           Import
 import           Mahjong.Tiles
 
--- Types
+-- The Mentsu types
 
 -- | For Shuntsu, the tile is the /first/ tile in chronological order.
 --
@@ -46,13 +46,13 @@ data MentsuKind = Shuntsu -- ^ 3 Tile straight
                 | Jantou -- ^ Pair
                 deriving (Show, Read, Eq, Ord, Bounded, Enum)
 
--- Instances
-
 instance Pretty Mentsu where
     pretty = list . intersperse "-" . map pretty . mentsuTiles
 
 instance Pretty [Mentsu] where
     pretty = list . intersperse "\n" . map pretty
+
+-- The Shout types
 
 -- | A mentsu can result from a shout; and a shout always produces
 -- a mentsu.
@@ -133,6 +133,8 @@ isKantsu  = (== Kantsu)  . mentsuKind
 
 -- On shouts
 
+-- | All mentsu and related tiles for a given tile, that would produce
+-- a valid mentsu (Jantou is a mentsu here too).
 possibleShouts :: Tile -> [(MentsuKind, [Tile])]
 possibleShouts x =
     (Koutsu, [x, xf]) : (Kantsu, [x, xf, xf]) : (Jantou, [x]) : if' (isSuited x) shuntsuShouts []
