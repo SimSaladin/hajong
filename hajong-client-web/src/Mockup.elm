@@ -25,8 +25,8 @@ statePlaying rs =
    }
 
 overrideResources : Dict.Dict String String
-overrideResources = Dict.fromList
-   [ ("tiles", "http://localhost:3000/static/img/Mahjong-tiles.jpg") ]
+overrideResources = View.defaultResources |> Dict.map (\_ x ->
+   "http://localhost:3000" ++ x)
 
 roundState : RoundState
 roundState = 
@@ -37,9 +37,17 @@ roundState =
    , oja           = 0
    , firstoja      = 0
    , tilesleft     = 10
-   , dora          = []
-   , hands         = List.map2 (,) [Ton, Nan, Shaa, Pei] [publicHand, publicHand, publicHand, publicHand]
+   , dora          = [Suited ManTile 1 False, Suited PinTile 5 True]
+
+   , hands         = List.map2 (,) [Ton, Nan, Shaa, Pei]
+      [ publicHand
+      , { publicHand | riichiState = Riichi
+                     , discards    = [ { tile = Suited PinTile 6 False, to = Nothing, riichi = False } ]
+                  }
+      , publicHand, publicHand ]
+
    , players       = List.map2 (,) [Ton, Nan, Shaa, Pei] [dummyPlayer, dummyPlayer, dummyPlayer, dummyPlayer]
+
    , myhand        = { concealed = [Suited ManTile 1 False], picks = [], furiten = NotFuriten,
                         canTsumo = False, state = DrawNone, called = [],
                         discards = [], riichiState = NoRiichi, ippatsu = True }
@@ -50,7 +58,7 @@ roundState =
    }
 
 dummyPlayer : (Player, Int, String)
-dummyPlayer = (0, 20000, "dummy")
+dummyPlayer = (0, 20000, "")
 
 publicHand : HandPublic
 publicHand = { state = DrawNone, called = [], discards = [], riichiState = NoRiichi, ippatsu = True }

@@ -48,7 +48,7 @@ data Event = JoinServer Nick Int Text (Maybe Int) -- nick, ident, token, game to
            | LoungeInfo Lounge
            | GameCreated (Int, Text, [Nick], Text) -- id, name, nicks, uuid
            | JoinGame Int Nick -- ^ game num, nick
-           | PartGame Nick
+           | PartGame Nick -- ^ Abandon the game completely
            | ForceStart Int
 
            | InGamePrivateEvent GameEvent

@@ -3,7 +3,6 @@ module Lounge where
 import GameTypes exposing (..)
 import Events
 import Util exposing (..)
-import PlayerInfo
 
 import Dict exposing (Dict)
 import Dict
@@ -170,7 +169,3 @@ toPlayerInfoLi st nick = li []
      , text <| getInfoWithDefault st nick .displayName nick ]
 
 -- }}}
-
-getInfoWithDefault : GameState -> a -> (PlayerInfo.PlayerInfo -> a) -> String -> a
-getInfoWithDefault st def f k = Dict.get k st.playerInfo
-    |> Maybe.map f |> Maybe.withDefault def

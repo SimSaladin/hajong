@@ -50,7 +50,7 @@ data WorkerData = WorkerData
                 } deriving (Typeable)
 
 data WorkerInput = WorkerAddPlayer Client Callback -- ^ Careful with the callbacks, an uncatched exception will kill the worker
-                 | WorkerPartPlayer Client Callback
+                 | WorkerPartPlayer Client Bool Callback -- ^ The Bool is whether the player should be completely removed from the game.
                  | WorkerGameAction Client GameAction
                  | WorkerForceStart
                  | WorkerReplaceKyoku Machine (Maybe Kyoku) -- ^ For debugging only.
@@ -89,15 +89,18 @@ execWorker st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
 
 -- | Remove the player identified by connection from the game and replace
 -- the player with a dummy client.
-partPlayer :: Client -> Callback -> Worker ()
-partPlayer client callback = do
-    $logInfo $ "Client leaving: " <> tshow client
+partPlayer :: Bool -- ^ Leave permanently; erases the seat info for the client
+           -> Client -> Callback -> Worker ()
+partPlayer leave client callback = do
+    $logInfo $ "Client disconnected: " <> tshow client
     gsv <- view wGame
     mgs <- atomically $ do
         gs <- readTVar gsv
+
         case clientToPlayer client gs of
             Just p  -> do
-                let gs' = setClient (dummyClient $ getNick client ++ " (n/a)") p gs
+                let gs' = if leave then setClient (dummyClient $ getNick client ++ " (n/a)") p gs
+                                   else gs & gamePlayers.ix p %~ disconnectClient
                 writeTVar gsv gs' $> Just gs'
             Nothing -> return Nothing
 
@@ -145,7 +148,7 @@ waitPlayersAndBegin = $logInfo "Waiting for players" >> go
 -- a client or server (both come in to the same TMVar).
 processInput :: WorkerInput -> Worker (Maybe (Machine, Worker ()))
 processInput (WorkerAddPlayer client callback)  = addPlayer client callback >> return Nothing
-processInput (WorkerPartPlayer client callback) = partPlayer client callback >> return Nothing
+processInput (WorkerPartPlayer client leave callback) = partPlayer leave client callback >> return Nothing
 processInput (WorkerGameAction c ga)            = processGameAction c ga
 processInput WorkerForceStart                   = rmodify wGame (gamePlayers.each %~ \c -> c { isReady = True }) >> return Nothing
 processInput (WorkerReplaceKyoku machine kyoku) = do rmodify wGame (gameKyoku .~ kyoku)
@@ -157,8 +160,19 @@ processInput (WorkerReplaceKyoku machine kyoku) = do rmodify wGame (gameKyoku .~
 -- which applies the action and the corresponding continuation state.
 processGameAction :: Client -> GameAction -> Worker (Maybe (Machine, Worker ()))
 processGameAction c ga = fmap (clientToPlayer c) (rview wGame) >>= \case
-    Just p  -> gameActionToKyokuInput p ga >>= safeStep >>= either (\e -> unicastError c e >> return Nothing) (return . Just)
+    Just p  -> gameActionToKyokuInput p >>= safeStep >>= either (\e -> unicastError c e >> return Nothing) (return . Just)
     Nothing -> unicastError c "You are not playing in this game" >> return Nothing
+
+  where
+
+    -- | Argument player *must* be present in the game.
+    gameActionToKyokuInput :: Player -> Worker MachineInput
+    gameActionToKyokuInput p = do
+        k <- unsafeRoundM (playerToKaze p)
+        return $ case ga of
+            GameTurn ta  -> InpTurnAction k ta
+            GameShout sh -> InpShout k sh
+            GameDontCare -> InpPass k
 
 -- ** Waiting for input
 
@@ -269,15 +283,6 @@ unsafeRoundM :: RoundM a -> Worker a
 unsafeRoundM = roundM >=> either failed go
   where failed e  = error $ "unsafeRoundM: unexpected Left: " <> unpack e
         go (a, m) = m >> return a
-
--- | Argument player *must* be present in the game.
-gameActionToKyokuInput :: Player -> GameAction -> Worker MachineInput
-gameActionToKyokuInput p ga = do
-    k <- unsafeRoundM (playerToKaze p)
-    return $ case ga of
-        GameTurn ta  -> InpTurnAction k ta
-        GameShout sh -> InpShout k sh
-        GameDontCare -> InpPass k
 
 -- | Send private events individually and public events in bulk.
 sendGameEvents :: [GameEvent] -> Worker ()

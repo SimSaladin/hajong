@@ -1,6 +1,7 @@
 module Util where
 
 import GameTypes exposing (..)
+import PlayerInfo
 import Maybe
 
 import Text
@@ -70,3 +71,9 @@ lookupResource : {a | resources : Dict String String } -> String -> String
 lookupResource st k = case Dict.get k st.resources of
    Just x -> x
    Nothing -> "resource-not-found.jpg"
+
+-- getInfoWithDefault st "nick" .displayName nick
+-- getInfoWithDefault st "http://url/somedefault.jpg" .profilepicture nick
+getInfoWithDefault : GameState -> a -> (PlayerInfo.PlayerInfo -> a) -> String -> a
+getInfoWithDefault st def f k = Dict.get k st.playerInfo
+    |> Maybe.map f |> Maybe.withDefault def

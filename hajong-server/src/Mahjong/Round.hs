@@ -81,9 +81,17 @@ runKyoku k m = fmap logEvents $ runRWST m k k
 
 -- * Players
 
+-- | This class defines characteristics of a player seat.
 class Eq playerID => IsPlayer playerID where
-    isBot        :: playerID -> Bool
+
+    -- | Is this player seat reserved.
+    seatOccupied :: playerID -> Bool
+
+    -- | first argument is a seat for the second.
+    seatOf :: playerID -> playerID -> Bool
+
     playerReady  :: playerID -> Bool
+
     playerNick   :: playerID -> Text
 
 ------------------------------------------------------------------------------
@@ -119,10 +127,7 @@ playerToClient gs p = gs^.gamePlayers.at p
 -- | Given a client, find either its old place, or assign it to an empty
 -- seat.
 clientToPlayer :: IsPlayer p => p -> GameState p -> Maybe Player
-clientToPlayer c gs =  fmap (^._1) $
-    (gs^.gamePlayers & ifind (\_ x -> x == c)) -- are the same player, by ident
+clientToPlayer c gs = fmap (^._1) $
+    (gs^.gamePlayers & ifind (\_ s -> s `seatOf` c)) -- previous seat
     `mplus`
-    (gs^.gamePlayers & ifind (\_ c' -> isBot c' && playerNick c' == playerNick c ++ " (n/a)"))
-    `mplus`                                    -- a bot replacement
-    (gs^.gamePlayers & ifind (\_ x -> isBot x && null (playerNick x)))
-                                               -- empty seat
+    (gs^.gamePlayers & ifind (\_ s -> not (seatOccupied s))) -- empty seat

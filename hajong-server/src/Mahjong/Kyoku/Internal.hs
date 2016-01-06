@@ -61,9 +61,11 @@ deriving instance Read (Kyoku' Maybe)
 deriving instance Show (Kyoku' Identity)
 deriving instance Read (Kyoku' Identity)
 
+-- | Server-side, no hidden information.
 type Kyoku = Kyoku' Identity
 
--- | Deal from a player's perspective
+-- | Client-side @Kyoku'@, all but public and player-private information
+-- hidden.
 type AsPlayer = Kyoku' Maybe
 
 -- | Left for turn, right for shout(s)
@@ -112,10 +114,10 @@ data TurnAction = TurnTileDiscard Discard
                 | TurnTsumo
                 deriving (Show, Read, Typeable)
 
--- | Actions you do on someone else's turn.
-data GameAction = GameTurn TurnAction
-                | GameShout Shout
-                | GameDontCare -- ^ About shouting last discarded tile
+-- | A @GamAction@ is what clients send to interact in the game.
+data GameAction = GameTurn TurnAction -- ^ An action of the player in turn
+                | GameShout Shout -- ^ Call after a discard
+                | GameDontCare -- ^ Discard shouts from this player
                 deriving (Show, Read, Typeable)
 
 -- ** Points, results

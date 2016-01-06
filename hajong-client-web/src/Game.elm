@@ -28,8 +28,8 @@ t_w = 31 -- tile width, in source image
 t_h = 47 -- tile height
 offSpacer = 5
 
-infoBlockWidth = 6 * t_w
-riichiBetsOffCenter = 3 * t_w
+infoBlockWidth = 6 * t_w - 20
+riichiBetsOffCenter = 3 * t_w - 3
 discardsOffCenter = 3 * t_w + offSpacer
 wallOffCenter = 3 * t_w + 3 * t_h + 2 * offSpacer
 handOffCenter = 3 * t_w + 4 * t_h + 3 * offSpacer
@@ -248,7 +248,9 @@ dispPlayerInfos st = [Ton, Nan, Shaa, Pei]
 dispPlayerInfo : GameState -> Kaze -> Form
 dispPlayerInfo st k =
    let (p, points, name) = Util.listFind k st.rs.players
-       playerName        = if name == "" then T.fromString "(bot)" else T.fromString name |> T.bold
+       displayName       = getInfoWithDefault st name .displayName name
+       playerName        = if name == "" then T.fromString "bot"
+                                         else T.fromString displayName |> T.bold
    in
       Html.toElement 30 30 (Lounge.smallPlayerInfo st name)
          `beside` spacer 5 5
@@ -310,13 +312,16 @@ dispInfoBlock st =
    <| collage infoBlockWidth infoBlockWidth
    <| [ turnIndicator st |> moveRotateKaze (infoBlockWidth / 2, 0) st.rs.mypos st.rs.turn
       , dealAndRoundIndicator st
-      , toForm (dispWanpai st) |> move (-60, 60)
+      , toForm (dispWanpai st) |> move (-40, 50)
       , honbaIndicator st.rs.honba
       , riichiInTableIndicator st.rs.inTable
       , moveY (-t_h) <| toForm <| centered <| T.fromString <| toString st.rs.tilesleft
       ]
 
-dealAndRoundIndicator st = toForm <| kazeImage st (st.rs.round.kaze) `beside` centered (T.fromString (toString <| st.rs.round.round_rot))
+dealAndRoundIndicator st = toForm
+   <| kazeImage st (st.rs.round.kaze)
+         `beside`
+      centered (T.fromString (toString <| st.rs.round.round_rot))
 
 turnIndicator : GameState -> Form
 turnIndicator st =
@@ -357,7 +362,7 @@ moveRotateKaze (offY, offX) mypos pos =
 
 -- | Riichi stick, not rotated.
 playerRiichi : GameState -> Form
-playerRiichi st = toForm <| image 200 20 <| lookupResource st "stick-1000"
+playerRiichi st = toForm <| image (infoBlockWidth - 20) 20 <| lookupResource st "stick-1000"
 -- }}}
 
 -- {{{ Display: Results ----------------------------------------------
@@ -440,10 +445,9 @@ dispTileInHand : GameState -> Int -> Tile -> Element
 dispTileInHand st n tile =
    let isHover = st.hoveredTileNth == n || List.member n st.relatedToShout
        in dispTileHand st tile
-   |> clickable (message discard.address (Just <| Discard tile Nothing False))
    |> hoverable (\f -> message tileHoverStatus.address <| if f then n else -1 )
-   |> \telem -> container t_w t_h middle
-         (if isHover then opacity 0.7 telem else telem)
+   |> \telem -> container t_w t_h middle (if isHover then opacity 0.7 telem else telem)
+   |> clickable (message discard.address (Just <| Discard tile Nothing False))
    |> if isHover then color blue else identity
 
 -- }}}

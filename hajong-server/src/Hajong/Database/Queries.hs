@@ -158,6 +158,16 @@ setPlayerGame :: Int -- ^ Game ID
               -> Update ServerDB ()
 setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
 
+-- | The player leaves the game completely. Leaves no record of the
+-- player ever playing in the game.
+abandonPlayerGame :: Int -- ^ UID
+                  -> Int -- ^ GID
+                  -> Game -- ^ GameState after update 
+                  -> Update ServerDB ()
+abandonPlayerGame uid gid game = do
+    seReserved.ix uid.cInGame .= Nothing
+    seGames.ix gid .= game
+
 -- * Worker logs
 
 getWorkerResultLog :: Query ServerDB (Map UUID PastGame)
@@ -181,5 +191,5 @@ dumpDB = ask
 $(makeAcidic ''ServerDB
     [ 'getClientRecord, 'getGame, 'getGames, 'dumpDB, 'connectClient,
     'partClient, 'registerAnonymousPlayer, 'registerLoggedInPlayer,
-    'setPlayerGame, 'insertGame, 'setGame, 'destroyGame, 'logWorkerResult,
-    'getWorkerResultLog, 'flushWorkerLog ])
+    'setPlayerGame, 'abandonPlayerGame, 'insertGame, 'setGame,
+    'destroyGame, 'logWorkerResult, 'getWorkerResultLog, 'flushWorkerLog ])

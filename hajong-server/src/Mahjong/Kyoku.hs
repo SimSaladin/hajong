@@ -75,10 +75,13 @@ data Machine = NotBegun Int -- Seconds to wait before continuing. Waiting is not
              | HasEnded FinalPoints
              deriving (Eq, Show, Read)
 
-data MachineInput = InpAuto
-                  | InpTurnAction Kaze TurnAction
-                  | InpShout Kaze Shout
-                  | InpPass Kaze
+-- | @MachineInput@ consists of two parts: actions from clients a la
+-- @GameAction@, and actions from the managing process i.e. advances to
+-- next rounds and automatic advances after timeouts.
+data MachineInput = InpAuto -- ^ Whatever the current state is, do an action that advances it to the next state
+                  | InpTurnAction Kaze TurnAction -- ^ An action from player in turn
+                  | InpShout Kaze Shout -- ^ A call
+                  | InpPass Kaze -- ^ Ignore call
                   deriving (Show, Read)
 
 -- | Remember to publish the turn action when successful

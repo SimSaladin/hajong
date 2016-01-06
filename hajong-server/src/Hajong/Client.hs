@@ -34,9 +34,10 @@ instance Ord Client where (<=) = (<=) `on` getIdent
 instance Show Client where show = unpack . getNick
 
 instance IsPlayer Client where
-    isBot = not . isReal
-    playerReady = isReady
-    playerNick = getNick
+    seatOccupied c = getIdent c /= 0 -- XXX: Is 0 really unused UID in the Record?
+    seatOf s c     = getIdent s == getIdent c && getIdent s /= 0
+    playerReady    = isReady
+    playerNick     = getNick
 
 -- * Send
 
@@ -73,3 +74,14 @@ websocketClient nick conn = Client nick 0 True True
 
 dummyClient :: Nick -> Client
 dummyClient nick = Client nick 0 False False (const (return ())) (error "called receive of dummy Client")
+
+-- | When a client has disconnected, the unicast and receive fields no
+-- longer work. @disconnectClient@ updates these to no-op's to not clutter
+-- the logs.
+--
+-- If you want to free the seat for anyone, e.g. remove the player from the
+-- game, use @leaveClient@.
+disconnectClient :: Client -> Client
+disconnectClient c = c { isReal = False
+                       , unicast = \_ -> return ()
+                       , receive = error "disconnectClient: receive available" }

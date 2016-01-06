@@ -48,6 +48,10 @@ instance Ord Tile where
     Suited{} <= Honor{}              = True
     _ <= _                           = False
 
+-- | Exact equality on tiles
+(==@) :: Tile -> Tile -> Bool
+a ==@ b = a ==~ b && equating isAka a b
+
 data TileKind = ManTile | PinTile | SouTile | HonorTile
               deriving (Show, Read, Eq, Ord)
 

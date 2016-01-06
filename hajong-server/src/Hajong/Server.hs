@@ -285,9 +285,9 @@ disconnects (PartedException reason) = do
     updateLounge
 
     case cr^.cInGame of
-        Just gid -> withRunningGame gid
-            (`putWorker` WorkerPartPlayer c (const $ return ()))
+        Just gid -> withRunningGame gid (`putWorker` WorkerPartPlayer c False (const $ return ()))
         Nothing  -> return ()
+
     putLounge (PartServer $ getNick c)
 
 cleanupClient :: Text -> Server ()
@@ -301,17 +301,23 @@ handleEventOf :: Client -> Event -> Server ()
 handleEventOf c event = case event of
     JoinServer{}      -> uniError "Already joined (and nick change not implemented)"
     PartServer reason -> liftIO $ throwIO $ PartedException reason
-    JoinGame n _      -> joinGame n
-    ForceStart n      -> forceStart n
-    InGameAction a    -> handleGameAction a
+    ClientIdentity{}  -> uniError "Unhandled event ClientIdentity"
     Message _ msg     -> do mgid <- query (GetClientRecord $ getIdent c) <&> (>>= _cInGame)
                             let m = Message (getNick c) msg
                             maybe (putLounge m) (flip withRunningGame $ mapM_ (flip safeUnicast m) . _gClients) mgid
-    _                 -> uniError $ "Event not allowed or not implemented (" <> tshow event <> ")"
+    Invalid{}         -> uniError "Unhandled event Invalid"
+
+    JoinGame n _      -> joinGame n
+    PartGame _        -> partGame
+    ForceStart gid    -> forceStart gid
+
+    InGamePrivateEvent{} -> uniError "Unhandled event InGamePrivateEvent"
+    InGameEvents{}    -> uniError "Unhandled event InGameEvents"
+    InGameAction ga   -> handleGameAction ga
 
 -- ** Actions
 
-joinGame :: Int -> Server ()
+joinGame :: GID -> Server ()
 joinGame gid = do
     c  <- view seClient
     $logInfo $ "Nick " <> getNick c <> " joins game " <> tshow gid
@@ -319,21 +325,40 @@ joinGame gid = do
     Just cr <- query $ GetClientRecord (getIdent c)
     case cr^.cInGame of
         Just gid' | gid' /= gid -> uniError "You are already in some other game. You cannot join multiple games simultaneously."
-        _                       -> withRunningGame gid (handleJoinGame gid)
+        _                       -> withRunningGame gid handleJoinGame
 
-handleJoinGame :: Int -> RunningGame -> Server ()
-handleJoinGame gid rg = do
-    ss <- ask
+  where
+
+    handleJoinGame :: RunningGame -> Server ()
+    handleJoinGame rg = do
+        ss <- ask
+        c  <- view seClient
+        let nick = getNick c
+            uid  = getIdent c
+        putWorker rg $ WorkerAddPlayer c $ \gs -> do
+            multicast gs (JoinGame gid nick)
+            liftIO $ runServer ss $ do
+                update $ SetPlayerGame gid uid
+                update $ SetGame gid (getIdent <$> gs)
+                atomically $ do modifyTVar' (ss^.seLounge) (deleteSet c)
+                                modifyTVar' (ss^.seWorkers) (ix gid.gClients.at uid .~ Just c)
+                putLounge (JoinGame gid nick)
+
+partGame :: Server ()
+partGame = withInGame $ \gid -> do
+    st <- ask
     c  <- view seClient
-    let nick = getNick c
-    putWorker rg $ WorkerAddPlayer c $ \gs -> do
-        multicast gs (JoinGame gid nick)
-        liftIO $ runServer ss $ do
-            update $ SetPlayerGame gid (getIdent c)
-            update $ SetGame gid (getIdent <$> gs)
-            atomically $ do modifyTVar' (ss^.seLounge) (deleteSet c)
-                            modifyTVar' (ss^.seWorkers) (ix gid.gClients.at (getIdent c) .~ Just c)
-            putLounge (JoinGame gid nick)
+    let uid  = getIdent c
+        nick = getNick c
+    $logInfo $ "Client " <> getNick c <> " leaving game " <> tshow gid
+    withRunningGame gid $ \rg ->
+        putWorker rg $ WorkerPartPlayer c True $ \gs -> do
+            multicast gs (PartGame nick)
+            liftIO $ runServer st $ do
+                update $ AbandonPlayerGame uid gid (getIdent <$> gs)
+                atomically $ do modifyTVar' (st^.seLounge) (insertSet c)
+                                modifyTVar' (st^.seWorkers) (ix gid.gClients.at uid .~ Nothing)
+                putLounge (PartGame nick)
 
 -- | Force the specfied game to start even if there are not enough players.
 forceStart :: Int -> Server ()
@@ -343,7 +368,7 @@ forceStart n = withRunningGame n (`putWorker` WorkerForceStart)
 handleGameAction :: GameAction -> Server ()
 handleGameAction action = withInGame $ \n -> withRunningGame n $ \gr -> do
     c <- view seClient
-    putWorker gr (c `WorkerGameAction` action)
+    putWorker gr (WorkerGameAction c action)
 
 createGame :: GameSettings -> Server ()
 createGame settings = do
@@ -386,13 +411,13 @@ updateLounge = do
 
     forM_ lounge (`safeUnicast` loungeInfo)
 
-withInGame :: (Int -> Server ()) -> Server ()
+withInGame :: (GID -> Server ()) -> Server ()
 withInGame f = do
     c        <- view seClient
     Just res <- query $ GetClientRecord (getIdent c)
     maybe (uniError "You are not in a game") f (res^.cInGame)
 
-withRunningGame :: Int -> (RunningGame -> Server ()) -> Server ()
+withRunningGame :: GID -> (RunningGame -> Server ()) -> Server ()
 withRunningGame gid f = do
     res <- rview seWorkers <&> view (at gid)
     maybe (uniError $ "Game " <> tshow gid <> " not found!") f res
