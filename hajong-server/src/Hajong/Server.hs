@@ -46,8 +46,17 @@ serverMain = do
     let configFile | [x] <- args = unpack x
                    | otherwise   = "config/settings.yml"
 
-    conf@ServerConfig{..} <- readConfigFile configFile (Just "hajong")
+    config <- readConfigFile configFile (Just "hajong")
+    st <- serverStartParts config
+    runServer st serverDebugger
 
+-- |
+-- * set up logging
+-- * restart hibernated games
+-- * fork a websocket listener
+-- * fork a acid remote at the socket
+serverStartParts :: ServerConfig -> IO ServerSt
+serverStartParts conf@ServerConfig{..} = do
     unlessM (doesDirectoryExist _logDirectory) (createDirectory _logDirectory)
     lgr                   <- newFileLoggerSet defaultBufSize $ _logDirectory </> "server.log"
     st                    <- makeServerSt conf lgr
@@ -55,10 +64,9 @@ serverMain = do
     runServer st restartGames
     void . forkIO $ runServer st workerWatcher
     void . forkIO $ WS.runServer _websocketHost _websocketPort (wsApp st)
+    void $ forkServerAcidRemote st (UnixSocket _databaseSocket)
 
-    finalizer <- forkServerAcidRemote st (UnixSocket _databaseSocket)
-    -- XXX: We open the debugger here on no conditions
-    runServer st serverDebugger `finally` finalizer
+    return st
 
 makeServerSt :: ServerConfig -> LoggerSet -> IO ServerSt
 makeServerSt conf lgr = do
@@ -84,15 +92,14 @@ startGame gid game = do
 
 -- * ACID Database
 
--- | Returns the finalizer
-forkServerAcidRemote :: ServerSt -> PortID -> IO (IO ())
-forkServerAcidRemote st port = do
-    _threadId <- forkIO $ withSocketsDo $ do
-        sckt <- listenOn port
-        acidServer' skipAuthenticationCheck sckt (st^.db)
-    return $ case port of
-                 UnixSocket str -> removeFile str
-                 _ -> return ()
+forkServerAcidRemote :: ServerSt -> PortID -> IO ThreadId
+forkServerAcidRemote st port = flip forkFinally finalize $ withSocketsDo $ do
+    sckt <- listenOn port
+    acidServer' skipAuthenticationCheck sckt (st^.db)
+  where
+    finalize = \_ -> case port of
+                   UnixSocket str -> removeFile str
+                   _              -> return ()
 
 openServerDB :: PortID -> IO (AcidState ServerDB)
 openServerDB = openRemoteState skipAuthenticationPerform "127.0.0.1"

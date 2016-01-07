@@ -27,11 +27,9 @@ main :: IO ()
 main = do
     -- The server process used by the client tests
     putStrLn "Starting server process :9160..."
-    pid <- Server.setupProcess
+    _st <- Server.forkTestServer
 
-    defaultMain tests `finally` do
-        putStrLn "Killed server process."
-        signalProcess killProcess pid
+    defaultMain tests
 
 tests :: TestTree
 tests = testGroup "Hajong tests"

@@ -184,7 +184,7 @@ updateAfterDiscard d@Discard{..} hand = updateFlags
     . updateFuriten                                      -- If the discard brought us to furiten state set a flag -- XXX: should be a flag
     . setRiichi                                          -- If we riichi with the discard, set a flag -- XXX: should be a flag
     . set handIppatsu (if' _dcRiichi True False)         -- Ippatsu-flag is set here XXX: should be a flag
-    . set (handCanTsumo._Wrapped) False                  -- tsumo possible at least after discard
+    . set (handCanTsumo._Wrapped) False                  -- tsumo impossible at least after discard
     . over handDiscards (|> d)                           -- Discard to discard pool
     $ movePicks hand                                     -- handPicks -> handConcealed
   where
@@ -194,7 +194,7 @@ updateAfterDiscard d@Discard{..} hand = updateFlags
         | otherwise                            = id
     updateFlags                                = handFlags._Wrapped %~ deleteSet HandFirsRoundUninterrupted
     movePicks                                  = over (handConcealed._Wrapped) (++ map pickedTile (_handPicks hand)) . set handPicks []
-    updateFuriten                              = handFuriten._Wrapped .~ if' (furiten hand) Furiten NotFuriten
+    updateFuriten h                            = h & handFuriten._Wrapped .~ if' (furiten h) Furiten NotFuriten
 
 -- | Update hand state after picked tile
 updateAfterPick :: PickedTile Identity -> HandA -> HandA

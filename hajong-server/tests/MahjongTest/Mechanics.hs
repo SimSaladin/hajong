@@ -247,8 +247,7 @@ furitenTests = testGroup "Furiten tests"
 
   , testCase "Chiitoi furiten" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "M3"]
-                         <&> sHands . ix Nan . handDiscards .~ [Discard "M3" Nothing False]
-                         <&> sHands . ix Nan %~ updateFuriten
+                         <&> sHands . ix Nan %~ updateAfterDiscard ( Discard "M3" Nothing False )
                          <&> sHands.ix Shaa .handConcealed._Wrapped .~ ["M3", "M3"] -- needed to ensure some other possible shout
                          <&> sWall %~ ("M3" <|)
 
@@ -263,8 +262,7 @@ furitenTests = testGroup "Furiten tests"
   , testCase "Kokushi furiten" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"]
                          <&> sHands.ix Shaa .handConcealed._Wrapped .~ ["G", "G"] -- needed to ensure some other possible shout
-                         <&> sHands . ix Nan . handDiscards .~ [Discard "G" Nothing False]
-                         <&> sHands . ix Nan %~ updateFuriten
+                         <&> sHands . ix Nan %~ updateAfterDiscard (Discard "G" Nothing False)
                          <&> sWall %~ cons "G"
 
       let res = runKyokuState kyoku $ do
