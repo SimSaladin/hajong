@@ -1,7 +1,10 @@
 x = done, / = half done, ! = needs testing
 
 ## open tasks
+[ ] [game] hand is not considered closed when winning on ron (agari should not produce an open meld)
 [ ] [game] riichi is deducted from payer on ron
+[ ] [game] riichi-with tile can be tsumogiri
+[ ] [elm/game] waiting-for info should be encoded to the gamestate instead of events; now player can discard his shout options by refreshing
 [ ] [elm/game] display uradora on win. They're in roundstate .flags when someone has won (or at least, should be)
 [ ] [elm/game] uradorat ei toimi? näytä ura-indikaattorit pelin lopussa
 [ ] [elm/game] new dora are not updated from server? at least, not displayed in elm without a refresh. see the flipped-dora event.
