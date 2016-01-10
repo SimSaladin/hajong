@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Game.Yaku.Builder
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)

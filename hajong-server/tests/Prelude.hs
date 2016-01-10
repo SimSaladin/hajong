@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Prelude
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)

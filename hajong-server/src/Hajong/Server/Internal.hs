@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Server.Internal
 -- Copyright      : (C) 2016 Samuli Thomasson
 -- License        : %% (see the file LICENSE)

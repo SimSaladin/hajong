@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiWayIf #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Database.Queries
 -- Copyright      : (C) 2016 Samuli Thomasson
 -- License        : %% (see the file LICENSE)
@@ -43,7 +43,7 @@ data ServerDB = ServerDB
     , _seGameRecord    :: Record
     -- ^ Integral game identifiers.
     , _seGames         :: IntMap Game
-    -- ^ Games that are running at the moment, analogous to @_seReserved@. 
+    -- ^ Games that are running at the moment, analogous to @_seReserved@.
     , _seHistory       :: Map UUID PastGame
     -- ^ History of games that have finished.
     } deriving (Show, Typeable)
@@ -72,7 +72,7 @@ connectClient time ident token = do
                                           return (Right (ident, c'))
                | otherwise          -> return $ Left $ "Auth tokens didn't match (got " <> token <> ")"
 
--- | Client disconnects: Set status to Left in corresponding ClientRecord. 
+-- | Client disconnects: Set status to Left in corresponding ClientRecord.
 --
 -- @partClient currentTime ident@
 partClient :: UTCTime -> Int -> Update ServerDB (Maybe ClientRecord)
@@ -162,7 +162,7 @@ setPlayerGame gid i = seReserved.at i._Just.cInGame .= Just gid
 -- player ever playing in the game.
 abandonPlayerGame :: Int -- ^ UID
                   -> Int -- ^ GID
-                  -> Game -- ^ GameState after update 
+                  -> Game -- ^ GameState after update
                   -> Update ServerDB ()
 abandonPlayerGame uid gid game = do
     seReserved.ix uid.cInGame .= Nothing

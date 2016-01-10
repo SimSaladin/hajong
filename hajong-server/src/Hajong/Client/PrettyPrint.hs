@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Client.Pretty
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
@@ -30,7 +30,7 @@ ppNicks nicks = case setToList nicks of
             (x:xs) -> foldl' (\a b -> a <> ", " <> b) x xs
 
 -- * Functions
- 
+
 breakGamePlayer :: GamePlayer -> [PInfo]
 breakGamePlayer pstate = zipWith
       (\(player, nick, points) (_, hand) -> (player, nick, points, hand))
@@ -74,7 +74,7 @@ pinfoNickPoints :: Int -> PInfo -> Text
 pinfoNickPoints n (_, nick, points, _) = intercalate "\n" $ map (justifyRight n ' ')
     [ pretty (PNick nick), pretty (PPoints points) ]
 
--- * Related types 
+-- * Related types
 
 type PInfo = (Player, Nick, Points, HandPublic)
 
@@ -115,13 +115,13 @@ instance Pretty GamePlayer where
             [openMine, openRight, openFront, openLeft] = map pretty    (players ^.. each._4.handCalled)
 
         return $ string $ unlines $ []
-                & pushToPlace dora      (12, 24) 
+                & pushToPlace dora      (12, 24)
                 & pushToPlace wallCount (10, 24)
-                & pushToPlace dmine     (15, 22) 
-                & pushToPlace dleft     (9 , 14) 
+                & pushToPlace dmine     (15, 22)
+                & pushToPlace dleft     (9 , 14)
                 & pushToPlace dfront    (6 , 22) -- TODO fails if discards go over 6*3
                 & pushToPlace dright    (9 , 39) --  here too
-                & pushToPlace concealed (21, 4 ) 
+                & pushToPlace concealed (21, 4 )
                 & pushToPlace openMine  (21, 49)
                 & pushToPlace openRight (2 , 49)
                 & pushToPlace openFront (1 , 5 )

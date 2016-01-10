@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : HajongTest.Server.Worker
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
@@ -31,23 +31,23 @@ tests = testGroup "Worker" []
 --             killThread tid
 --             return True
 --     ]
--- 
+--
 -- -- * Helper framework
--- 
+--
 -- type TestClient = (Client, Event -> IO (), IO Event)
--- 
+--
 -- worker :: LoggerSet -> IO ([Event -> IO ()], TChan (Nick, Event), ThreadId)
 -- worker lgr = do
 --     wiv <- newEmptyTMVarIO
 --     tid <- startWorker wiv (newEmptyGS (dummyClient "dummy") "test-state") lgr
--- 
+--
 --     clients <- testClients
 --     clientsEvents <- clientsCombineOutput clients
 --     fs  <- forM clients $ \(c, f, _) -> do
 --         liftIO $ atomically $ putTMVar wiv $ WorkerAddPlayer c (\_ -> return ())
 --         return f
 --     return (fs, clientsEvents, tid)
--- 
+--
 -- clientsCombineOutput :: [TestClient] -> IO (TChan (Nick, Event))
 -- clientsCombineOutput xs = do
 --     chan <- newTChanIO
@@ -55,12 +55,12 @@ tests = testGroup "Worker" []
 --         let go = m >>= liftIO . atomically . writeTChan chan . (getNick c,) >> go
 --             in void $ forkIO go
 --     return chan
--- 
+--
 -- testClients :: IO [TestClient]
 -- testClients = zipWith3 testClient ["1", "2", "3", "4"]
 --     <$> replicateM 4 newEmptyTMVarIO
 --     <*> replicateM 4 newTChanIO
--- 
+--
 -- testClient :: Nick -> TMVar Event -> TChan Event -> TestClient
 -- testClient nick input_v output_v =
 --     ( Client

@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Game.Yaku.Standard
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
@@ -91,7 +91,7 @@ ittsuu = do
 -- NOTE this does/should not combine with chanta
 honroutou :: YakuCheck Yaku
 honroutou = do
-    replicateM_ 4 $ anyKoutsuKantsu (terminal |. honor) 
+    replicateM_ 4 $ anyKoutsuKantsu (terminal |. honor)
     anyJantou (terminal |. honor)
     return (Yaku 2 "Honroutou")
 
@@ -178,7 +178,7 @@ honitsu = do
 junchan :: YakuCheck Yaku
 junchan = do
     concealedHandDegrade
-    anyShuntsu terminal 
+    anyShuntsu terminal
     replicateM_ 4 $ anyMentsuJantou terminal
     return (Yaku 3 "Junchan")
 
@@ -242,7 +242,7 @@ ryuuiisou = do
     tiles <- yakuAllTiles
     if all isGreen tiles then return $ Yaku 13 "Ryyiisou" else yakuFail
   where
-    isGreen t = any (t ==~) ["G", "S2", "S3", "S4", "S6", "S8"] 
+    isGreen t = any (t ==~) ["G", "S2", "S3", "S4", "S6", "S8"]
 
 -- | all-terminals
 chinroutou :: YakuCheck Yaku

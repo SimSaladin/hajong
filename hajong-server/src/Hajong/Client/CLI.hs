@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Client.CLI
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
@@ -152,7 +152,7 @@ gameInputHandler ch
             'p' -> emit $ Pon tp dt
             'c' -> emit $ Chi tp dt [] -- TODO get the tiles
             'k' -> emit $ Kan tp dt
-            'r' -> emit $ Ron tp dt [] -- TODO 
+            'r' -> emit $ Ron tp dt [] -- TODO
             _   -> unknownCommand ch
 
 unknownCommand :: Char -> ClientM ()
@@ -194,7 +194,7 @@ eventHandler ev = case ev of
             lounge <- rview clientLounge
             let players = lounge^.loungeGames.at n.traversed._2
                 countInfo
-                    | length players < 4 = tshow (4 - length players) <> " more players until game starts." 
+                    | length players < 4 = tshow (4 - length players) <> " more players until game starts."
                     | otherwise          = " Game is starting!"
             me <- isMyNick nick
             if me

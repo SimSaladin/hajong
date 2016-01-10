@@ -387,7 +387,7 @@ createGame settings = do
         Right g  -> do rg <- startGame g game
                        ws <- view seWorkers
                        atomically $ modifyTVar ws (insertMap g rg)
-                       uni $ InternalGameCreated g 
+                       uni $ InternalGameCreated g
 
 -- * Utility
 

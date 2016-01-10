@@ -85,7 +85,7 @@ execWorker :: WorkerData -> Worker a -> IO a
 execWorker st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
     where logger loc src level = pushLogStr (st^.wLogger) . defaultLogStr loc src level
 
--- * Managing connected players 
+-- * Managing connected players
 
 -- | Remove the player identified by connection from the game and replace
 -- the player with a dummy client.

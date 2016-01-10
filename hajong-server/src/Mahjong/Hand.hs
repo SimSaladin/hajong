@@ -25,16 +25,16 @@ module Mahjong.Hand
     , PickedTile(..), FuritenState(..), HandFlag(..), Agari(..)
 
     -- ** lenses
-    , handCalled   
-    , handDiscards 
-    , handRiichi   
-    , handIppatsu  
+    , handCalled
+    , handDiscards
+    , handRiichi
+    , handIppatsu
     , handAgari
-    , handState    
-    , handPicks    
+    , handState
+    , handPicks
     , handConcealed
-    , handFuriten  
-    , handCanTsumo 
+    , handFuriten
+    , handCanTsumo
     , handFlags
     , dcTile, dcRiichi, dcTo
     ) where
@@ -136,7 +136,7 @@ discard d@Discard{..} hand
     | hand^.handState /= DrawNone                 = throwError "You need to draw first"
 
     | hand^.handRiichi /= NoRiichi, p : _ <- hand^.handPicks, pickedTile p /= _dcTile
-                                                  = throwError "Cannot change wait in riichi" 
+                                                  = throwError "Cannot change wait in riichi"
     | otherwise                                   = updateAfterDiscard d <$> tileFromHand _dcTile hand
 
 -- | The tiles of the shout (including shoutTo-tiles) must NOT be present
@@ -213,7 +213,7 @@ meldTo shout hand
     | not correctConcealedTilesInHand       = throwError $ "meldTo: Tiles not available (concealed: " ++ tshow concealedTiles ++ ", needed: " ++ tshow tilesFromHand ++ ")"
     | shoutKind shout `elem` [Ron, Chankan] = rons shout (removeFromConcealed hand)
     | shoutKind shout == Kan                = return $ (handState .~ DrawFromWanpai) (moveFromConcealed hand)
-    | otherwise                             = return $ moveFromConcealed hand 
+    | otherwise                             = return $ moveFromConcealed hand
   where
     tilesFromHand               = shoutTo shout
     concealedTiles              = hand^.handConcealed._Wrapped

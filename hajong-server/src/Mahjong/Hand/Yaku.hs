@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Mahjong.Yaku
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
@@ -27,7 +27,7 @@ import            Mahjong.Kyoku.Internal
 -- mutual exclusivity is necessary at this level only for some exceptions,
 -- i.e. yaku that wholly include some other yaku (iipeikou and ryanpeikou).
 standardYaku :: [[YakuCheck Yaku]]
-standardYaku = 
+standardYaku =
     [ [ chankan ]
     , [ menzenTsumo ]
     , [ haiteiRaoyui ]
@@ -70,7 +70,7 @@ standardYaku =
 standardYakumans :: [YakuCheck Yaku]
 standardYakumans = [ kokushiMusou, daisangen, suuankou, suushiihou, tsuuiisou, ryuuiisou, chinroutou, chuurenPoutou, suuKantsu, tenhouOrChiihou ]
 
--- | Check a list of yaku that are 
+-- | Check a list of yaku that are
 checkYaku :: [[YakuCheck Yaku]] -> ValueInfo -> Grouping -> [Yaku]
 checkYaku yakus vi grp = mapMaybe (msum . map (runYakuCheck vi grp)) yakus
 

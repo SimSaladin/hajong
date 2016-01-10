@@ -1,6 +1,6 @@
 #!/bin/bash
 #-----------------------------------------------------------------------------
-# File:          
+# File:
 # Creation Date:
 # Last Modified:
 # Created By: Samuli Thomasson [SimSaladin] samuli.thomassonAtpaivola.fi

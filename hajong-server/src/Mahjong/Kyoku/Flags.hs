@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Mahjong.Kyoku.Flags
 -- Copyright      : (C) 2015 Samuli Thomasson
 -- License        : %% (see the file LICENSE)

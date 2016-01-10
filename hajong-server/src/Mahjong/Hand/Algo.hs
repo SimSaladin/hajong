@@ -254,7 +254,7 @@ groupingShanten n tgs = case foldl' (\i -> (i -) . tgval) n tgs of
     tgval (GroupWait{})          = 1
     tgval (GroupLeftover{})      = 0
     pairExtra = max 0 (length (filter notPairable tgs) - 4)
-    
+
 -- | If there is a shuntsu wait, that is the only possible agari. If there
 -- is a single leftover tile that is the agari. otherwise any of the koutsu
 -- waits can be completed (thus agari).

@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : HajongTest.Client.PrettyPrint
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
@@ -64,11 +64,11 @@ dummyFullState = RiichiState secret public
             , _riichiPoints        = mapFromList $ zip defaultPlayers (repeat 25000)
             , _riichiEvents        = []
             }
-        
+
         fullHand = initHand (take 13 riichiTiles)
             & set (handPublic.handDiscards) souTiles
             . set (handPublic.handOpen) [mentsu, mentsu, mentsu, mentsu]
- 
+
         mentsu = Koutsu (replicate 3 $ pread "M3") Nothing
 
 souTiles :: [(Tile, Maybe Player)]

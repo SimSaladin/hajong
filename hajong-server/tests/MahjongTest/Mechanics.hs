@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : MahjongTest.Mechanics
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
@@ -22,7 +22,7 @@ tests = testGroup "Game mechanics"
   [ gameFlowTests, furitenTests, riichiTests, weirdYaku, yakumans, scoringTests ]
 
 gameFlowTests :: TestTree
-gameFlowTests = testGroup "Game flow" 
+gameFlowTests = testGroup "Game flow"
   [ testCase "Game ends when a Ron is called and game is continued" $ do
 
         kyoku <- testKyoku <&> sHands.ix Nan .handConcealed . _Wrapped .~ ["M5", "M5", "M5", "P5", "P6", "P7", "P8", "P8", "S4", "S5", "S6", "S7", "S8"]
@@ -83,7 +83,7 @@ gameFlowTests = testGroup "Game flow"
             autoAndDiscard Ton $ Discard "P5" Nothing False
             stepped $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
             autoEndTurn
-        
+
       case res of
           Right (_evs, (r, _k)) -> assertFailure $ "Didn't fail, received " ++ show r
           Left r                -> return ()
@@ -176,7 +176,7 @@ gameFlowTests = testGroup "Game flow"
             autoAndDiscard Ton $ Discard "P5" Nothing False
             stepped_ $ InpShout Nan $ Shout Pon Ton "P5" ["P5", "P5"]
             stepped_ $ InpShout Nan $ Shout Pon Ton "P5" ["P5", "P5"]
-    
+
       case res of
           Left err -> err @?= "You have already called on that tile"
           Right _  -> assertFailure "Game should have errored"
@@ -219,7 +219,7 @@ gameFlowTests = testGroup "Game flow"
             stepped $ InpPass Nan
 
       requireRight res $ \(_,(m,_)) -> m @?= CheckEndConditionsAfterDiscard
-      
+
   ]
 
 furitenTests :: TestTree

@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Mahjong.Hand.Internal
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
@@ -159,7 +159,7 @@ instance (SafeCopy (m (Set HandFlag)), SafeCopy (m Bool), SafeCopy (m [Tile]), S
 -- | All info
 type HandA = Hand Identity
 
--- | Public info only 
+-- | Public info only
 type HandP = Hand Maybe
 
 -- * Construct hand

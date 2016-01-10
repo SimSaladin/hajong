@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Database
 -- Copyright      : (C) 2016 Samuli Thomasson
 -- License        : %% (see the file LICENSE)
@@ -10,7 +10,7 @@
 -- Every function here has a corresponding acidic constructor, see below.
 ------------------------------------------------------------------------------
 module Hajong.Database
-    ( 
+    (
     module Hajong.Database,
 
     -- * Queries

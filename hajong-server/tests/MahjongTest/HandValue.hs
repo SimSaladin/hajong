@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : MahjongTest.HandValue
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : BSD-style (see the file LICENSE)
@@ -29,8 +29,8 @@ tests = testGroup "Hand value"
         , testCase " G honor minkantsu     " $ minkantsu "G " @?= 16
         , testCase " G honor ankantsu      " $ ankantsu  "G " @?= 32
 
-        , testCase " M1 jantou "            $ mentsuValue (jantou "M1") @?= 0 
-        , testCase " G jantou "             $ mentsuValue (jantou "G") @?= 0 
+        , testCase " M1 jantou "            $ mentsuValue (jantou "M1") @?= 0
+        , testCase " G jantou "             $ mentsuValue (jantou "G") @?= 0
 
         , testProperty "Fu of any shuntsu is 0" $ (== 0) . mentsuValue <$> arbitraryShuntsu
         ]

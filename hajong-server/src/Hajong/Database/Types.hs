@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-} -- XXX: get rid of this
 
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Hajong.Database.Types
 -- Copyright      : (C) 2016 Samuli Thomasson
 -- License        : %% (see the file LICENSE)
@@ -26,7 +26,7 @@ import qualified Data.UUID as UUID
 data ClientRecord = ClientRecord
     { _cNick           :: Text
     -- ^ Better named username; maps to them.
-    , _cToken          :: Text 
+    , _cToken          :: Text
     -- ^ When a client has disconnected, to reconnect it must know this
     -- token. If the client loses the token, it must retrieve it by
     -- authenticating to the site which gets and sends the value to the

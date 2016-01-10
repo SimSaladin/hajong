@@ -43,7 +43,7 @@ liftE = either throwError return
 rview :: (MonadReader s m, MonadIO m) => Getting (TVar b) s (TVar b) -> m b
 rview l = view l >>= atomically . readTVar
 
-rswap :: (MonadReader s m, MonadIO m) => Getting (TVar b) s (TVar b) -> b -> m b 
+rswap :: (MonadReader s m, MonadIO m) => Getting (TVar b) s (TVar b) -> b -> m b
 rswap l a = view l >>= atomically . (`swapTVar` a)
 
 rmodify :: (MonadReader s m, MonadIO m) => Getting (TVar a) s (TVar a) -> (a -> a) -> m ()

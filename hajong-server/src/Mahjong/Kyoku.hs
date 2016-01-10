@@ -194,7 +194,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
     GameEnded _ -> []
 
 dealTurnAction :: Kaze -> TurnAction -> Endo Kyoku
-dealTurnAction p ta = mconcat $ case ta of 
+dealTurnAction p ta = mconcat $ case ta of
 
     TurnTileDiscard dc ->
         [ Endo $ sHands.ix p.handDiscards %~ (|> dc) ]

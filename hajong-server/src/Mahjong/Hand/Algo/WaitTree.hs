@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, FlexibleInstances #-}
 ------------------------------------------------------------------------------
--- | 
+-- |
 -- Module         : Mahjong.Hand.Algo.WaitTree
 -- Copyright      : (C) 2014 Samuli Thomasson
 -- License        : MIT (see the file LICENSE)
