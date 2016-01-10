@@ -404,10 +404,11 @@ riichiTests = testGroup "Riichi tests"
           Right (_,(m,k)) -> traceShowM (m,k) >> assertFailure "Game should have errored"
 
   , testCase "When riichi, ura-dora are opened" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handRiichi .~ Riichi
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+                         <&> sHands . ix Ton . handAgari .~ Just (AgariTsumo "P5" False)
+                         <&> sHands . ix Ton . handRiichi .~ Riichi
       let res = runKyoku kyoku $ getValuedHand Ton
       requireRight res $ \(vh, _, _) -> return () -- we just check that there were no complications
-            
   ]
 
 weirdYaku :: TestTree

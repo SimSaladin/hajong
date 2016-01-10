@@ -250,11 +250,10 @@ type RiichiState = NoRiichi | Riichi | DoubleRiichi
 
 type DrawState = DrawFromWanpai | DrawFromWall | DrawNone
 
-type PickedTile = FromWall (Maybe Tile)
-                | FromWanpai (Maybe Tile)
-                | AgariTsumo Tile
-                | AgariTsumoWanpai Tile
-                | AgariCall Shout
+type alias PickedTile = { tile : Maybe Tile, wanpai : Bool }
+
+type Agari = AgariCall Mentsu
+           | AgariTsumo Tile Bool
 
 type FuritenState = NotFuriten | Furiten | TempFuriten
 

@@ -436,7 +436,7 @@ dispHand : Kaze -> GameState -> Hand -> Element
 dispHand k st hand = flow right <|
    List.map2 (dispTileInHand st) [1..14] (sortTiles hand.concealed)
    ++ [ spacer 10 10 ]
-   ++ map (pickedTile >> dispTileInHand st (List.length hand.concealed + 1)) hand.picks
+   ++ map (.tile >> maybe empty (dispTileInHand st (List.length hand.concealed + 1))) hand.picks
    ++ [ spacer 10 10 ]
    ++ map (dispMentsu st k) hand.called
 
@@ -599,15 +599,17 @@ buttonElem' str col = collage 80 40
 
 -- {{{ Utility -----------------------------------------------------------------
 findFourTiles : RoundState -> Maybe Tile
-findFourTiles rs = counted 4 <| sortTiles <| rs.myhand.concealed ++ map pickedTile rs.myhand.picks
+findFourTiles rs = counted 4 <| sortTiles <| rs.myhand.concealed ++ map (.tile >> fromJust) rs.myhand.picks
 
 findShouminkan : Hand -> List Tile
 findShouminkan h = List.filter
-   (\mentsu -> mentsu.mentsuKind == Koutsu && List.any (\t -> t `List.member` mentsu.tiles) (h.concealed ++ map pickedTile h.picks))
+   (\mentsu -> mentsu.mentsuKind == Koutsu && List.any (\t -> t `List.member` mentsu.tiles) (h.concealed ++ map (.tile >> fromJust) h.picks))
    h.called -- TODO This fails when picked more than one tile
      |> map (fromJust << List.head << .tiles)
 
--- | The nth unique tile
+-- | Finds a tile we have 4 of in hand
+-- TODO: This only finds the first quad. Should find all of them and return a
+-- list.
 counted : Int -> List Tile -> Maybe Tile
 counted m ts =
    let go n xs = case xs of

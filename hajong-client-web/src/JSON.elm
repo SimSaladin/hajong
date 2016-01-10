@@ -160,13 +160,7 @@ riichiState = string |> map (\x -> case x of
    _              -> Debug.crash <| "Couldn't deserialize riichi type `" ++ x ++ "'")
 
 pickedTile : Decoder PickedTile
-pickedTile = "type" := string `andThen` \t -> case t of
-   "from-wall"          -> object1 FromWall         (maybe ("tile" := tile))
-   "from-wanpai"        -> object1 FromWanpai       (maybe ("tile" := tile))
-   "agari-tsumo"        -> object1 AgariTsumo       ("tile" := tile)
-   "agari-call"         -> object1 AgariCall        ("shout" := shout)
-   "agari-tsumo-wanpai" -> object1 AgariTsumoWanpai ("tile" := tile)
-   _                    -> Debug.crash <| "Couldn't deserialize tile kind `" ++ t ++ "'"
+pickedTile = object2 PickedTile ("tile" := maybe tile) ("wanpai" := bool)
 
 furitenState : Decoder FuritenState
 furitenState = string |> map (\x -> case x of
@@ -378,12 +372,7 @@ toJSON_DrawState ds = case ds of
 
 
 toJSON_PickedTile : PickedTile -> Value
-toJSON_PickedTile pt = case pt of
-    FromWall mtile        -> Encode.object [("type", Encode.string "from-wall"), ("tile", Util.maybe Encode.null toJSON_Tile mtile)]
-    FromWanpai mtile      -> Encode.object [("type", Encode.string "from-wanpai"), ("tile", Util.maybe Encode.null toJSON_Tile mtile)]
-    AgariTsumo tile       -> Encode.object [("type", Encode.string "agari-tsumo"), ("tile", toJSON_Tile tile)]
-    AgariCall shout       -> Encode.object [("type", Encode.string "agari-call"), ("shout", toJSON_Shout shout)]
-    AgariTsumoWanpai tile -> Encode.object [("type", Encode.string "agari-tsumo-wanpai"), ("tile", toJSON_Tile tile)]
+toJSON_PickedTile pt = Encode.object [("tile", Util.maybe Encode.null toJSON_Tile pt.tile), ("wanpai", Encode.bool pt.wanpai)]
 
 toJSON_Discard : Discard -> Value
 toJSON_Discard {tile,to,riichi} = Encode.object

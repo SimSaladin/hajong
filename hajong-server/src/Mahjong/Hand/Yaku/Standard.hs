@@ -30,7 +30,13 @@ import           Mahjong.Hand.Internal
 yakuAllTiles :: YakuCheck [Tile]
 yakuAllTiles = do
     Hand{..} <- yakuState <&> view vHand
-    return $ mapMaybe pickedTileInHand _handPicks ++ runIdentity _handConcealed ++ concatMap mentsuTiles _handCalled
+    return $ runIdentity _handConcealed
+        ++ map pickedTile _handPicks
+        ++ concatMap mentsuTiles _handCalled
+        ++ case _handAgari of
+            Just (AgariTsumo tile _) -> [ tile ]
+            Just (AgariCall shout) -> M.shoutTile shout : M.shoutTo shout
+            _ -> []
 
 -- * 4 mentsu + 1 jantou
 
@@ -42,9 +48,11 @@ pinfu = do
     anyJantou suited
 
     -- require: wait (at least) two-sided
-    agari <- yakuState <&> pickedTile . view (vHand.handPicks.to lastEx)
-    [a, _, c] <- anyShuntsu' (suited &. containsTile agari) <&> tileGroupTiles
-    if (tileNumber a == Just Ii && agari ==~ c) || (tileNumber c == Just Chuu && agari ==~ a)
+    agari <- yakuState <&> view (vHand.handAgari)
+    agariTile <- maybe yakuFail (return . agariTile) agari -- TODO: agari should always be present in ValueInfo
+
+    [a, _, c] <- anyShuntsu' (suited &. containsTile agariTile) <&> tileGroupTiles
+    if (tileNumber a == Just Ii && agariTile ==~ c) || (tileNumber c == Just Chuu && agariTile ==~ a)
         then yakuFail
         else do
             replicateM_ 3 (anyShuntsu suited)
@@ -187,8 +195,9 @@ chinitsu = do
 chiitoitsu :: YakuCheck Yaku
 chiitoitsu = do
     concealedHand
+    tiles <- yakuAllTiles
     info <- yakuState
-    if Just (-1) == shantenBy chiitoitsuShanten (info^.vHand.handConcealed._Wrapped ++ (info^..vHand.handPicks.each.to pickedTile) ++ (info^..vHand.handCalled.each.filtered M.isJantou.to mentsuTiles.each))
+    if Just (-1) == shantenBy chiitoitsuShanten tiles
         then return (Yaku 2 "Chiitoitsu")
         else yakuFail
 
@@ -261,8 +270,8 @@ menzenTsumo :: YakuCheck Yaku
 menzenTsumo = do
     concealedHand
     info <- yakuState
-    case info^?vHand.handPicks._last of
-        Just (AgariTsumo _) -> return (Yaku 1 "Menzen Tsumo")
+    case info^.vHand.handAgari of
+        Just AgariTsumo{} -> return (Yaku 1 "Menzen Tsumo")
         _ -> yakuFail
 
 riichi :: YakuCheck Yaku
@@ -285,9 +294,9 @@ ippatsu = do
 haiteiRaoyui :: YakuCheck Yaku
 haiteiRaoyui = do
     info <- yakuState
-    let tsumo = case info^.vHand.handPicks of
-                     [AgariTsumo{}] -> True
-                     _              -> False
+    let tsumo = case info^.vHand.handAgari of
+                     Just AgariTsumo{} -> True
+                     _                 -> False
     if info^.vKyoku.pWallTilesLeft == 0 && tsumo
         then return (Yaku 1 "Haitei Raoyui")
         else yakuFail
@@ -295,9 +304,9 @@ haiteiRaoyui = do
 houteiRaoyui :: YakuCheck Yaku
 houteiRaoyui = do
     info <- yakuState
-    let called = case info^.vHand.handPicks of
-                     [AgariCall{}] -> True
-                     _             -> False
+    let called = case info^.vHand.handAgari of
+                     Just AgariCall{} -> True
+                     _                -> False
     if info^.vKyoku.pWallTilesLeft == 0 && called
         then return (Yaku 1 "Houtei Raoyui")
         else yakuFail
@@ -305,16 +314,16 @@ houteiRaoyui = do
 rinshanKaihou :: YakuCheck Yaku
 rinshanKaihou = do
     info <- yakuState
-    case info^?vHand.handPicks._last of
-        Just AgariTsumoWanpai{} -> return (Yaku 1 "Rinshan Kaihou")
-        _                       -> yakuFail
+    case info^.vHand.handAgari of
+        Just (AgariTsumo _ True) -> return (Yaku 1 "Rinshan Kaihou")
+        _                        -> yakuFail
 
 chankan :: YakuCheck Yaku
 chankan = do
     info <- yakuState
-    case info^?vHand.handPicks._last of
-        Just (AgariCall s) | M.shoutKind s == M.Chankan -> return (Yaku 1 "Chankan")
-        _                                               -> yakuFail
+    case info^.vHand.handAgari of
+        Just (AgariCall shout) | M.shoutKind shout == M.Chankan -> return (Yaku 1 "Chankan")
+        _ -> yakuFail
 
 nagashiMangan :: YakuCheck Yaku
 nagashiMangan = yakuFail -- NOTE: this is implemented in @Mahjong.Kyoku@ currently.
@@ -324,8 +333,8 @@ tenhouOrChiihou :: YakuCheck Yaku
 tenhouOrChiihou = do
     requireFlag FirstRoundUninterrupted
     info <- yakuState
-    case info^?vHand.handPicks._last of
-        Just (AgariTsumo _) -> return $ Yaku 13 $ if info^.vPlayer == Ton then "Tenhou" else "Chiihou"
+    case info^.vHand.handAgari of
+        Just AgariTsumo{} -> return $ Yaku 13 $ if info^.vPlayer == Ton then "Tenhou" else "Chiihou"
         _ -> yakuFail
 
 -- | Non-dealer ron on first uninterrupted round.

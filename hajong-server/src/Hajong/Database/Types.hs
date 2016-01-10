@@ -64,54 +64,17 @@ $(deriveSafeCopy 0 'base ''Machine)
 $(deriveSafeCopy 0 'base ''Player)
 $(deriveSafeCopy 0 'base ''Wanpai)
 $(deriveSafeCopy 0 'base ''GameSettings)
-$(deriveSafeCopy 0 'base ''Tile)
-$(deriveSafeCopy 0 'base ''TileEq)
-$(deriveSafeCopy 0 'base ''MentsuKind)
-$(deriveSafeCopy 0 'base ''Honor)
-$(deriveSafeCopy 0 'base ''Number)
-$(deriveSafeCopy 0 'base ''Sangen)
-$(deriveSafeCopy 0 'base ''TileKind)
 $(deriveSafeCopy 0 'base ''KyokuResults)
 $(deriveSafeCopy 0 'base ''AbortiveDraw)
 $(deriveSafeCopy 0 'base ''Flag)
 $(deriveSafeCopy 0 'base ''Value)
-$(deriveSafeCopy 0 'base ''Discard)
 $(deriveSafeCopy 0 'base ''TurnAction)
 $(deriveSafeCopy 0 'base ''Yaku)
-$(deriveSafeCopy 0 'base ''Mentsu)
-$(deriveSafeCopy 0 'base ''ShoutKind)
-$(deriveSafeCopy 0 'base ''Kaze)
 $(deriveSafeCopy 0 'base ''ValuedHand)
-$(deriveSafeCopy 0 'base ''Shout)
 $(deriveSafeCopy 0 'base ''GameEvent)
-$(deriveSafeCopy 0 'base ''RiichiState)
-$(deriveSafeCopy 0 'base ''DrawState)
-$(deriveSafeCopy 0 'base ''FuritenState)
-$(deriveSafeCopy 0 'base ''HandFlag)
 $(deriveSafeCopy 0 'base ''GameState)
 
 -- SafeCopy instances for indexed types
-
-instance (SafeCopy (m (Set HandFlag)), SafeCopy (m Bool), SafeCopy (m [Tile]), SafeCopy (m FuritenState), SafeCopy (PickedTile m)) => SafeCopy (Hand m) where
-    version          = 0
-    putCopy Hand{..} = contain $ do safePut _handCalled; safePut _handDiscards; safePut _handRiichi; safePut _handIppatsu; safePut _handState; safePut _handPicks; safePut _handConcealed; safePut _handFuriten; safePut _handCanTsumo; safePut _handFlags
-    getCopy          = contain $ Hand <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet
-
-instance SafeCopy (m Tile) => SafeCopy (PickedTile m) where
-    version = 0
-    putCopy (FromWall t)         = contain $ do safePut (0 :: Word8); safePut t
-    putCopy (FromWanpai t)       = contain $ do safePut (1 :: Word8); safePut t
-    putCopy (AgariTsumo t)       = contain $ do safePut (2 :: Word8); safePut t
-    putCopy (AgariCall s)        = contain $ do safePut (3 :: Word8); safePut s
-    putCopy (AgariTsumoWanpai t) = contain $ do safePut (4 :: Word8); safePut t
-    getCopy = contain $ do tag <- safeGet
-                           case tag :: Word8 of
-                               0 -> FromWall <$> safeGet
-                               1 -> FromWanpai <$> safeGet
-                               2 -> AgariTsumo <$> safeGet
-                               3 -> AgariCall <$> safeGet
-                               4 -> AgariTsumoWanpai <$> safeGet
-                               _ -> fail $ "Couldn't identify tag " ++ show tag
 
 instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
     version = 0

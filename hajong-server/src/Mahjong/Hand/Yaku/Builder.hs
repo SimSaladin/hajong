@@ -83,7 +83,8 @@ runYakuCheck info grouping = fmap fst . (`runStateT` grouping) . iterM f
         f YakuFailed                    = lift Nothing
 
         putRes (tg, g) = put g >> return tg
-        isConcealed    = null $ info^..vHand.handCalled.each.filtered (maybe True ((/= Ron) . shoutKind) . mentsuShout)
+        isConcealed    = null $ info^..vHand.handCalled.each.filtered
+            (maybe True ((`notElem` [Ron, Chankan]) . shoutKind) . mentsuShout)
         hasFlag flag   = elem flag $ info^.vKyoku.pFlags
 
 -- @MentsuProp@s

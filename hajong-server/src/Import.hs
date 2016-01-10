@@ -20,6 +20,7 @@ import           Control.Monad.State.Class    as X
 import           Control.Monad.Writer.Class   as X
 import           Control.Monad.Trans.Either   as X
 import           Data.Aeson.TH
+import           Data.SafeCopy                as X (deriveSafeCopy, base)
 ------------------------------------------------------------------------------
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 import           Text.PrettyPrint.ANSI.Leijen as X (Pretty(..), (<+>), string, list)

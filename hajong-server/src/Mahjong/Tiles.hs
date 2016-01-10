@@ -19,7 +19,45 @@ import Text.PrettyPrint.ANSI.Leijen ((<>), displayS, renderCompact, dquotes)
 import qualified Data.List as L
 ------------------------------------------------------------------------------
 
+-- * Tile order
+
+-- | @CircularOrd@ models the succession of tiles, dragons and winds.
+class CircularOrd a where
+    (==~) :: CircularOrd a => a -> a -> Bool
+    succCirc, predCirc :: CircularOrd a => a -> a
+    succMay, predMay :: CircularOrd a => a -> Maybe a
+    default (==~) :: Eq a => a -> a -> Bool
+    default succCirc :: (Eq a, Bounded a, Enum a) => a -> a
+    default predCirc :: (Eq a, Bounded a, Enum a) => a -> a
+    default succMay :: (Eq a, Bounded a, Enum a) => a -> Maybe a
+    default predMay :: (Eq a, Bounded a, Enum a) => a -> Maybe a
+    (==~)      = (==)
+    succCirc x = if x == maxBound then minBound else succ x
+    predCirc x = if x == minBound then maxBound else pred x
+    succMay x  = if x == maxBound then Nothing else Just (succ x)
+    predMay x  = if x == minBound then Nothing else Just (pred x)
+
 -- * Types
+
+data TileKind = ManTile | PinTile | SouTile | HonorTile
+              deriving (Show, Read, Eq, Ord)
+
+-- | Is akadora?
+type Aka = Bool
+
+-- | The number of man, pin and sou tiles.
+data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
+            deriving (Show, Read, Eq, Ord, Enum, Bounded)
+
+data Sangen = Haku | Hatsu | Chun
+            deriving (Show, Read, Eq, Ord, Enum, Bounded)
+
+data Kaze = Ton | Nan | Shaa | Pei
+          deriving (Show, Read, Eq, Ord, Enum, Bounded)
+
+data Honor = Sangenpai Sangen
+           | Kazehai Kaze
+           deriving (Show, Read, Eq, Ord)
 
 -- | A (japanese) mahjong tile. Note the lack of Eq/Ord, because tiles can
 -- have flags.
@@ -48,29 +86,34 @@ instance Ord Tile where
     Suited{} <= Honor{}              = True
     _ <= _                           = False
 
+instance CircularOrd Number
+instance CircularOrd Kaze
+instance CircularOrd Sangen
+
+-- | The next tile according to the succession rules. Discards flags like
+-- dora from the tile.
+instance CircularOrd Tile where
+    Suited tk n _ ==~ Suited tk' n' _ = tk == tk' && n == n'
+    Honor x       ==~ Honor y         = x == y
+    _             ==~ _               = False
+
+    succCirc (Suited k n _) = Suited k (succCirc n) False
+    succCirc (Honor (Kazehai k)) = Honor $ Kazehai $ succCirc k
+    succCirc (Honor (Sangenpai s)) = Honor $ Sangenpai $ succCirc s
+
+    predCirc (Suited k n _) = Suited k (predCirc n) False
+    predCirc (Honor (Kazehai k)) = Honor $ Kazehai $ predCirc k
+    predCirc (Honor (Sangenpai s)) = Honor $ Sangenpai $ predCirc s
+
+    succMay (Suited k n _) = Suited k (succ n) False <$ guard (n /= maxBound)
+    succMay _              = Nothing -- TODO implement succession of honors here
+
+    predMay (Suited k n _) = Suited k (pred n) False <$ guard (n /= minBound)
+    predMay _              = Nothing
+
 -- | Exact equality on tiles
 (==@) :: Tile -> Tile -> Bool
 a ==@ b = a ==~ b && equating isAka a b
-
-data TileKind = ManTile | PinTile | SouTile | HonorTile
-              deriving (Show, Read, Eq, Ord)
-
--- | Is akadora?
-type Aka = Bool
-
--- | The number of man, pin and sou tiles.
-data Number = Ii | Ryan | San | Suu | Wu | Rou | Chii | Paa | Chuu
-            deriving (Show, Read, Eq, Ord, Enum, Bounded)
-
-data Honor = Sangenpai Sangen
-           | Kazehai Kaze
-           deriving (Show, Read, Eq, Ord)
-
-data Sangen = Haku | Hatsu | Chun
-            deriving (Show, Read, Eq, Ord, Enum, Bounded)
-
-data Kaze = Ton | Nan | Shaa | Pei
-          deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 -- Instances
 
@@ -200,46 +243,12 @@ removeFlags :: Tile -> Tile
 removeFlags (Suited tk n _) = Suited tk n False
 removeFlags x               = x
 
--- * Tile order
+-- SafeCopy
 
--- | @CircularOrd@ models the succession of tiles, dragons and winds.
-class CircularOrd a where
-    (==~) :: CircularOrd a => a -> a -> Bool
-    succCirc, predCirc :: CircularOrd a => a -> a
-    succMay, predMay :: CircularOrd a => a -> Maybe a
-
-    default (==~) :: Eq a => a -> a -> Bool
-    default succCirc :: (Eq a, Bounded a, Enum a) => a -> a
-    default predCirc :: (Eq a, Bounded a, Enum a) => a -> a
-    default succMay :: (Eq a, Bounded a, Enum a) => a -> Maybe a
-    default predMay :: (Eq a, Bounded a, Enum a) => a -> Maybe a
-    (==~)      = (==)
-    succCirc x = if x == maxBound then minBound else succ x
-    predCirc x = if x == minBound then maxBound else pred x
-    succMay x  = if x == maxBound then Nothing else Just (succ x)
-    predMay x  = if x == minBound then Nothing else Just (pred x)
-
-instance CircularOrd Number
-instance CircularOrd Kaze
-instance CircularOrd Sangen
-
--- | The next tile according to the succession rules. Discards flags like
--- dora from the tile.
-instance CircularOrd Tile where
-    Suited tk n _ ==~ Suited tk' n' _ = tk == tk' && n == n'
-    Honor x       ==~ Honor y         = x == y
-    _             ==~ _               = False
-
-    succCirc (Suited k n _) = Suited k (succCirc n) False
-    succCirc (Honor (Kazehai k)) = Honor $ Kazehai $ succCirc k
-    succCirc (Honor (Sangenpai s)) = Honor $ Sangenpai $ succCirc s
-
-    predCirc (Suited k n _) = Suited k (predCirc n) False
-    predCirc (Honor (Kazehai k)) = Honor $ Kazehai $ predCirc k
-    predCirc (Honor (Sangenpai s)) = Honor $ Sangenpai $ predCirc s
-
-    succMay (Suited k n _) = Suited k (succ n) False <$ guard (n /= maxBound)
-    succMay _              = Nothing -- TODO implement succession of honors here
-
-    predMay (Suited k n _) = Suited k (pred n) False <$ guard (n /= minBound)
-    predMay _              = Nothing
+deriveSafeCopy 0 'base ''TileEq
+deriveSafeCopy 0 'base ''TileKind
+deriveSafeCopy 0 'base ''Number
+deriveSafeCopy 0 'base ''Kaze
+deriveSafeCopy 0 'base ''Sangen
+deriveSafeCopy 0 'base ''Honor
+deriveSafeCopy 0 'base ''Tile

@@ -164,3 +164,10 @@ shoutPrecedence dk (k, s) (k', s') = case comparing shoutKind s s' of
 -- | @shoutGE turn_kaze a b@: a greater-or-same-precedence-as b
 shoutGE :: Kaze -> (Kaze, Shout) -> (Kaze, Shout) -> Bool
 shoutGE dk a b = shoutPrecedence dk a b `elem` [EQ, GT]
+
+-- SafeCopy
+
+deriveSafeCopy 0 'base ''Mentsu
+deriveSafeCopy 0 'base ''MentsuKind
+deriveSafeCopy 0 'base ''Shout
+deriveSafeCopy 0 'base ''ShoutKind

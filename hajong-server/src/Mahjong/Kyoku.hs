@@ -472,8 +472,8 @@ processShouts shouts@((fsk,fs):_) _chank = do
 
     (th':_) <- forM shouts $ \(sk, s) -> do
         sh <- handOf' sk
-        (m, th') <- shoutFromHand sk s th -- TODO: split shoutFromHand to two functions so it only needs to be run once
-        sh' <- if null (shoutTo s) then handWin (Just s) sh else meldTo s m sh -- if null then kokushi. can't use a mentsu 'cause mentsu have >=2 tiles
+        th' <- shoutFromHand sk s th
+        sh' <- if null (shoutTo s) then rons s sh else meldTo s sh -- if null then kokushi. can't use a mentsu 'cause mentsu have >=2 tiles
         updateHand sk sh'
         tellEvent $ DealTurnShouted sk s
         return th'
@@ -499,7 +499,7 @@ endGame points = do tellEvent $ GameEnded points
 
 endTsumo :: InKyoku m => Kaze -> m KyokuResults
 endTsumo winner = do
-    handOf' winner >>= handWin Nothing >>= updateHand winner -- FIXME this shouldn't exist, I think
+    handOf' winner >>= updateHand winner . setAgariTsumo
 
     vh     <- getValuedHand winner
     honba  <- use pHonba
@@ -716,7 +716,7 @@ couldContainYaku :: InKyoku m => (Kaze, Shout) -> m Bool
 couldContainYaku (k, s)
     | Ron <- shoutKind s = do
         h  <- handOf' k
-        vh <- valueHand k <$> meldTo s (fromShout s) h <*> get
+        vh <- valueHand k <$> meldTo s h <*> get
         return $ length (vh^..vhValue.vaYaku.each.filtered yakuNotExtra) /= 0
     | otherwise = return True
 

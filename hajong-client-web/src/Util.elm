@@ -53,14 +53,6 @@ isNothing x = case x of
    Nothing -> True
    Just _ -> False
 
-pickedTile : PickedTile -> Tile
-pickedTile pt = case pt of
-   FromWall t         -> fromJust t
-   FromWanpai t       -> fromJust t
-   AgariTsumo t       -> t
-   AgariCall shout    -> shout.shoutTile
-   AgariTsumoWanpai t -> t
-
 renderTitle title = Text.fromString title |> Text.bold |> Element.centered
 
 -- | An event signal, where Nothing is a Noop

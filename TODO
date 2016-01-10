@@ -1,7 +1,7 @@
 x = done, / = half done, ! = needs testing
 
 ## open tasks
-[ ] [game] hand is not considered closed when winning on ron (agari should not produce an open meld)
+[x] [game] hand is not considered closed when winning on ron (agari should not produce an open meld)
 [ ] [game] riichi is deducted from payer on ron
 [ ] [game] riichi-with tile can be tsumogiri
 [ ] [game] fu are calculated incorrectly
