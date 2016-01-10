@@ -52,34 +52,14 @@ data PastGame = PastGame
     } deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''ClientRecord)
-$(deriveSafeCopy 0 'base ''FinalPoints)
 $(deriveSafeCopy 0 'base ''PastGame)
 
 -- Not our data types, hope they don't change internal rep.
-$(deriveSafeCopy 0 'base ''Identity)
 $(deriveSafeCopy 0 'base ''UUID.UUID)
 
 -- | TODO: Move these instances and data types to corresponding .Types modules
 $(deriveSafeCopy 0 'base ''Machine)
-$(deriveSafeCopy 0 'base ''Player)
-$(deriveSafeCopy 0 'base ''Wanpai)
-$(deriveSafeCopy 0 'base ''GameSettings)
-$(deriveSafeCopy 0 'base ''KyokuResults)
-$(deriveSafeCopy 0 'base ''AbortiveDraw)
-$(deriveSafeCopy 0 'base ''Flag)
-$(deriveSafeCopy 0 'base ''Value)
-$(deriveSafeCopy 0 'base ''TurnAction)
-$(deriveSafeCopy 0 'base ''Yaku)
-$(deriveSafeCopy 0 'base ''ValuedHand)
-$(deriveSafeCopy 0 'base ''GameEvent)
 $(deriveSafeCopy 0 'base ''GameState)
-
--- SafeCopy instances for indexed types
-
-instance SafeCopy (Hand m) => SafeCopy (Kyoku' m) where
-    version = 0
-    putCopy Kyoku{..} = contain $ do safePut _pRound; safePut _pTurn; safePut _pFlags; safePut _pOja; safePut _pFirstOja; safePut _pWallTilesLeft; safePut _pDora; safePut _pPlayers; safePut _pHonba; safePut _pRiichi; safePut _pResults; safePut _sEventHistory; safePut _sHands; safePut _sWall; safePut _sWanpai; safePut _sWaiting;
-    getCopy = contain $ do Kyoku <$> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet <*> safeGet
 
 -- * Lenses
 

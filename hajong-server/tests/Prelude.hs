@@ -54,7 +54,7 @@ xs .<-- ys = conjoin $ isElem <$> ys
 
 -- * Arbitrary instancees
 
-instance Arbitrary (Hand Identity) where
+instance Arbitrary Hand where
     arbitrary = initHand <$> vector 13
 
 instance Arbitrary Tile where

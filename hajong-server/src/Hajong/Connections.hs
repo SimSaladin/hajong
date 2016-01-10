@@ -129,9 +129,9 @@ instance ToJSON Event where
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
-        DealStarts p pk kyoku                    -> let Object extra = atEvent "round-begin"  ["mypos" .= pk, "player" .= p, "myhand" .= (kyoku^?!sHands.at pk)]
-                                                        Object base  = toJSON kyoku
-                                                        in Object (extra <> base)
+        DealStarts playerKyoku -> let Object event = atEvent "round-begin"  []
+                                      Object base  = toJSON playerKyoku
+                                      in Object (event <> base)
         DealWaitForShout (player, _, secs, xs)   -> atEvent "wait-shout"   ["player"      .= player, "seconds" .= secs, "shouts" .= xs]
         DealWaitForTurnAction (p,_,sec,rs)       -> atEvent "wait-turn"    ["player"      .= p, "seconds" .= sec, "riichi-with" .= rs]
         DealTurnBegins pk                        -> atEvent "turn-changed" ["player-kaze" .= pk]
@@ -158,20 +158,31 @@ instance ToJSON Kaze where toJSON = toJSON . tshow
 instance ToJSON Number where toJSON = toJSON . (1 +) . fromEnum
 instance ToJSON TileKind where toJSON = toJSON . tshow
 
-instance (ToJSON (m Tile), ToJSON (m FuritenState), ToJSON (m RiichiState), ToJSON (m DrawState), ToJSON (m [Tile]), ToJSON (m Bool))
-        => ToJSON (Hand m) where
-    toJSON h = object
-        [ "called"    .= _handCalled h
-        , "discards"  .= _handDiscards h
-        , "riichi"    .= _handRiichi h
-        , "ippatsu"   .= _handIppatsu h
-        , "state"     .= _handState h
-        , "picks"     .= _handPicks h
+instance ToJSON Hand where
+    toJSON Hand{..} = object
+        [ "called"    .= _handCalled
+        , "discards"  .= _handDiscards
+        , "riichi"    .= _handRiichi
+        , "ippatsu"   .= _handIppatsu
+        , "state"     .= _handState
 
-        , "concealed" .= _handConcealed h
-        , "furiten"   .= _handFuriten h
-        , "can-tsumo" .= _handCanTsumo h
+        , "picks"     .= _handPicks
+        , "concealed" .= _handConcealed
+        , "furiten"   .= _handFuriten
+        , "can-tsumo" .= _handCanTsumo
         ]
+
+instance ToJSON PlayerHand where
+    toJSON (PlayerHand Hand{..}) = object
+        [ "called"    .= _handCalled
+        , "discards"  .= _handDiscards
+        , "riichi"    .= _handRiichi
+        , "ippatsu"   .= _handIppatsu
+        , "state"     .= _handState
+
+        , "count-concealed" .= (length _handConcealed + length _handPicks)
+        ]
+    
 
 instance ToJSON Tile where
     toJSON (Suited tk n a) = object [ "type" .= tk, "number" .= n, "aka" .= a ]
@@ -181,39 +192,61 @@ instance ToJSON Honor where
     toJSON (Sangenpai s) = toJSON (tshow s)
     toJSON (Kazehai k) = toJSON k
 
-instance (ToJSON (m Bool), ToJSON (m [Tile]), ToJSON (m Tile), ToJSON (m RiichiState), ToJSON (m FuritenState), ToJSON (m DrawState)) => ToJSON (Kyoku' m) where
-    toJSON x = object
-        [ "round"         .= _pRound x
-        , "turn"          .= _pTurn x
-        , "oja"           .= _pOja x
-        , "first-oja"     .= _pFirstOja x
-        , "tiles-left"    .= _pWallTilesLeft x
-        , "dora"          .= _pDora x
-        , "players"       .= map (toJSON *** toJSON) (M.toList $ _pPlayers x)
-        , "honba"         .= _pHonba x
-        , "in-table"      .= _pRiichi x
-        , "results"       .= _pResults x
-        , "hands"         .= map (toJSON *** toJSON) (M.toList $ _sHands x)
-        , "event-history" .= _sEventHistory x
-        ]
+instance ToJSON PlayerKyoku where
+    toJSON (PlayerKyoku player kaze Kyoku{..}) = object
+        [ "mypos"         .= kaze
+        , "player"        .= player
+        , "myhand"        .= (_sHands^?!ix kaze)
+        --
+        , "round"         .= _pRound
+        , "turn"          .= _pTurn
+        , "oja"           .= _pOja
+        , "first-oja"     .= _pFirstOja
+        , "tiles-left"    .= _pWallTilesLeft
+        , "dora"          .= _pDora
+        , "players"       .= map (toJSON *** toJSON) (M.toList _pPlayers)
+        , "honba"         .= _pHonba
+        , "in-table"      .= _pRiichi
+        , "results"       .= _pResults
+        , "flags"         .= _pFlags
+        , "event-history" .= ([]  :: [Int])-- _sEventHistory
+        , "hands"         .= map playerKyokuHandFrom (M.toList _sHands)
+        -- , "wall"          .= _
+        -- , "wanpai"        .= _ -- TODO: is there something public here?
+        , "waiting"       .= fmap playerWaiting _sWaiting
+        ] where
+      playerKyokuHandFrom (handKaze, hand)
+          | kaze == handKaze = (toJSON handKaze, toJSON hand)
+          | otherwise        = (toJSON handKaze, toJSON $ PlayerHand hand)
 
-instance ToJSON (m Tile) => ToJSON (PickedTile m) where
+      playerWaiting (Left (p,pk,secs,riichi)) = Just $ DealWaitForTurnAction (p,pk,secs,if' (pk == kaze) riichi [])
+      playerWaiting (Right waitshouts)
+          | Just waitshout <- find (^._2.to (== kaze)) waitshouts = Just $ DealWaitForShout waitshout
+          | otherwise = Nothing
+
+instance ToJSON PickedTile where
     toJSON (PickedTile tile wanpai) = object [ "tile" .= tile, "wanpai" .= wanpai ]
 
+$(deriveJSON (aesonOptions 0) ''TileEq)
+$(deriveJSON (aesonOptions 0) ''Flag)
 $(deriveJSON (aesonOptions 0) ''GameSettings)
 
-instance ToJSON a => ToJSON (Map Player a) where
+instance (ToJSON a, ToJSON b) => ToJSON (Map a b) where
     toJSON = toJSON . itoList
+instance (Ord a, FromJSON a, FromJSON b) => FromJSON (Map a b) where
+    parseJSON = fmap mapFromList . parseJSON
 
 instance ToJSON UUID.UUID where
     toJSON = toJSON . UUID.toText
 
-instance ToJSON a => ToJSON (GameState a)
+instance ToJSON (GameState Int)
+instance ToJSON Kyoku
 
 -- derived
 
 --
 $(deriveJSON (aesonOptions 3) ''Discard)
+$(deriveJSON (aesonOptions 3) ''Wanpai)
 $(deriveJSON (aesonOptions 6) ''Mentsu)
 $(deriveJSON (aesonOptions 0) ''MentsuKind)
 $(deriveJSON (aesonOptions 0) ''ShoutKind)

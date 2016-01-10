@@ -25,8 +25,8 @@ gameFlowTests :: TestTree
 gameFlowTests = testGroup "Game flow"
   [ testCase "Game ends when a Ron is called and game is continued" $ do
 
-        kyoku <- testKyoku <&> sHands.ix Nan .handConcealed . _Wrapped .~ ["M5", "M5", "M5", "P5", "P6", "P7", "P8", "P8", "S4", "S5", "S6", "S7", "S8"]
-                           <&> sHands.ix Ton .handConcealed . _Wrapped .~ ["S3"]
+        kyoku <- testKyoku <&> sHands.ix Nan .handConcealed .~ ["M5", "M5", "M5", "P5", "P6", "P7", "P8", "P8", "S4", "S5", "S6", "S7", "S8"]
+                           <&> sHands.ix Ton .handConcealed .~ ["S3"]
 
         let res = runKyokuState kyoku $ do
                 drawAndTurnAction Ton $ TurnTileDiscard $ Mahjong.Discard "S3" Nothing False
@@ -39,7 +39,7 @@ gameFlowTests = testGroup "Game flow"
 
   , testCase "Discarding a tile results in correct state and yields correct GameEvents" $ do
         kyoku <- newKyoku fourPlayers (map tshow [1..4])
-        let Just tile = kyoku ^? sHands . ix Ton . handConcealed . _Wrapped . _head
+        let Just tile = kyoku ^? sHands . ix Ton . handConcealed . _head
             res = runKyokuState kyoku $ do
                 stepped_ InpAuto
                 stepped_ $ InpTurnAction Ton $ TurnTileDraw False Nothing
@@ -54,14 +54,14 @@ gameFlowTests = testGroup "Game flow"
         kyoku^.pRound                            @?= (Ton, 1, 0)
         length (kyokuTiles kyoku)                @?= 136
         length (filter isAka $ kyokuTiles kyoku) @?= 4
-        kyoku^.sHands ^.. each.handConcealed._Wrapped.to length @?= [13, 13, 13, 13]
+        kyoku^.sHands ^.. each.handConcealed.to length @?= [13, 13, 13, 13]
 
   , testCase "Tsumo is an option in the DealPrivateHandChanged event" $ do
-        kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5
+        kyoku <- testKyoku <&> sHands . ix Ton . handConcealed  .~ handThatWinsWithP5
                            <&> sWall %~ ("P5" <|)
         let res = runKyokuState kyoku $ stepped InpAuto >> stepped InpAuto -- start and draw
         requireRight res $ \(evs, (m, k)) -> do
-            let check (DealPrivateHandChanged _ _ hand : xs) = assertBool "handCanTsumo was False" (hand^.handCanTsumo._Wrapped)
+            let check (DealPrivateHandChanged _ _ hand : xs) = assertBool "handCanTsumo was False" (hand^.handCanTsumo)
                 check (_ : xs)                               = check xs
                 check []                                     = assertFailure "No Dealprivatechanged in events"
                 in check evs
@@ -74,7 +74,7 @@ gameFlowTests = testGroup "Game flow"
           Right _                      -> assertFailure "Kyoku didn't end withing 250 automatic advances"
 
   , testCase "One han minimum to win a hand, not counting YakuExtra" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed . _Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed  .~ handThatWinsWithP5
                          <&> pDora .~ ["P5"]
                          <&> sWall %~ ("P5" <|)
                          <&> pFlags .~ setFromList [] -- not first round
@@ -89,7 +89,7 @@ gameFlowTests = testGroup "Game flow"
           Left r                -> return ()
 
   , testCase "Dora case test: flipping and winning" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ (replicate 3 "M1" ++ replicate 3 "M2" ++ replicate 3 "M3" ++ replicate 3 "M9" ++ ["S1"])
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ (replicate 3 "M1" ++ replicate 3 "M2" ++ replicate 3 "M3" ++ replicate 3 "M9" ++ ["S1"])
                          <&> sWall %~ (["M1", "M3"] ++)
                          <&> sWanpai.wSupplement .~ ["M2", "P1", "S1"]
                          <&> sWanpai.wUraDora .~ ["P1", "P2", "P3", "P4", "P5"]
@@ -120,10 +120,10 @@ gameFlowTests = testGroup "Game flow"
 
   , testCase "Suukaikan: four kans called all not by one player" $ do
       kyoku <- testKyoku <&> sWall %~ (["M1", "M2", "M3", "M4"] ++)
-                         <&> sHands . ix Ton  . handConcealed._Wrapped %~ (["M1", "M1", "M1"] ++)
-                         <&> sHands . ix Nan  . handConcealed._Wrapped %~ (["M2", "M2", "M2"] ++)
-                         <&> sHands . ix Shaa . handConcealed._Wrapped %~ (["M3", "M3", "M3"] ++)
-                         <&> sHands . ix Pei  . handConcealed._Wrapped %~ (["M4", "M4", "M4", "N"] ++)
+                         <&> sHands . ix Ton  . handConcealed %~ (["M1", "M1", "M1"] ++)
+                         <&> sHands . ix Nan  . handConcealed %~ (["M2", "M2", "M2"] ++)
+                         <&> sHands . ix Shaa . handConcealed %~ (["M3", "M3", "M3"] ++)
+                         <&> sHands . ix Pei  . handConcealed %~ (["M4", "M4", "M4", "N"] ++)
 
       let res = runKyokuState kyoku $ do
             drawAndTurnAction Ton  (TurnAnkan "M1") >> stepped_ InpAuto >> stepped_ InpAuto
@@ -135,7 +135,7 @@ gameFlowTests = testGroup "Game flow"
       requireRight res $ \(_evs, (r,_k)) -> r @?= KyokuEnded (DealAbort SuuKaikan)
 
   , testCase "Suukantsu: yakuman" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ (replicate 4 "M1" ++ replicate 3 "M2" ++ replicate 3 "M3" ++ replicate 3 "M9")
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ (replicate 4 "M1" ++ replicate 3 "M2" ++ replicate 3 "M3" ++ replicate 3 "M9")
                          <&> sWall %~ (["S1"] ++)
                          <&> sWanpai.wSupplement .~ ["M2", "M3", "M9", "S1"]
                          <&> sWanpai.wUraDora .~ []
@@ -156,8 +156,8 @@ gameFlowTests = testGroup "Game flow"
         _                              -> assertFailure $ "Expected KyokuEnded but received " ++ show r
 
   , testCase "Ankan may be robbed to kokushi" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "G", "W!"] -- Win on "R"
-                         <&> sHands . ix Ton . handConcealed._Wrapped .~ ["R", "R", "R", "P1", "P2"]
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "G", "W!"] -- Win on "R"
+                         <&> sHands . ix Ton . handConcealed .~ ["R", "R", "R", "P1", "P2"]
                          <&> sWall %~ (["R"] ++)
 
       let res = runKyokuState kyoku $ do
@@ -168,8 +168,8 @@ gameFlowTests = testGroup "Game flow"
       requireRight res $ \_ -> return ()
 
   , testCase "Supplying the same shout twice is not possible" $ do
-      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
-                         <&> sHands.ix Nan .handConcealed._Wrapped .~ ["P5", "P5"] -- needed to ensure some other possible shout
+      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed .~ handThatWinsWithP5Pinfu
+                         <&> sHands.ix Nan .handConcealed .~ ["P5", "P5"] -- needed to ensure some other possible shout
                          <&> sWall %~ cons "P5"
 
       let res = runKyokuState kyoku $ do
@@ -199,7 +199,7 @@ gameFlowTests = testGroup "Game flow"
       nextRound kyoku @?= (Ton, 2, 0)
 
   , testCase "Shouting an aka-dora results in a set where only the shouted tile is aka" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed . _Wrapped .~ ["S3", "s4", "P5"]
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed  .~ ["S3", "s4", "P5"]
                          <&> sWall %~ cons "s5"
 
       let res = runKyokuState kyoku $ do
@@ -210,8 +210,8 @@ gameFlowTests = testGroup "Game flow"
       requireRight res $ \(_,(_,k)) -> k^..sHands.ix Nan .handCalled._head.to mentsuTiles.each.filtered isAka @?= ["s4", "s5"]
 
   , testCase "After last has passed on a shout, the game continues immediately" $ do
-      kyoku <- testKyoku <&> sHands.each.handConcealed._Wrapped .~ []
-                         <&> sHands.ix Nan . handConcealed . _Wrapped .~ ["S3", "s4", "P5"]
+      kyoku <- testKyoku <&> sHands.each.handConcealed .~ []
+                         <&> sHands.ix Nan . handConcealed  .~ ["S3", "s4", "P5"]
                          <&> sWall %~ cons "s5"
 
       let res = runKyokuState kyoku $ do
@@ -225,8 +225,8 @@ gameFlowTests = testGroup "Game flow"
 furitenTests :: TestTree
 furitenTests = testGroup "Furiten tests"
   [ testCase "Temporary furiten is effective until next own draw" $ do
-      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
-                         <&> sHands.ix Ton .handConcealed._Wrapped .~ ["P5", "P5"] -- needed to ensure some other possible shout
+      kyoku <- testKyoku <&> sHands.ix Shaa .handConcealed .~ handThatWinsWithP5Pinfu
+                         <&> sHands.ix Ton .handConcealed .~ ["P5", "P5"] -- needed to ensure some other possible shout
                          <&> sWall %~ cons "P5" . cons "P5" . cons "S1" . cons "P5"
 
       let firstRound = do autoAndDiscard Ton $ Discard "P5" Nothing False
@@ -246,9 +246,9 @@ furitenTests = testGroup "Furiten tests"
           Right _  -> return ()
 
   , testCase "Chiitoi furiten" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "M3"]
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ ["M2", "M2", "M5", "M5", "M7", "M7", "P3", "P3", "M9", "M9", "M1", "M1", "M3"]
                          <&> sHands . ix Nan %~ updateAfterDiscard ( Discard "M3" Nothing False )
-                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ ["M3", "M3"] -- needed to ensure some other possible shout
+                         <&> sHands.ix Shaa .handConcealed .~ ["M3", "M3"] -- needed to ensure some other possible shout
                          <&> sWall %~ ("M3" <|)
 
       let res = runKyokuState kyoku $ do
@@ -260,8 +260,8 @@ furitenTests = testGroup "Furiten tests"
           Right x  -> assertFailure "Should have errored"
 
   , testCase "Kokushi furiten" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"]
-                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ ["G", "G"] -- needed to ensure some other possible shout
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ ["P1", "P9", "M1", "M9", "S1", "S9", "E", "S", "W", "N", "G", "R", "W!"]
+                         <&> sHands.ix Shaa .handConcealed .~ ["G", "G"] -- needed to ensure some other possible shout
                          <&> sHands . ix Nan %~ updateAfterDiscard (Discard "G" Nothing False)
                          <&> sWall %~ cons "G"
 
@@ -274,9 +274,9 @@ furitenTests = testGroup "Furiten tests"
           Right x  -> assertFailure "Should have errored"
 
   , testCase "Ron is not possible if furiten; must fail before shout goes through" $ do
-      kyoku <- testKyoku <&> sHands.ix Nan .handConcealed._Wrapped .~ handThatWinsWithP5
-                         <&> sHands.ix Nan .handFuriten._Wrapped .~ Furiten
-                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5Pinfu -- needed to ensure some other possible shout
+      kyoku <- testKyoku <&> sHands.ix Nan .handConcealed .~ handThatWinsWithP5
+                         <&> sHands.ix Nan .handFuriten .~ Furiten
+                         <&> sHands.ix Shaa .handConcealed .~ handThatWinsWithP5Pinfu -- needed to ensure some other possible shout
                          <&> sWall %~ cons "P5"
 
       let res = runKyokuState kyoku $ do
@@ -288,9 +288,9 @@ furitenTests = testGroup "Furiten tests"
           _        -> assertFailure "Game should have errored"
 
   , testCase "Ron is not possible if 0 yaku; must fail before shout goes through" $ do
-      kyoku <- testKyoku <&> sHands.ix Nan .handConcealed . _Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands.ix Nan .handConcealed  .~ handThatWinsWithP5
                          <&> sHands.ix Nan .handRiichi .~ NoRiichi
-                         <&> sHands.ix Shaa .handConcealed._Wrapped .~ handThatWinsWithP5Pinfu -- needed to ensure some other possible shout
+                         <&> sHands.ix Shaa .handConcealed .~ handThatWinsWithP5Pinfu -- needed to ensure some other possible shout
                          <&> sWall %~ cons "P5"
 
       let res = runKyokuState kyoku $ do
@@ -306,7 +306,7 @@ furitenTests = testGroup "Furiten tests"
 riichiTests :: TestTree
 riichiTests = testGroup "Riichi tests"
   [ testCase "Riichi tiles are calculated correctly in the DealWaitForTurnAction event" $ do
-        kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "W "]
+        kyoku <- testKyoku <&> sHands . ix Ton . handConcealed  .~ ["M1", "M2", "M3", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "W "]
                            <&> sWall %~ ("S4" <|)
 
         let res = runKyokuState kyoku $ stepped InpAuto >> stepped InpAuto -- start and draw
@@ -318,7 +318,7 @@ riichiTests = testGroup "Riichi tests"
                 in check evs
 
   , testCase "Riichi points are transferred to table from player(s) on riichi" $ do
-      kyoku <- testKyoku <&> sHands . each . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . each . handConcealed .~ handThatWinsWithP5
                          <&> sWall %~ (["P2", "P2", "P3", "P4"] ++)
 
       let res = runKyokuState kyoku $ do
@@ -331,7 +331,7 @@ riichiTests = testGroup "Riichi tests"
           k ^?! pPlayers . ix Nan . _2 @?= 24000
 
   , testCase "Riichi points from table are removed on ron" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed . _Wrapped .~ handThatWinsWithP5Pinfu
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed  .~ handThatWinsWithP5Pinfu
                          <&> pRiichi .~ 2000
                          <&> sWall %~ (["P3", "P5"] ++)
 
@@ -345,7 +345,7 @@ riichiTests = testGroup "Riichi tests"
           k' ^. pRiichi @?= 0
 
   , testCase "Hand restarts on four riichi" $ do
-      kyoku <- testKyoku <&> sHands . each . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . each . handConcealed .~ handThatWinsWithP5
                          <&> sWall %~ (["P2", "P2", "P3", "P4"] ++)
 
       let res = runKyokuState kyoku $ do
@@ -360,7 +360,7 @@ riichiTests = testGroup "Riichi tests"
           k ^. pRiichi @?= 4000
 
   , testCase "Riichi not possible if under 1000 points" $ do
-      kyoku <- testKyoku <&> sHands . each . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . each . handConcealed .~ handThatWinsWithP5
                          <&> pPlayers . ix Ton . _2 .~ 500
                          <&> sWall %~ (["P2", "P2", "P3", "P4"] ++)
       let res = runKyokuState kyoku $ do
@@ -372,7 +372,7 @@ riichiTests = testGroup "Riichi tests"
           Right _  -> assertFailure "Should have errored"
 
   , testCase "Ankan is possible in riichi when it doesn't change wait" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ handThatWinsWithP5
                          <&> sWall %~ (["M1"] ++)
 
       let res = runKyokuState kyoku $ do
@@ -382,7 +382,7 @@ riichiTests = testGroup "Riichi tests"
           return ()
 
   , testCase "Ankan is not possible in riichi when it would change waits" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ ["M1", "M1", "M2", "M3", "P1", "P2", "P3", "P7", "P8", "P9", "S2", "S3", "S4"]
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ ["M1", "M1", "M2", "M3", "P1", "P2", "P3", "P7", "P8", "P9", "S2", "S3", "S4"]
                          <&> sWall %~ (["M1"] ++)
 
       let res = runKyokuState kyoku $ do
@@ -393,7 +393,7 @@ riichiTests = testGroup "Riichi tests"
           Right _ -> assertFailure "Game should have errored"
 
   , testCase "(tenpai test) player is not tenpai if waiting only on a tile he already has four of" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ ["M1", "M1", "M1", "M1", "P1", "P2", "P3", "P7", "P8", "P9", "S2", "S3", "S4"]
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ ["M1", "M1", "M1", "M1", "P1", "P2", "P3", "P7", "P8", "P9", "S2", "S3", "S4"]
                          <&> sWall %~ cons "W"
 
       let res = runKyokuState kyoku $ do
@@ -404,7 +404,7 @@ riichiTests = testGroup "Riichi tests"
           Right (_,(m,k)) -> traceShowM (m,k) >> assertFailure "Game should have errored"
 
   , testCase "When riichi, ura-dora are opened" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ handThatWinsWithP5
                          <&> sHands . ix Ton . handAgari .~ Just (AgariTsumo "P5" False)
                          <&> sHands . ix Ton . handRiichi .~ Riichi
       let res = runKyoku kyoku $ getValuedHand Ton
@@ -429,7 +429,7 @@ weirdYaku = testGroup "Yaku dependant on the whole game state"
           x -> error $ show x
 
   , testCase "Chankan is possible" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ handThatWinsWithP5
                          <&> sHands . ix Ton . handCalled .~ [fromShout $ Shout Pon Shaa "P5" ["P5", "P5"]]
                          <&> sWall %~ ("P5" <|)
 
@@ -445,7 +445,7 @@ weirdYaku = testGroup "Yaku dependant on the whole game state"
 yakumans :: TestTree
 yakumans = testGroup "Yakumans that are dependant on the whole game state"
   [ testCase "Tenhou (dealer goes out on first draw)" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ handThatWinsWithP5
                          <&> sWall %~ ("P5" <|)
                          <&> pDora .~ []
 
@@ -459,7 +459,7 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
           x -> assertFailure (show x)
 
   , testCase "Chiihou (non-dealer goes out on first draw uninterrupted)" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ handThatWinsWithP5
                          <&> sWall %~ ("P1" <|) . ("P5" <|)
                          <&> pDora .~ []
 
@@ -478,7 +478,7 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
 
  {-
   , testCase "Renhou (out on first round uninterrupted)" $ do
-      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5
+      kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ handThatWinsWithP5
                          <&> sWall %~ ("P5" <|)
 
       let res = runKyokuState kyoku $ do
@@ -496,7 +496,7 @@ yakumans = testGroup "Yakumans that are dependant on the whole game state"
 scoringTests :: TestTree
 scoringTests = testGroup "Scoring"
     [ testCase "Honba is deducted from payers and added to winner on tsumo" $ do
-        kyoku <- testKyoku <&> sHands . ix Ton . handConcealed._Wrapped .~ handThatWinsWithP5
+        kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ handThatWinsWithP5
                            <&> pDora .~ []
                            <&> sWall %~ ("P5" <|)
                            <&> pFlags .~ mempty
@@ -512,7 +512,7 @@ scoringTests = testGroup "Scoring"
             dPayers r ^..each._2 @?= [-500 - 100, -500 - 100, -500 - 100]
 
     , testCase "Honba is deducted from payer and added to winner on ron" $ do
-        kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
+        kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ handThatWinsWithP5Pinfu
                            <&> pDora .~ []
                            <&> sWall %~ ("P5" <|)
                            <&> pHonba .~ 2
@@ -529,8 +529,8 @@ scoringTests = testGroup "Scoring"
             dPayers r ^..each._2 @?= [-1000 - 2 * 300]
 
     , testCase "Double-ron" $ do
-        kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
-                           <&> sHands . ix Shaa . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu
+        kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ handThatWinsWithP5Pinfu
+                           <&> sHands . ix Shaa . handConcealed .~ handThatWinsWithP5Pinfu
                            <&> pDora .~ []
                            <&> sWall %~ (["P5"] ++)
 

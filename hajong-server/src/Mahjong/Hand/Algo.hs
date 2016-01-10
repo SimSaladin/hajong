@@ -189,7 +189,7 @@ instance HasGroupings [x] => HasGroupings [[x]] where
                           min_ss = minimumEx ss
                           in concatMap fst . filter ((== min_ss) . snd) $ zip gs ss
 
-instance HasGroupings HandA where
+instance HasGroupings Hand where
     getGroupings hand = getGroupings $ (\mentsu concealed magari -> case magari of
                                        Nothing    -> (mentsu, concealed)
                                        Just (AgariTsumo tile _) -> (mentsu, tile : concealed)
@@ -197,7 +197,7 @@ instance HasGroupings HandA where
                                                               | otherwise            -> (fromShout shout : mentsu, concealed) )
                                        -- XXX: special shouts, where shoutTo /= [a,b], are regarded as individual tiles.
         <$> _handCalled
-        <*> liftA2 (++) (map pickedTile._handPicks) (runIdentity._handConcealed)
+        <*> liftA2 (++) (map pickedTile._handPicks) _handConcealed
         <*> _handAgari
         $ hand
 

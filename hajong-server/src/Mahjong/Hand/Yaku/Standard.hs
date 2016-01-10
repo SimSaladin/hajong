@@ -30,7 +30,7 @@ import           Mahjong.Hand.Internal
 yakuAllTiles :: YakuCheck [Tile]
 yakuAllTiles = do
     Hand{..} <- yakuState <&> view vHand
-    return $ runIdentity _handConcealed
+    return $ _handConcealed
         ++ map pickedTile _handPicks
         ++ concatMap mentsuTiles _handCalled
         ++ case _handAgari of

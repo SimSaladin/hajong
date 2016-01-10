@@ -291,7 +291,7 @@ sendGameEvents events = do
     public <- filterM (sendPrivates gs) events
     multicast $ InGameEvents public
   where
-    sendPrivates gs e@(DealStarts p _ _)                = f gs p e
+    sendPrivates gs e@(DealStarts (PlayerKyoku p _ _))  = f gs p e
     sendPrivates gs e@(DealWaitForShout (p,_,_,_))      = f gs p e
     sendPrivates gs e@(DealWaitForTurnAction (p,_,_,_)) = f gs p e
     sendPrivates gs e@(DealPrivateHandChanged p _ _)    = f gs p e

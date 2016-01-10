@@ -23,3 +23,5 @@ data GameSettings = GameSettings { gameTitle :: Text }
 -- between hands).
 newtype Player = Player Int deriving (Show, Read, Eq, Ord)
 
+$(deriveSafeCopy 0 'base ''Player)
+$(deriveSafeCopy 0 'base ''GameSettings)

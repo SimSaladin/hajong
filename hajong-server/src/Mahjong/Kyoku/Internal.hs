@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 ------------------------------------------------------------------------------
 -- |
 -- Module         : Mahjong.Kyoku.Internal
@@ -31,7 +32,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen   as P
 --
 -- Fields starting @_p@ are for public consumption and @_s@ for internal
 -- only.
-data Kyoku' m = Kyoku
+data Kyoku = Kyoku
     -- always public
     { _pRound         :: Round
     , _pTurn          :: Kaze   -- ^ Current player in turn
@@ -47,26 +48,15 @@ data Kyoku' m = Kyoku
 
     -- secret
     , _sEventHistory  :: [GameEvent] -- ^ Complete history of events applied in this kyoku, latest first
-    , _sHands         :: Map Kaze (Hand m)
+    , _sHands         :: Map Kaze Hand
     , _sWall          :: [Tile]
     , _sWanpai        :: Wanpai
     , _sWaiting       :: Maybe Waiting -- ^ Waiting turn action or shout(s)
-    } deriving (Typeable)
+    } deriving (Typeable, Show, Read, Generic)
 
--- deriving instance Eq   (Kyoku' Maybe)
-deriving instance Show (Kyoku' Maybe)
-deriving instance Read (Kyoku' Maybe)
-
--- deriving instance Eq   (Kyoku' Identity)
-deriving instance Show (Kyoku' Identity)
-deriving instance Read (Kyoku' Identity)
-
--- | Server-side, no hidden information.
-type Kyoku = Kyoku' Identity
-
--- | Client-side @Kyoku'@, all but public and player-private information
--- hidden.
-type AsPlayer = Kyoku' Maybe
+-- | Kyoku viewed from a specific player's point-of-view
+data PlayerKyoku = PlayerKyoku Player Kaze Kyoku
+                 deriving (Typeable, Show, Read)
 
 -- | Left for turn, right for shout(s)
 type Waiting = Either WaitTurnAction [WaitShout]
@@ -90,14 +80,14 @@ data Wanpai = Wanpai
 
 -- ** Actions and events
 
-data GameEvent = DealStarts Player Kaze AsPlayer -- ^ Only at the start of a round
+data GameEvent = DealStarts PlayerKyoku -- ^ Only at the start of a round
                | DealWaitForShout WaitShout -- ^ Number of seconds left to shout or confirm an ignore (See @GameDontCare@)
                | DealWaitForTurnAction WaitTurnAction
                | DealTurnBegins Kaze
                | DealTurnAction Kaze TurnAction
                | DealTurnShouted Kaze Shout -- ^ Who, Shout
-               | DealPublicHandChanged Kaze HandP
-               | DealPrivateHandChanged Player Kaze HandA -- ^ Wholly private
+               | DealPublicHandChanged Kaze PlayerHand
+               | DealPrivateHandChanged Player Kaze Hand -- ^ Wholly private
                | DealFlipDora Tile -- ^ New dora was flipped
                | DealNick Kaze Player Text -- Pos, player id, nick TODO: no nick but fetch the player info separetely
                | DealRiichi Kaze
@@ -180,7 +170,7 @@ data Yaku = Yaku
 data ValueInfo = ValueInfo
     { _vKyoku  :: Kyoku
     , _vPlayer :: Kaze
-    , _vHand   :: HandA
+    , _vHand   :: Hand
     } deriving (Show, Read)
 
 instance HasGroupings ValueInfo where getGroupings = getGroupings . _vHand
@@ -238,7 +228,7 @@ shuffleTiles = shuffleM riichiTiles
 -- * Lenses
 
 --
-makeLenses ''Kyoku'
+makeLenses ''Kyoku
 makeLenses ''Wanpai
 makeLenses ''ValueInfo
 makeLenses ''ValuedHand
@@ -248,7 +238,7 @@ makeLenses ''Yaku
 -- * Utility
 
 kyokuTiles :: Kyoku -> [Tile]
-kyokuTiles kyoku = kyoku^.pDora ++ kyoku^.sWall ++ kyoku^..sHands.each.handConcealed._Wrapped.each ++ kyoku^.sWanpai.to wanpaiTiles
+kyokuTiles kyoku = kyoku^.pDora ++ kyoku^.sWall ++ kyoku^..sHands.each.handConcealed.each ++ kyoku^.sWanpai.to wanpaiTiles
 
 -- | Get all tiles currently in the wanpai in no particular order.
 wanpaiTiles :: Wanpai -> [Tile]
@@ -261,3 +251,16 @@ instance P.Pretty Kyoku where
         P.string "wall:"   P.<+> P.hang 0 (prettyList' _sWall) P.<$$>
         P.string "unrevealed dora:" P.<+> P.hang 0 (prettyList' $ _wDora _sWanpai) P.<$$>
         P.string "hands:"  P.<+> P.hang 0 (P.list $ toList $ fmap P.pretty _sHands)
+
+$(deriveSafeCopy 0 'base ''GameEvent)
+$(deriveSafeCopy 0 'base ''Kyoku)
+$(deriveSafeCopy 0 'base ''PlayerKyoku)
+$(deriveSafeCopy 0 'base ''TurnAction)
+$(deriveSafeCopy 0 'base ''Wanpai)
+$(deriveSafeCopy 0 'base ''KyokuResults)
+$(deriveSafeCopy 0 'base ''Flag)
+$(deriveSafeCopy 0 'base ''FinalPoints)
+$(deriveSafeCopy 0 'base ''ValuedHand)
+$(deriveSafeCopy 0 'base ''Value)
+$(deriveSafeCopy 0 'base ''Yaku)
+$(deriveSafeCopy 0 'base ''AbortiveDraw)

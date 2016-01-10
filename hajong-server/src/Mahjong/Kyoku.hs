@@ -55,7 +55,7 @@ type InKyoku m =
     , Applicative m
     , Monad m )
 
-handOf :: Kaze -> Lens Kyoku Kyoku (Maybe HandA) (Maybe HandA)
+handOf :: Kaze -> Lens Kyoku Kyoku (Maybe Hand) (Maybe Hand)
 handOf pk = sHands.at pk
 
 ----------------------------------------------------------------------------------------
@@ -175,7 +175,7 @@ dealGameEvent ev = appEndo . mconcat $ case ev of
         , Endo $ pPlayers . ix pk . _1 .~ player ]
 
     -- player-private
-    DealStarts _ _ _ -> [ ]
+    DealStarts{} -> [ ]
 
     DealWaitForShout ws ->
         [ Endo $ sWaiting %~ Just . Right . maybe [ws] (either (const [ws]) (|> ws)) ]
@@ -280,12 +280,12 @@ nagashiOrDraw = do
     endKyoku res
 
 
-handWinsNagashi :: Kaze -> Hand Identity -> Maybe (Winner, [Payer])
+handWinsNagashi :: Kaze -> Hand -> Maybe (Winner, [Payer])
 handWinsNagashi pk hand =
     -- TODO perhaps this could be placed in YakuCheck too
      let points = floor $ if' (pk == Ton) 1.5 1 * 8000
          value  = Value [Yaku 5 "Nagashi Mangan"] 0 5 0 (Just "Mangan")
-         winner = (pk, points, ValuedHand (hand^.handCalled) (hand^.handConcealed._Wrapped) value)
+         winner = (pk, points, ValuedHand (hand^.handCalled) (hand^.handConcealed) value)
 
          -- TODO fails when not four players
          payers = map (\payer -> (payer, if' (payer == Ton) 2 1 * 2000)) $ L.delete pk [Ton .. Pei]
@@ -295,8 +295,8 @@ processAnkan :: InKyoku m => Kaze -> Tile -> m Machine
 processAnkan pk t = do
     handOf' pk >>= ankanOn t >>= updateHand pk
     otherHands <- use sHands <&> filter ((/=pk).fst) . Map.toList
-    let kokushiWins = filter ((== NotFuriten) . runIdentity . _handFuriten . snd) $
-                      filter ((== Just (-1)) . shantenBy kokushiShanten . (handConcealed._Wrapped %~ cons t) . snd) otherHands
+    let kokushiWins = filter ((== NotFuriten) . _handFuriten . snd) $
+                      filter ((== Just (-1)) . shantenBy kokushiShanten . (handConcealed %~ cons t) . snd) otherHands
     if null kokushiWins -- chankan on ankan only when kokushi could win from it
         then return $ WaitingDraw pk True
         else return $ WaitingShouts (setFromList $ map fst kokushiWins) Nothing (each._2 .~ Shout Chankan pk t [] $ kokushiWins) True
@@ -337,7 +337,7 @@ checkEndConditions = do
 sendDealStarts :: InKyoku m => m ()
 sendDealStarts = do
     deal <- get
-    imapM_ (\pk (player,_,_) -> tellEvent . DealStarts player pk $ buildPlayerState deal pk) (deal^.pPlayers)
+    imapM_ (\pk (player,_,_) -> tellEvent . DealStarts $ PlayerKyoku player pk deal) (deal^.pPlayers)
 
 -- ** Drawing
 
@@ -355,19 +355,19 @@ draw pk wanpai = do
 
     firstRound <- use $ pFlags.to (member FirstRoundUninterrupted)
     when firstRound $ do
-        allHandsInterrupted <- use sHands <&> allOf (each.handFlags._Wrapped) (notMember HandFirsRoundUninterrupted)
+        allHandsInterrupted <- use sHands <&> allOf (each.handFlags) (notMember HandFirsRoundUninterrupted)
         when allHandsInterrupted $ unsetFlag FirstRoundUninterrupted
 
     updateHand pk =<< (if wanpai then drawDeadWall else drawWall) =<< handOf' pk
     tellEvent $ DealTurnAction pk $ TurnTileDraw wanpai Nothing
 
-drawWall :: InKyoku m => HandA -> m HandA
+drawWall :: InKyoku m => Hand -> m Hand
 drawWall hand = do
     wallHead <- preuse (sWall._head) >>= maybe (throwError "Wall is empty") return
     sWall %= tailEx
     wallHead `toHand` hand
 
-drawDeadWall :: InKyoku m => HandA -> m HandA
+drawDeadWall :: InKyoku m => Hand -> m Hand
 drawDeadWall hand = do
     lastTileInWall <- preuse (sWall._last) >>= maybe (throwError "Wall is empty") return
     fromWanpai     <- wanpaiGetSupplement lastTileInWall
@@ -403,12 +403,12 @@ updateTempFuritens :: InKyoku m => m ()
 updateTempFuritens = do
     pk   <- use pTurn
     tile <- _dcTile . lastEx . _handDiscards <$> handOf' pk
-    handOf' pk >>= \h -> case h^.handFuriten._Wrapped of
-        NotFuriten | tile `elem` handGetAgari h -> updateHand pk $ h & handFuriten._Wrapped .~ TempFuriten
-        TempFuriten                             -> updateHand pk $ h & handFuriten._Wrapped .~ NotFuriten
+    handOf' pk >>= \h -> case h^.handFuriten of
+        NotFuriten | tile `elem` handGetAgari h -> updateHand pk $ h & handFuriten .~ TempFuriten
+        TempFuriten                             -> updateHand pk $ h & handFuriten .~ NotFuriten
         _                                       -> return ()
-    forM_ (L.delete pk [Ton .. Pei]) $ \k -> handOf' k >>= \h -> case h^.handFuriten._Wrapped of
-        NotFuriten | tile `elem` handGetAgari h -> updateHand k $ h & handFuriten._Wrapped .~ TempFuriten
+    forM_ (L.delete pk [Ton .. Pei]) $ \k -> handOf' k >>= \h -> case h^.handFuriten of
+        NotFuriten | tile `elem` handGetAgari h -> updateHand k $ h & handFuriten .~ TempFuriten
         _                                       -> return ()
 
 -- ** Turn-passing
@@ -516,7 +516,7 @@ endDraw = do
     let x@(tenpaiHands, nootenHands) = partition (tenpai.snd) (itoList hands) -- & both.each %~ fst
         (receive, pay) | null tenpaiHands || null nootenHands = (0, 0)
                        | otherwise                            = x & both %~ div 3000.fromIntegral.length
-    dealEnds $ DealDraw (map (\(k,h) -> (k,receive,h^.handCalled,h^.handConcealed._Wrapped)) tenpaiHands) (map ((,-pay) . fst) nootenHands)
+    dealEnds $ DealDraw (map (\(k,h) -> (k,receive,h^.handCalled,h^.handConcealed)) tenpaiHands) (map ((,-pay) . fst) nootenHands)
 
 endRon :: InKyoku m => [Kaze] -> Kaze -> m KyokuResults
 endRon winners payer = do
@@ -625,34 +625,18 @@ tellPlayerState :: InKyoku m => Player -> m ()
 tellPlayerState p = do
     pk <- playerToKaze p
     deal <- get
-    tellEvent . DealStarts p pk $ buildPlayerState deal pk
+    tellEvent . DealStarts $ PlayerKyoku p pk deal
 
 updatePlayerNick :: InKyoku m => Player -> Text -> m ()
 updatePlayerNick p nick = playerToKaze p >>= \pk -> tellEvent (DealNick pk p nick)
 
--- | Build the player's "@GamePlayer@" record, or the state of the game as
--- seen by the player (hide "Deal" but show the player's own hand).
-buildPlayerState :: Kyoku -> Kaze -> AsPlayer
-buildPlayerState deal pk = flip appEndo (deal { _sHands = imap (\k -> if pk == k then convertHand else maskPublicHand) (_sHands deal) }) $ mconcat
-    [ Endo $ sEventHistory .~ []
-    , Endo $ sWall .~ []
-    , Endo $ sWanpai .~ Wanpai [] [] [] []
-    , Endo $ sWaiting %~ mwaiting
-    ] where
-        mwaiting :: Maybe Waiting -> Maybe Waiting
-        mwaiting x
-            | x ^? _Just._Left._2 == Just pk = x
-            | otherwise = case x ^.. _Just._Right.folded.filtered (^._2.to(==pk)) of
-                        [] -> Nothing
-                        xs -> Just (Right xs)
-
 -- | Set the hand of player
-updateHand :: InKyoku m => Kaze -> HandA -> m ()
+updateHand :: InKyoku m => Kaze -> Hand -> m ()
 updateHand pk new = do
     p   <- kazeToPlayer pk
     sHands.at pk .= Just new
     tellEvent (DealPrivateHandChanged p pk new)
-    tellEvent (DealPublicHandChanged pk $ maskPublicHand new)
+    tellEvent (DealPublicHandChanged pk $ PlayerHand new)
 
 tellEvent :: InKyoku m => GameEvent -> m ()
 tellEvent ev = do
@@ -676,7 +660,7 @@ kazeToPlayer pk = do
     rp <- use pPlayers <&> view (at pk)
     maybe (throwError $ "Player `" ++ tshow pk ++ "' not found") (return . (^._1)) rp
 
-handOf' :: InKyoku m => Kaze -> m HandA
+handOf' :: InKyoku m => Kaze -> m Hand
 handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") return
 
 ----------------------------------------------------------------------------------------
@@ -686,12 +670,12 @@ handOf' p = use (handOf p) >>= maybe (throwError "handOf': Player not found") re
 -- | Get all possible shouts from all players for a given tile.
 filterCouldShout :: Tile            -- ^ Tile to shout
                  -> Kaze            -- ^ Whose tile
-                 -> Map Kaze HandA  -- ^ All hands
+                 -> Map Kaze Hand  -- ^ All hands
                  -> [(Kaze, Shout)] -- ^ Sorted in correct precedence (highest priority as head)
 filterCouldShout dt np = sortBy (shoutPrecedence np)
     . concatMap flatten . Map.toList
     . Map.mapWithKey (shoutsOn np dt)
-    . Map.filter ((== NotFuriten) . runIdentity . _handFuriten) -- discard furiten
+    . Map.filter ((== NotFuriten) . _handFuriten) -- discard furiten
   where flatten (k, xs) = map (k,) xs
 
 -- | Flag for chankan.
