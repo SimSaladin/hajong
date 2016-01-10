@@ -508,8 +508,8 @@ scoringTests = testGroup "Scoring"
                 stepped_ $ InpTurnAction Ton $ TurnTsumo
 
         requireRight res $ \(_evs, (KyokuEnded r, _k)) -> do
-            headEx (dWinners r) ^. _2 @?= 1200 + 300
-            dPayers r ^..each._2 @?= [-400 - 100, -400 - 100, -400 - 100]
+            headEx (dWinners r) ^. _2 @?= 1500 + 300
+            dPayers r ^..each._2 @?= [-500 - 100, -500 - 100, -500 - 100]
 
     , testCase "Honba is deducted from payer and added to winner on ron" $ do
         kyoku <- testKyoku <&> sHands . ix Nan . handConcealed._Wrapped .~ handThatWinsWithP5Pinfu

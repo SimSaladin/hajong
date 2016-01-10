@@ -24,6 +24,7 @@ import            Mahjong.Hand.Yaku
 import            Mahjong.Hand.Algo
 import            Mahjong.Hand.Mentsu
 ------------------------------------------------------------------------------
+import qualified  Data.List as L
 
 -- ** Calculating
 
@@ -35,8 +36,8 @@ import            Mahjong.Hand.Mentsu
 getValue :: ValueInfo -> Value
 getValue vi = Value yaku fu han val name
   where
-    (_, yaku)   = getYaku vi -- TODO save grouping?
-    fu          = getFu yaku vi
+    (grp, yaku) = getYaku vi
+    fu          = getFu grp yaku vi
     han         = (each.yHan) `sumOf` yaku
     (val, name) = valued yaku han fu
 
@@ -51,32 +52,62 @@ hanSum :: [Yaku] -> Int
 hanSum = sum . map _yHan
 
 -- | Calculate fu points.
-getFu :: [Yaku] -> ValueInfo -> Fu
-getFu ys | any (\y -> _yName y == "Chiitoitsu") ys = const 25
-         | otherwise = rounded . sum . sequence
-             [ sum . map mentsuValue . view (vHand.handCalled)
-             , waitValue
-             , baseFu ]
-    where rounded = (* 10) . fst . (`divMod` 10)
+getFu :: Grouping -> [Yaku] -> ValueInfo -> Fu
+getFu grp ys vi
+    | hanSum ys >= 5 = 0
+    | any (\y -> _yName y == "Chiitoitsu") ys = 25
+    | any (\y -> _yName y == "Pinfu") ys = case vi^.vHand.handAgari of
+                                                           Just AgariCall{} -> 30
+                                                           _ -> 20
+    | otherwise = rounded $ sum $ 20 : tsumoFu vi : waitFu grp vi : map tileGroupFu grp
+    where rounded x = ceiling (fromIntegral x / 10) * 10
 
-baseFu :: ValueInfo -> Fu
-baseFu vi | Just AgariCall{} <- vi^.vHand.handAgari = 30
-          | otherwise                               = 20
+-- | +2 if tsumo.
+tsumoFu :: ValueInfo -> Fu
+tsumoFu vi | Just AgariTsumo{} <- vi^.vHand.handAgari = 2
+           | otherwise                                = 0
 
-waitValue :: ValueInfo -> Fu
-waitValue = go <$> pickedTile . (^?! vHand.handPicks._last) <*> map mentsuTiles . filter (not . mentsuShouted) . view (vHand.handCalled)
-    where go tile = fromMaybe 0 . maximumMay . map (waitFu tile)
+-- | +10 if ron and hand is closed.
+closedFu :: ValueInfo -> Fu
+closedFu vi | [] <- vi^.vHand.handCalled
+            , Just AgariCall{} <- vi^.vHand.handAgari = 10
+            | otherwise                              = 0
 
-waitFu :: Tile -> [Tile] -> Fu
-waitFu t xs = case xs of
-    [a, _]    | a == t -> 2
-    [a, b, c] | t == b -> 2
-              | tileNumber a == Just Ii   && t == c -> 2
-              | tileNumber c == Just Chuu && t == a -> 2
-    _ -> 0
+waitFu :: Grouping -> ValueInfo -> Fu
+waitFu grp vi = vi^.vHand.handAgari.to agariValue
+    where
+        agariValue Nothing = 0
+        agariValue (Just (AgariCall Shout{..})) = getsValue shoutTile shoutTo
 
-mentsuValue :: Mentsu -> Fu
-mentsuValue (Mentsu mk ts ms) = product [gokind mk, gotile (headEx ts), goshout ms]
+        agariValue (Just (AgariTsumo tile _)) =
+            let possibleTileGroups = flip map grp $ \case
+                    GroupWait _ ih _
+                        | tile `elem` ih -> initEx ih
+                    GroupComplete Mentsu{..}
+                        | Nothing <- mentsuShout, tile `elem` mentsuTiles -> L.delete tile mentsuTiles
+                        | Just Shout{..} <- mentsuShout, tile `elem` mentsuTiles, shoutKind `elem` [Ron, Chankan] -> L.delete tile mentsuTiles
+                    _ -> []
+
+            in maximumEx $ map (getsValue tile) possibleTileGroups
+
+        getsValue t ih
+            | [Honor honor] <- ih = case honor of
+                Sangenpai _ -> 2 -- sangen pair
+                Kazehai k | k == vi^.vPlayer || k == vi^.vKyoku.pRound._1 -> 2 -- value kaze pair (max 2 fu)
+                _ -> 0
+            | [a, b] <- ih
+            , a ==~ b {- shanpon -}
+                || tileNumber t `elem` [Just San, Just Chii] {- penchan -}
+                || succMay a == predMay b || predMay a == succMay b {- kanchan -} = 2
+            | otherwise = 0
+
+tileGroupFu :: TileGroup -> Fu
+tileGroupFu (GroupWait _ ih _) = mentsuFu $ Mentsu Jantou ih Nothing
+tileGroupFu (GroupComplete mentsu) = mentsuFu mentsu
+tileGroupFu _ = 0
+
+mentsuFu :: Mentsu -> Fu
+mentsuFu (Mentsu mk ts ms) = product [gokind mk, gotile (headEx ts), goshout ms]
   where
     gokind Koutsu = 2
     gokind Kantsu = 8

@@ -29,16 +29,16 @@ tests = testGroup "Hand value"
         , testCase " G honor minkantsu     " $ minkantsu "G " @?= 16
         , testCase " G honor ankantsu      " $ ankantsu  "G " @?= 32
 
-        , testCase " M1 jantou "            $ mentsuValue (jantou "M1") @?= 0
-        , testCase " G jantou "             $ mentsuValue (jantou "G") @?= 0
+        , testCase " M1 jantou "            $ mentsuFu (jantou "M1") @?= 0
+        , testCase " G jantou "             $ mentsuFu (jantou "G") @?= 0
 
-        , testProperty "Fu of any shuntsu is 0" $ (== 0) . mentsuValue <$> arbitraryShuntsu
+        , testProperty "Fu of any shuntsu is 0" $ (== 0) . mentsuFu <$> arbitraryShuntsu
         ]
     ]
 
-ankoutsu  = mentsuValue . koutsu
-minkoutsu t = mentsuValue . fromShout $ Shout Pon undefined t [t,t]
+ankoutsu  = mentsuFu . koutsu
+minkoutsu t = mentsuFu . fromShout $ Shout Pon undefined t [t,t]
 
-ankantsu  = mentsuValue . kantsu
-minkantsu t = mentsuValue . fromShout $ Shout Kan undefined t [t,t,t]
+ankantsu  = mentsuFu . kantsu
+minkantsu t = mentsuFu . fromShout $ Shout Kan undefined t [t,t,t]
 
