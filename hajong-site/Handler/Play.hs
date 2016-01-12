@@ -129,7 +129,7 @@ getUpdateGamesR = do
 
         (failed, results) <- case _pgResults of
             Right fp -> (Nothing,) <$> mapFinalPoints _gamePlayers fp
-            Left err -> return (Just $ err ++ " " ++ tshow _pgLastMachine, [])
+            Left err -> return (Just $ err ++ " " ++ tshow _pgGameState, [])
 
         runDB $ updateWhere [ GameUuid ==. UUID.toText _gameUUID ]
             [ GameFinished =. Just time, GameContent =. Just (toJsonText _pgGameState)

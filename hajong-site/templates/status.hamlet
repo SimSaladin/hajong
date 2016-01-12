@@ -35,4 +35,3 @@
   $forall pg <- _seHistory
     <li>#{tshow $ _pgResults pg} &mdash;
         #{tshow $ _pgGameState pg} &mdash;
-        #{tshow $ _pgLastMachine pg}

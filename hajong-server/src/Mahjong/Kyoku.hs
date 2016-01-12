@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections, RecordWildCards #-}
+{-# LANGUAGE TupleSections, RecordWildCards, DeriveGeneric #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 ------------------------------------------------------------------------------
 -- |
@@ -63,17 +63,15 @@ handOf pk = sHands.at pk
 -- * Logic
 
 -- | Game automata
-data Machine = NotBegun Int -- Seconds to wait before continuing. Waiting is not done in this module, so do it somewhere else.
+data Machine = KyokuNone -- ^ No tiles in the table atm
+             | KyokuStartIn Int -- ^ Number of seconds before kyoku starts. Tiles dealt.
              | CheckEndConditionsAfterDiscard
              | WaitingDraw Kaze Bool
              | WaitingDiscard Kaze
-             | WaitingShouts (Set Kaze) (Maybe [Int]) [(Kaze, Shout)] Bool -- ^ set of players who could shout but have not (passed), index of now winning shout(s), flag: chankan? (to continue with discard)
-                -- TODO the Maybe [Int] could be replaced with just [Int],
-                -- [] representing the Nothing-case. Must take note of the
-                -- safecopy instances, though.
+             | WaitingShouts (Set Kaze) [Int] [(Kaze, Shout)] Bool -- ^ set of players who could shout but have not (passed), index of now winning shout(s), flag: chankan? (to continue with discard)
              | KyokuEnded KyokuResults
-             | HasEnded FinalPoints
-             deriving (Eq, Show, Read)
+             | HasEnded FinalPoints -- ^ This game has ended
+             deriving (Eq, Show, Read, Generic)
 
 -- | @MachineInput@ consists of two parts: actions from clients a la
 -- @GameAction@, and actions from the managing process i.e. advances to
@@ -86,7 +84,8 @@ data MachineInput = InpAuto -- ^ Whatever the current state is, do an action tha
 
 -- | Remember to publish the turn action when successful
 step :: InKyoku m => Machine -> MachineInput -> m Machine
-step (NotBegun _) InpAuto                   = sendDealStarts >> waitForDraw -- startDeal
+step KyokuNone _ = return KyokuNone
+step (KyokuStartIn _) InpAuto = sendDealStarts >> waitForDraw -- startDeal
 
 step (WaitingDraw pk wanpai) InpAuto        = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded timeout
 step (WaitingDraw pk wanpai) (InpTurnAction pk' (TurnTileDraw wanpai' _))
@@ -103,9 +102,9 @@ step (WaitingDiscard pk) (InpTurnAction pk' ta)
             | TurnShouminkan t <- ta        = processShouminkan pk t
 
 step (WaitingShouts couldShout winning shouts chankan) inp
-            | InpAuto <- inp, Just xs <- winning = processShouts (map (shouts L.!!) xs) chankan
-            | InpAuto <- inp                     = proceedWithoutShoutsAfterDiscard chankan
-            | null couldShout                    = proceedWithoutShoutsAfterDiscard chankan
+            | InpAuto <- inp, null winning = proceedWithoutShoutsAfterDiscard chankan
+            | InpAuto <- inp               = processShouts (map (shouts L.!!) winning) chankan
+            | null couldShout              = proceedWithoutShoutsAfterDiscard chankan
 
             | InpPass pk <- inp, couldShout' <- deleteSet pk couldShout
                                                  = do p <- kazeToPlayer pk
@@ -118,12 +117,11 @@ step (WaitingShouts couldShout winning shouts chankan) inp
             | InpShout pk shout <- inp, Just i <- L.findIndex (== (pk, shout)) shouts
                                                  = do
                 res <- use pTurn >>= \tk -> case winning of
-                    Just (j:js) -> case shoutPrecedence tk (shouts L.!! j) (pk, shout) of -- XXX: Would be prettier with a view-pattern
-                        EQ      -> return $ WaitingShouts (deleteSet pk couldShout) (Just (i:j:js)) shouts chankan -- new goes through with old ones
-                        GT      -> return $ WaitingShouts couldShout                (Just (j:js))   shouts chankan -- old takes precedence (XXX: this branch should never even be reached
-                        LT      -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i])      shouts chankan -- new takes precedence
-                    Just []     -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i])      shouts chankan
-                    Nothing     -> return $ WaitingShouts (deleteSet pk couldShout) (Just [i])      shouts chankan
+                    j:js -> case shoutPrecedence tk (shouts L.!! j) (pk, shout) of -- XXX: Would be prettier with a view-pattern
+                        EQ      -> return $ WaitingShouts (deleteSet pk couldShout) (i:j:js) shouts chankan -- new goes through with old ones
+                        GT      -> return $ WaitingShouts couldShout                (j:js)   shouts chankan -- old takes precedence (XXX: this branch should never even be reached
+                        LT      -> return $ WaitingShouts (deleteSet pk couldShout) [i]      shouts chankan -- new takes precedence
+                    []          -> return $ WaitingShouts (deleteSet pk couldShout) [i]      shouts chankan
 
                 p <- kazeToPlayer pk
                 tellEvent $ DealWaitForShout (p, pk, 0, [])
@@ -137,7 +135,7 @@ step CheckEndConditionsAfterDiscard InpAuto = checkEndConditions
 step (KyokuEnded{}) InpAuto = do
     k <- get
     case maybeGameResults k of
-        Nothing -> return (NotBegun 15) -- TODO Return instead a WaitingNextDeal before this, which only continues with a new kyoku state.
+        Nothing -> return KyokuNone
         Just res -> endGame res
 
 step HasEnded{} _     = throwError "This game has ended!"
@@ -299,7 +297,7 @@ processAnkan pk t = do
                       filter ((== Just (-1)) . shantenBy kokushiShanten . (handConcealed %~ cons t) . snd) otherHands
     if null kokushiWins -- chankan on ankan only when kokushi could win from it
         then return $ WaitingDraw pk True
-        else return $ WaitingShouts (setFromList $ map fst kokushiWins) Nothing (each._2 .~ Shout Chankan pk t [] $ kokushiWins) True
+        else return $ WaitingShouts (setFromList $ map fst kokushiWins) [] (each._2 .~ Shout Chankan pk t [] $ kokushiWins) True
 
 processShouminkan :: InKyoku m => Kaze -> Tile -> m Machine
 processShouminkan pk t = do
@@ -307,7 +305,7 @@ processShouminkan pk t = do
     chankanShouts <- getShouts True t
     if null chankanShouts then return (WaitingDraw pk True)
                           else do tellEvents . map DealWaitForShout =<< toWaitShouts chankanShouts
-                                  return (WaitingShouts (setFromList $ map fst chankanShouts) Nothing chankanShouts True)
+                                  return (WaitingShouts (setFromList $ map fst chankanShouts) [] chankanShouts True)
 
 checkEndConditions :: InKyoku m => m Machine
 checkEndConditions = do
@@ -387,7 +385,7 @@ processDiscard pk d' = do
     tellEvents $ map DealWaitForShout waiting
     return $ if null waiting
                  then CheckEndConditionsAfterDiscard
-                 else WaitingShouts (setFromList $ map fst shouts) Nothing shouts False
+                 else WaitingShouts (setFromList $ map fst shouts) [] shouts False
 
 doRiichi :: InKyoku m => Kaze -> m ()
 doRiichi pk = do
@@ -524,12 +522,13 @@ endRon winners payer = do
     honba       <- use pHonba
     riichi      <- use pRiichi
 
-    let pointsFromPayer = zipWith valuedHandPointsForRon winners valuedHands
-        pointsExtra     = sum [riichi, honba * 300]
+    let pointsFromPayer  = zipWith valuedHandPointsForRon winners valuedHands
+        pointsRiichi     = riichi
+        pointsHonba      = honba * 300
         Just extraGoesTo = payer ^.. iterated succCirc & find (`elem` winners) -- Iterate every kaze, so one must be an element. unless no one won.
-        winEntries      = map (\x -> if x^._1 == extraGoesTo then x & _2 +~ pointsExtra else x) $ zip3 winners pointsFromPayer valuedHands
+        winEntries       = map (\x -> if x^._1 == extraGoesTo then x & _2 +~ pointsHonba + pointsRiichi else x) $ zip3 winners pointsFromPayer valuedHands
 
-    dealEnds $ DealRon winEntries [(payer, negate $ pointsExtra + sum pointsFromPayer)]
+    dealEnds $ DealRon winEntries [(payer, negate $ pointsHonba + sum pointsFromPayer)]
 
 -- *** Helpers
 

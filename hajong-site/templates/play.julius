@@ -86,15 +86,14 @@ function startGame(doJoin) {
 
     socket.onmessage = function (e) {
        var data = JSON.parse(e.data);
-        if (data.type == "identity") {
-          localStorage.setItem("ident", data.ident);
-          localStorage.setItem("token", data.token);
-        }
-        if (data.type == "invalid") {
-          handleInvalidEvent(data.content);
-        } else {
-          if (debug) debugEvent(data);
-        }
+       if (data.type == "identity") {
+         localStorage.setItem("ident", data.ident);
+         localStorage.setItem("token", data.token);
+       }
+       if (debug) debugEvent(data);
+       if (data.type == "invalid") {
+         handleInvalidEvent(data.content);
+       }
        game.ports.downstream.send(e.data);
     }
 
@@ -109,7 +108,7 @@ function handleInvalidEvent(content) {
   if (content.startsWith("Handshake failed:")) {
     authenticateGameServer();
   } else {
-    alerted(content);
+    alerted("Server: " + content);
   }
 }
 

@@ -115,7 +115,6 @@ type UID = Int
 makeWorkerData :: Game -> Server WorkerData
 makeWorkerData game = WorkerData
     <$> (liftIO . newTVarIO =<< attachClients game)
-    <*> (liftIO $ newTVarIO $ NotBegun 5)
     <*> liftIO newEmptyTMVarIO
     <*> getWorkerLoggerSet game
 
@@ -160,7 +159,7 @@ initiateHandshake = do
             | length nick > 24 -> uniError "Maximum nick length is 24 characters"
             | otherwise        -> withClient c{getNick = nick, getIdent = ident} (handshake token mgame)
         InternalControl secret -> internalConnect secret
-        _                      -> uniError "Received an invalid Event"
+        _                      -> uniError $ "When expecting join-handshake, ceceived an invalid event instead: " <> tshow event
 
 handshake :: Text -> Maybe Int -> Server ()
 handshake token mgame = do
@@ -231,9 +230,8 @@ workerDied gid res = do
         rg           <- readTVar (ss^.seWorkers) <&> (^?! at gid._Just)
         let wd        = rg^.gWorker
         gs           <- readTVar (wd^.wGame) <&> map getIdent
-        machine      <- readTVar (wd^.wMachine)
         let clientSet = rg^..gClients.folded & setFromList
-            pg        = PastGame (_Left %~ tshow $ res) gs machine
+            pg        = PastGame (_Left %~ tshow $ res) gs
 
         modifyTVar' (ss^.seWorkers) (at gid .~ Nothing)
         modifyTVar' (ss^.seLounge) (union clientSet)
@@ -453,6 +451,9 @@ serverDebugger = forever $ do
                   print' "lounge:      " =<< rview seLounge
         "g" -> mapM_ debugGameShow . itoList =<< rview seWorkers
 
+        _ | ["kill", gid'] <- words inp, Just gid <- readMay gid' -> do
+                withRunningGame gid $ liftIO . killThread . _gThread
+
         _ | ["l", gid', filename] <- words inp, Just gid <- readMay gid' -> do
                 machine' : kyoku' <- readFile (unpack filename) <&> lines
                 let Just machine = readMay machine'
@@ -461,7 +462,7 @@ serverDebugger = forever $ do
 
           | ["s", gid', filename] <- words inp, Just gid <- readMay gid' -> withRunningGame gid $ \rg -> do
                 let wd = _gWorker rg
-                output <- liftIO $ (\m k -> show m ++ "\n" ++ show (_gameKyoku k)) <$> readTVarIO (_wMachine wd) <*> readTVarIO (_wGame wd)
+                output <- liftIO $ (\gs -> show (_gameState gs) ++ "\n" ++ show (_gameKyoku gs)) <$> readTVarIO (_wGame wd)
                 writeFile (unpack filename) output
           | otherwise -> putStrLn "Unknown command"
     putStrLn ""

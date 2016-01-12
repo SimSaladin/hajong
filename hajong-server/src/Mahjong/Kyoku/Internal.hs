@@ -115,7 +115,7 @@ data GameAction = GameTurn TurnAction -- ^ An action of the player in turn
 type PointsStatus = Map Player Points
 
 -- | Results from a whole game of mahjong.
-newtype FinalPoints = FinalPoints PointsStatus deriving (Show, Read, Eq)
+newtype FinalPoints = FinalPoints PointsStatus deriving (Show, Read, Eq, Generic)
 
 data KyokuResults = DealTsumo { dWinners :: [Winner], dPayers :: [Payer] }
                   | DealRon   { dWinners :: [Winner], dPayers :: [Payer] }

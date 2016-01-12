@@ -48,7 +48,6 @@ type Game = GameState Int
 data PastGame = PastGame
     { _pgResults       :: Either Text FinalPoints
     , _pgGameState     :: Game
-    , _pgLastMachine   :: Machine
     } deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''ClientRecord)

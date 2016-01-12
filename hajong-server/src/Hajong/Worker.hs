@@ -20,7 +20,7 @@
 --
 ------------------------------------------------------------------------------
 module Hajong.Worker
-    ( WorkerData(..), wGame, wMachine, wInput, wLogger
+    ( WorkerData(..), wGame, wInput, wLogger
     , WorkerInput(..), WorkerResult
     , startWorker
     ) where
@@ -44,7 +44,6 @@ default (Text)
 -- type WorkerState = (TVar (GameState Client), TMVar WorkerInput)
 data WorkerData = WorkerData
                 { _wGame    :: TVar (GameState Client)
-                , _wMachine :: TVar Machine
                 , _wInput   :: TMVar WorkerInput -- ^ Input from outside worker
                 , _wLogger  :: LoggerSet
                 } deriving (Typeable)
@@ -79,7 +78,7 @@ makeLenses ''WorkerData
 
 -- | Start the worker in a new thread.
 startWorker :: Finalize -> WorkerData -> IO ThreadId
-startWorker ends wdata = execWorker wdata waitPlayersAndBegin `forkFinally` ends
+startWorker ends wdata = execWorker wdata processMachine `forkFinally` ends
 
 execWorker :: WorkerData -> Worker a -> IO a
 execWorker st cont = (runWorker cont `runLoggingT` logger) `runReaderT` st
@@ -129,41 +128,24 @@ addPlayer client callback = do
 
 -- * Worker logic
 
--- | First entry point of a new worker.
---
--- Begins the game including the first round when all players have joined.
---
---  Internal flow:
---      @waitPlayersAndBegin@
---      -> @beginDeal@
---      -> @processMachine@
---      -> @processKyokuEnded@ (-> @processMachine@)
-waitPlayersAndBegin :: Worker FinalPoints
-waitPlayersAndBegin = $logInfo "Waiting for players" >> go
-  where
-    go = rview wGame >>= maybe (takeInput >>= processInput >> go)
-                               (liftIO >=> playGame) . maybeBeginGame
-
 -- | This is called when the worker is ready to take next input either from
 -- a client or server (both come in to the same TMVar).
-processInput :: WorkerInput -> Worker (Maybe (Machine, Worker ()))
-processInput (WorkerAddPlayer client callback)  = addPlayer client callback >> return Nothing
+processInput :: WorkerInput -> Worker (Maybe (GameState Client, [GameEvent]))
+processInput (WorkerAddPlayer client callback)        = addPlayer client callback        >> return Nothing
 processInput (WorkerPartPlayer client leave callback) = partPlayer leave client callback >> return Nothing
-processInput (WorkerGameAction c ga)            = processGameAction c ga
-processInput WorkerForceStart                   = rmodify wGame (gamePlayers.each %~ \c -> c { isReady = True }) >> return Nothing
-processInput (WorkerReplaceKyoku machine kyoku) = do rmodify wGame (gameKyoku .~ kyoku)
-                                                     void $ rswap wMachine machine
-                                                     $logInfo "Game state was replaced successfully"
-                                                     return Nothing
-
--- | If the action would be valid in the kyoku, return the worker action
--- which applies the action and the corresponding continuation state.
-processGameAction :: Client -> GameAction -> Worker (Maybe (Machine, Worker ()))
-processGameAction c ga = fmap (clientToPlayer c) (rview wGame) >>= \case
-    Just p  -> gameActionToKyokuInput p >>= safeStep >>= either (\e -> unicastError c e >> return Nothing) (return . Just)
-    Nothing -> unicastError c "You are not playing in this game" >> return Nothing
-
+processInput WorkerForceStart                         = rmodify wGame (gamePlayers.each %~ \c -> c { isReady = True }) >> return Nothing
+processInput (WorkerReplaceKyoku machine kyoku)       = do rmodify wGame $ (gameState .~ machine) . (gameKyoku .~ kyoku)
+                                                           $logInfo "Game state was replaced successfully"
+                                                           return Nothing
+processInput (WorkerGameAction c ga)                  = processGameAction
   where
+
+    -- | If the action would be valid in the kyoku, return the worker action
+    -- which applies the action and the corresponding continuation state.
+    processGameAction :: Worker (Maybe (GameState Client, [GameEvent]))
+    processGameAction = fmap (clientToPlayer c) (rview wGame) >>= \case
+        Just p  -> gameActionToKyokuInput p >>= safeStep >>= either (\e -> unicastError c e >> return Nothing) (return . Just)
+        Nothing -> unicastError c "You are not playing in this game" >> return Nothing
 
     -- | Argument player *must* be present in the game.
     gameActionToKyokuInput :: Player -> Worker MachineInput
@@ -179,7 +161,7 @@ processGameAction c ga = fmap (clientToPlayer c) (rview wGame) >>= \case
 -- | Wait until someone inputs a valid action to the kyoku machine
 -- (@stepByClient@) or a timeout is reached. After timeout we continue with
 -- an @InpAuto@.
-stepByClientOrTimeout :: Worker Machine
+stepByClientOrTimeout :: Worker ()
 stepByClientOrTimeout = do
     let secs = 15 -- TODO hard-coded limit
     join $ workerRace secs stepByClient
@@ -188,65 +170,57 @@ stepByClientOrTimeout = do
 
 -- | Wait indefinetely until someone inputs a valid action to the kyoku
 -- machine.
-stepByClient :: Worker (Worker Machine)
+stepByClient :: Worker (Worker ())
 stepByClient = go
-    where go = takeInput >>= processInput >>= maybe go (\(m, a) -> return $ a >> rswap wMachine m $> m)
+    where go = takeInput >>= processInput >>= maybe go (\(gs, ma) -> return $ void $ sendGameEvents ma >> rswap wGame gs)
 
 -- | Safe kyoku step. Checks whether the step is valid, but does not do
 -- any relevant modifications to the worker state. The modifications can be
 -- done by running the @Worker@ action of the result.
-safeStep :: MachineInput -> Worker (Either Text (Machine, Worker ()))
-safeStep inp = rview wMachine >>= roundM . flip step inp
-
--- | See @unsafeRoundM@.
-unsafeStep :: MachineInput -> Worker Machine
-unsafeStep inp = do
-    m <- rview wMachine >>= unsafeRoundM . flip step inp
-    rswap wMachine m $> m
+safeStep :: MachineInput -> Worker (Either Text (GameState Client, [GameEvent]))
+safeStep inp = rview wGame <&> roundStep inp
+    
+unsafeStep :: MachineInput -> Worker ()
+unsafeStep inp = safeStep inp >>= either failed go
+    where failed e = error $ "unsafeStep: unexpected Left: " <> unpack e
+          go (gs, evs) = sendGameEvents evs >> void (rswap wGame gs)
 
 -- * The game machine
 
--- | Called when beginning the first kyoku.
-playGame :: GameState Client -> Worker FinalPoints
-playGame gs = do
-    $logInfo "Game begins now"
-    void $ rswap wGame gs
-    unsafeStep InpAuto >>= processMachine
-
 -- | Monitor the kyoku machine and perhaps do something in there.
-processMachine :: Machine -> Worker FinalPoints
-processMachine m = do
+processMachine :: Worker FinalPoints
+processMachine = do
+    m <- rview wGame <&> view gameState
     logDebugN $ "Transitioned to state " ++ tshow m
     case m of
-        NotBegun s                     -> workerWait s >> processKyokuStarts
-        CheckEndConditionsAfterDiscard -> unsafeStep InpAuto    >>= processMachine -- auto check
-        WaitingDraw{}                  -> unsafeStep InpAuto    >>= processMachine -- auto draw
-        WaitingDiscard{}               -> stepByClientOrTimeout >>= processMachine
-        WaitingShouts{}                -> stepByClientOrTimeout >>= processMachine
+        KyokuNone                      -> waitPlayersAndBegin
+        KyokuStartIn s                 -> workerWait s >> unsafeStep InpAuto >> processMachine
+        CheckEndConditionsAfterDiscard -> unsafeStep InpAuto    >> processMachine -- auto check
+        WaitingDraw{}                  -> unsafeStep InpAuto    >> processMachine -- auto draw
+        WaitingDiscard{}               -> stepByClientOrTimeout >> processMachine
+        WaitingShouts{}                -> stepByClientOrTimeout >> processMachine
         KyokuEnded res                 -> processKyokuEnded res
         HasEnded points                -> return points
   where
-
-    processKyokuStarts :: Worker FinalPoints
-    processKyokuStarts = do
-        Just k <- rview wGame <&> _gameKyoku
-        nextk <- liftIO (maybeNextDeal k)
-        case nextk of
-            Left points -> processMachine (HasEnded points)
-            Right kyoku -> do rmodify wGame (gameKyoku.~Just kyoku)
-                              workerWait 15
-                              unsafeStep InpAuto >>= processMachine
 
     processKyokuEnded :: KyokuResults -> Worker FinalPoints
     processKyokuEnded results = do
         $logInfo $ "Kyoku ended: " <> tshow results
         gs <- rview wGame
-
         let Just k = _Just.pResults.~Just results $ _gameKyoku gs -- TODO shouldn't be here
-        rmodify wGame $ gameHistory %~ cons k
+        nextk <- liftIO (maybeNextDeal k)
+        rmodify wGame $ case nextk of
+            Left points -> (gameState .~ HasEnded points)
+            Right kyoku -> (gameState .~ KyokuStartIn 10) . (gameKyoku.~Just kyoku)
+        processMachine
 
-        workerWait 15
-        unsafeStep InpAuto >>= processMachine
+    waitPlayersAndBegin :: Worker FinalPoints
+    waitPlayersAndBegin = $logInfo "Waiting for players" >> wait
+      where
+        wait = do gs <- rview wGame
+                  case maybeBeginGame gs of
+                      Nothing    -> takeInput >>= processInput >> wait
+                      Just to_gs -> liftIO to_gs >>= rswap wGame >> processMachine
 
 -- * Worker utilities
 
@@ -273,10 +247,8 @@ multicast ev = do gs <- rview wGame
 
 -- | See what would happen if the given round action was executed.
 roundM :: RoundM a -> Worker (Either Text (a, Worker ()))
-roundM ma = do
-        gs <- rview wGame
-        return $ do (res, kyoku, events) <- runRoundM ma gs
-                    return (res, rmodify wGame (gameKyoku .~ Just kyoku) >> sendGameEvents events)
+roundM ma = rview wGame <&> fmap go . runRoundM ma
+    where go (res, gs, evs) = (res, rswap wGame gs >> sendGameEvents evs)
 
 -- | Just execute the action - if it fails the worker dies! Use with care.
 unsafeRoundM :: RoundM a -> Worker a

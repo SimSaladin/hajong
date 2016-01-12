@@ -30,6 +30,7 @@ import qualified Data.UUID as UUID
 -- | "GameState" records all information of a single game.
 data GameState playerID = GameState
                    { _gameKyoku    :: Maybe Kyoku           -- ^ Active kyoku
+                   , _gameState    :: Machine
                    , _gameHistory  :: [Kyoku]               -- ^ In decending order
                    , _gamePlayers  :: Map Player playerID
                    , _gameUUID     :: UUID.UUID
@@ -46,7 +47,7 @@ instance P.Pretty p => P.Pretty (GameState p) where
 
 -- | Create a new GameState with the given label.
 newEmptyGS :: a -> UUID.UUID -> GameSettings -> GameState a
-newEmptyGS defPlayer = GameState Nothing [] (Map.fromList $ zip fourPlayers $ repeat defPlayer)
+newEmptyGS defPlayer = GameState Nothing KyokuNone [] (Map.fromList $ zip fourPlayers $ repeat defPlayer)
 
 -- ** Lenses
 
@@ -61,16 +62,17 @@ makeLenses ''GameState
 type RoundM = RWST Kyoku [GameEvent] Kyoku (Either Text)
 
 -- | Execute a round action in the "GameState".
---
--- Succesfull return value contains the value from the run "RoundM" action,
--- arbitrarily modified "RiichiSecret" and public changes encoded in
--- "GameEvents".
---
--- RoundM-actions do not explicitly modify the public state (RiichiPublic),
--- so **it is important you apply the changes implied by the events on the
--- state!** Haskell clients may use "@applyRoundEvents@".
-runRoundM :: RoundM r -> GameState p -> Either Text (r, Kyoku, [GameEvent])
-runRoundM m gs = maybe (Left "No active round!") (flip runKyoku m) (_gameKyoku gs)
+runRoundM :: RoundM a -> GameState p -> Either Text (a, GameState p, [GameEvent])
+runRoundM m gs = maybe (Left "No active round!") (fmap go . flip runKyoku m) (_gameKyoku gs)
+    where go (res, k, evs) = (res, gs & gameKyoku .~ Just k, evs)
+
+-- | Run the given input.
+roundStep :: MachineInput -> GameState p -> Either Text (GameState p, [GameEvent])
+roundStep inp gs = fmap go $ runRoundM (step (_gameState gs) inp) gs
+    where go (m, gs, evs) = (gs & gameState .~ m, evs)
+
+
+-- ** Internal?
 
 -- | Run action and apply gameveents.
 runKyoku :: Kyoku -> RoundM a -> Either Text (a, Kyoku, [GameEvent])
@@ -106,7 +108,7 @@ maybeBeginGame gs = do
     guard . null            $ gs^.gamePlayers^..each.filtered (not . playerReady)
     return $ do
         rs <- newKyoku fourPlayers (gs^.gamePlayers^..each.to playerNick)
-        return $ gameKyoku .~ Just rs $ gs
+        return $ gameState .~ KyokuStartIn 10 $ gameKyoku .~ Just rs $ gs
 
 -- * Modify
 

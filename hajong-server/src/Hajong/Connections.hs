@@ -1,7 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-} -- Identity/Maybe paramaterization
 {-# LANGUAGE DeriveGeneric #-}
 ------------------------------------------------------------------------------
 -- |
@@ -31,9 +30,6 @@ import           Data.Text.Binary ()
 import qualified Data.UUID    as UUID
 
 ------------------------------------------------------------------------------
-
-instance ToJSON m => ToJSON (Identity m) where
-    toJSON (Identity x) = toJSON x
 
 type Nick = Text
 
@@ -240,7 +236,9 @@ instance ToJSON UUID.UUID where
     toJSON = toJSON . UUID.toText
 
 instance ToJSON (GameState Int)
+instance ToJSON Machine
 instance ToJSON Kyoku
+instance ToJSON FinalPoints
 
 -- derived
 

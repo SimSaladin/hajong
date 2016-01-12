@@ -1,8 +1,9 @@
 x = done, / = half done, ! = needs testing
 
 ## open tasks
+[ ] [game/gameserver] separation of concerns: redesign kyoku into a state machine that starts with dealt tiles and ends with kyokuresults; Round so that it starts with game start and ends with finalpoints. so two different machines on two abstraction levels
 [x] [game] hand is not considered closed when winning on ron (agari should not produce an open meld)
-[ ] [game] riichi is deducted from payer on ron
+[/] [game] riichi is deducted from payer on ron
 [ ] [game] riichi-with tile can be tsumogiri
 [x] [game] fu are calculated incorrectly
 [ ] [game] make local acid state directory configurable (mainly for tests)
@@ -15,7 +16,7 @@ x = done, / = half done, ! = needs testing
 [ ] [elm] restyle kyoku results and final points views. they're crappy at best.  Perhaps should fit into the info block in the center? and the winning hand(s) could be displayed as the hand of the winning player(s).
 [!] [elm] should discard the hovered/shout-indicator hovers after they're no longer relevant (bugs at leat mobile devices). Would discarding them after turn changes be enough?
 [ ] [elm] after a game has ended (final points shown), make it possible to go back to lobby.
-[ ] [gameserver] reloading when kyoku has ended and is in waiting state, goes to lobby; then should send the roundstate immediately instead of waiting for the threadDelay finish.
+[ ] [gameserver] reloading when kyoku has ended and is in waiting state, goes to lobby; (because there is no kyokustate?). Should have a separete "waiting"-screen to be shown when kyoku is in any of the waiting states.
 [ ] [site/gameserver] https
 [ ] [site] add favicon
 [ ] [other] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
