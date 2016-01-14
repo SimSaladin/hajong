@@ -21,3 +21,5 @@ import           Mahjong.Tiles
 data Flag = FirstRoundUninterrupted -- ^ Tenhou, chiihou and renhou are yielded if someone goes out when this flag is in effect.
           | OpenedUraDora [TileEq]
           deriving (Eq, Ord, Read, Show)
+
+$(deriveSafeCopy 0 'base ''Flag)

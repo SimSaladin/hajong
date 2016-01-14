@@ -5,6 +5,10 @@ main = doctest
     , "-XOverloadedStrings", "-XTemplateHaskell", "-XDeriveDataTypeable"
     , "-XLambdaCase", "-XRankNTypes", "-XNoImplicitPrelude"
     , "-XRecordWildCards"
+    , "-XGeneralizedNewtypeDeriving"
     , "-XStandaloneDeriving"
+    , "-hide-package control-monad-free"
     , "-isrc"
-    , "src/Mahjong/Hand/Value.hs", "src/Mahjong/Kyoku.hs" ]
+    , "src/Mahjong/Hand/Fu.hs"
+    , "src/Mahjong/Hand/Value.hs"
+    , "src/Mahjong/Kyoku.hs" ]

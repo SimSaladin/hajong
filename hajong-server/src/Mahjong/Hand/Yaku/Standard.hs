@@ -49,10 +49,10 @@ pinfu = do
 
     -- require: wait (at least) two-sided
     agari <- yakuState <&> view (vHand.handAgari)
-    agariTile <- maybe yakuFail (return . agariTile) agari -- TODO: agari should always be present in ValueInfo
+    agari_t <- maybe yakuFail (return . agariTile) agari -- TODO: agari should always be present in ValueInfo
 
-    [a, _, c] <- anyShuntsu' (suited &. containsTile agariTile) <&> tileGroupTiles
-    if (tileNumber a == Just Ii && agariTile ==~ c) || (tileNumber c == Just Chuu && agariTile ==~ a)
+    [a, _, c] <- anyShuntsu' (suited &. containsTile agari_t) <&> tileGroupTiles
+    if (tileNumber a == Just Ii && agari_t ==~ c) || (tileNumber c == Just Chuu && agari_t ==~ a)
         then yakuFail
         else do
             replicateM_ 3 (anyShuntsu suited)

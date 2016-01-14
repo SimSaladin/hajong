@@ -19,6 +19,7 @@ module Mahjong.Hand.Mentsu
     -- * Functions
     mentsuShouted,
     isJantou, isShuntsu, isKoutsu, isKantsu,
+    calledChi, calledPon, calledKan,
 
     -- * Shouts
     Shout(..), ShoutKind(..),
@@ -90,6 +91,13 @@ shuntsu = mentsuFromKind Shuntsu
 koutsu  = mentsuFromKind Koutsu
 kantsu  = mentsuFromKind Kantsu
 jantou  = mentsuFromKind Jantou
+
+calledChi :: Tile -> [Tile] -> Mentsu
+calledChi callTile callInto = fromShout $ Shout Chi Ton callTile callInto
+
+calledPon, calledKan :: Tile -> Mentsu
+calledPon t = fromShout $ Shout Pon Ton t [t, t]
+calledKan t = fromShout $ Shout Kan Ton t [t, t, t]
 
 mentsuFromKind :: MentsuKind -> Tile -> Mentsu
 mentsuFromKind mk t = case mk of

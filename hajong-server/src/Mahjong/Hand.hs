@@ -131,7 +131,6 @@ discard d@Discard{..} hand
 rons :: CanError m => Shout -> Hand -> m Hand
 rons shout hand
     | hand^.handFuriten/= NotFuriten = throwError "You are furiten"
-    -- | [] <- shoutTo shout                      = return $ setAgariCall shout hand -- XXX: for kokushi tenpai
     | not $ complete $ setAgariCall shout hand = throwError $ "Cannot win with an incomplete hand: " ++ tshow (shout, hand)
     | otherwise                                = return $ setAgariCall shout hand
 
@@ -178,7 +177,7 @@ updateAfterDiscard d@Discard{..} hand = updateFlags
         | _dcRiichi, null (hand^.handDiscards) = handRiichi .~ DoubleRiichi
         | _dcRiichi                            = handRiichi .~ Riichi
         | otherwise                            = id
-    updateFlags                                = handFlags%~ deleteSet HandFirsRoundUninterrupted
+    updateFlags                                = unsetHandFlag HandFirsRoundUninterrupted
     movePicks                                  = over (handConcealed) (++ map pickedTile (_handPicks hand)) . set handPicks []
     updateFuriten h                            = h & handFuriten.~ if' (furiten h) Furiten NotFuriten
 
@@ -205,7 +204,7 @@ meldTo shout hand
     tilesFromHand               = shoutTo shout
     concealedTiles              = hand^.handConcealed
     correctConcealedTilesInHand = length concealedTiles == length (concealedTiles L.\\ tilesFromHand) + length tilesFromHand
-    moveFromConcealed           = over handCalled (|> fromShout shout) . removeFromConcealed
+    moveFromConcealed           = setHandFlag HandOpen . over handCalled (|> fromShout shout) . removeFromConcealed
     removeFromConcealed         = over (handConcealed) removeTiles
     removeTiles ih              = let (aka, notaka) = partition isAka ih in (aka ++ notaka) L.\\ tilesFromHand -- XXX: this is needed because Eq on Tile is warped
 

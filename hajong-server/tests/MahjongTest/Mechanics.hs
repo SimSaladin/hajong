@@ -30,7 +30,7 @@ gameFlowTests = testGroup "Game flow"
 
         let res = runKyokuState kyoku $ do
                 drawAndTurnAction Ton $ TurnTileDiscard $ Mahjong.Discard "S3" Nothing False
-                stepped $ InpShout Nan $ Shout Ron Ton "S3" ["S4", "S5"]
+                stepped_ $ InpShout Nan $ Shout Ron Ton "S3" ["S4", "S5"]
                 autoEndTurn
 
         requireRight res $ \case
@@ -69,9 +69,9 @@ gameFlowTests = testGroup "Game flow"
   , testCase "Kyoku goes through with consecutive InpAuto actions" $ do
       kyoku <- testKyoku
       case runKyokuState kyoku (replicateM_ 250 $ stepped InpAuto) of
-          Left "This kyoku has ended!" -> return ()
-          Left err                     -> assertFailure (unpack err)
-          Right _                      -> assertFailure "Kyoku didn't end withing 250 automatic advances"
+          Left err                -> assertFailure (unpack err)
+          Right (_, (KyokuNone,_)) -> assertFailure "Kyoku didn't end withing 250 automatic advances"
+          Right (_, (m,_)) -> assertFailure $ "Expected KyokuNone, but got " ++ show m
 
   , testCase "One han minimum to win a hand, not counting YakuExtra" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed  .~ handThatWinsWithP5
@@ -81,7 +81,7 @@ gameFlowTests = testGroup "Game flow"
 
       let res = runKyokuState kyoku $ do
             autoAndDiscard Ton $ Discard "P5" Nothing False
-            stepped $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
+            stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
             autoEndTurn
 
       case res of
@@ -99,7 +99,7 @@ gameFlowTests = testGroup "Game flow"
               drawAndTurnAction Ton $ TurnAnkan "M2"
               autoAndDiscard Ton $ Discard "P1" Nothing False
               autoAndDiscard Nan $ Discard "M3" Nothing False
-              stepped $ InpShout Ton $ Shout Kan Nan "M3" ["M3", "M3", "M3"]
+              stepped_ $ InpShout Ton $ Shout Kan Nan "M3" ["M3", "M3", "M3"]
               drawAndTurnAction Ton TurnTsumo
 
       requireRight res $ \(_evs, (_r,k)) -> do
@@ -204,7 +204,7 @@ gameFlowTests = testGroup "Game flow"
 
       let res = runKyokuState kyoku $ do
             autoAndDiscard Ton $ Discard "s5" Nothing False
-            stepped $ InpShout Nan $ Shout Chi Ton "s5" ["s4", "S3"]
+            stepped_ $ InpShout Nan $ Shout Chi Ton "s5" ["s4", "S3"]
             autoEndTurn
 
       requireRight res $ \(_,(_,k)) -> k^..sHands.ix Nan .handCalled._head.to mentsuTiles.each.filtered isAka @?= ["s4", "s5"]
@@ -235,14 +235,14 @@ furitenTests = testGroup "Furiten tests"
           sndRound   = do autoAndDiscard Shaa $ Discard "S1" Nothing False
                           autoAndDiscard Pei $ Discard "P5" Nothing False
 
-          shout k    = do stepped_ $ InpShout Shaa $ Shout Ron k "P5" ["P5"]
+          shout k    = do stepped_ $ InpShout Shaa $ Shout Ron k "P5" ["P4", "P3"]
 
       case runKyokuState kyoku (firstRound >> shout Nan) of
-          Left err -> err @?= "No such call is possible"
+          Left err -> return ()
           _        -> assertFailure "Game should have errored"
 
       case runKyokuState kyoku (firstRound >> sndRound >> shout Pei) of
-          Left err -> assertFailure $ unpack err
+          Left err -> assertFailure $ "Shaa couldn't call P5 from Pei, got: " ++ unpack err
           Right _  -> return ()
 
   , testCase "Chiitoi furiten" $ do
@@ -256,7 +256,7 @@ furitenTests = testGroup "Furiten tests"
             stepped_ $ InpShout Nan $ Shout Ron Ton "M3" ["M3"]
 
       case res of
-          Left err -> err @?= "No such call is possible"
+          Left err -> return ()
           Right x  -> assertFailure "Should have errored"
 
   , testCase "Kokushi furiten" $ do
@@ -270,7 +270,7 @@ furitenTests = testGroup "Furiten tests"
             stepped_ $ InpShout Nan $ Shout Ron Ton "G" []
 
       case res of
-          Left err -> err @?= "No such call is possible"
+          Left err -> return ()
           Right x  -> assertFailure "Should have errored"
 
   , testCase "Ron is not possible if furiten; must fail before shout goes through" $ do
@@ -284,7 +284,7 @@ furitenTests = testGroup "Furiten tests"
             stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
 
       case res of
-          Left err -> err @?= "No such call is possible"
+          Left err -> return ()
           _        -> assertFailure "Game should have errored"
 
   , testCase "Ron is not possible if 0 yaku; must fail before shout goes through" $ do
@@ -298,7 +298,7 @@ furitenTests = testGroup "Furiten tests"
             stepped_ $ InpShout Nan $ Shout Ron Ton "P5" ["P5"]
 
       case res of
-          Left err -> err @?= "No such call is possible"
+          Left err -> return ()
           _        -> assertFailure "Game should have errored"
 
   ]
@@ -338,7 +338,7 @@ riichiTests = testGroup "Riichi tests"
       let res = runKyokuState kyoku $ do
             autoAndDiscard Ton $ Discard "P3" Nothing False
             autoAndDiscard Nan $ Discard "P5" Nothing False
-            stepped_ $ InpShout Ton $ Shout Ron Nan "P5" ["P5"]
+            stepped_ $ InpShout Ton $ Shout Ron Nan "P5" ["P4", "P3"]
 
       requireRight res $ \(_evs, (m, k)) -> do
           Right k' <- maybeNextDeal k
@@ -525,14 +525,16 @@ scoringTests = testGroup "Scoring"
                 autoEndTurn
 
         requireRight res $ \(_evs, (KyokuEnded r, _k)) -> do
-            headEx (dWinners r) ^. _2 @?= 1000 + 2 * 300
-            dPayers r ^..each._2 @?= [-1000 - 2 * 300]
+            let [(Nan, points, vh)] = dWinners r
+            points      @?= 1000 + _pHonba kyoku * 300
+            _vhValue vh @?= Value [Yaku 1 "Pinfu"] 30 1 240 Nothing
+            dPayers r  ^.. each._2 @?= [-1000 - _pHonba kyoku * 300]
 
     , testCase "Double-ron" $ do
         kyoku <- testKyoku <&> sHands . ix Nan . handConcealed .~ handThatWinsWithP5Pinfu
                            <&> sHands . ix Shaa . handConcealed .~ handThatWinsWithP5Pinfu
                            <&> pDora .~ []
-                           <&> sWall %~ (["P5"] ++)
+                           <&> sWall %~ ("P5" <|)
 
         let res = runKyokuState kyoku $ do
                 autoAndDiscard Ton $ Discard "P5" Nothing False
@@ -545,9 +547,10 @@ scoringTests = testGroup "Scoring"
             map (view _2) (dPayers r)  @?= [-2000]
     ]
 
--- agari to pair
+-- agari to pair 2 fu
+-- M1 ankoutsu  8 fu
 handThatWinsWithP5 :: [Tile]
-handThatWinsWithP5      = ["M1", "M1", "M1", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
+handThatWinsWithP5 = ["M1", "M1", "M1", "P1", "P2", "P3", "P5", "P7", "P8", "P9", "S2", "S3", "S4"]
 
 -- also P2
 handThatWinsWithP5Pinfu :: [Tile]
@@ -577,7 +580,7 @@ autoEndTurn = gets fst >>= \case
 testKyoku = newKyoku fourPlayers (map tshow [1..4]) <&> pDora .~ ["M1"]
                                                     <&> sWanpai.wUraDora .~ ["M1", "M2", "M3", "M4", "M5"]
 
-runKyokuState k ma = runStateT ma (NotBegun 0, k)
+runKyokuState k ma = runStateT ma (KyokuStartIn 0, k)
 
 requireRight (Left err) go = assertFailure (unpack err)
 requireRight (Right res) go = go res

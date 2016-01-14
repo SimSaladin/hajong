@@ -1,7 +1,9 @@
 x = done, / = half done, ! = needs testing
 
 ## open tasks
+[ ] [game] pinfu yaku: pair of pinfu can also be a valueless pair
 [ ] [game/gameserver] separation of concerns: redesign kyoku into a state machine that starts with dealt tiles and ends with kyokuresults; Round so that it starts with game start and ends with finalpoints. so two different machines on two abstraction levels
+[ ] [game] in calculating the shape and value of hand, should separete between (4+pair) and others. would simplify many parts of the code
 [x] [game] hand is not considered closed when winning on ron (agari should not produce an open meld)
 [/] [game] riichi is deducted from payer on ron
 [ ] [game] riichi-with tile can be tsumogiri

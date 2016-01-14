@@ -87,48 +87,47 @@ step :: InKyoku m => Machine -> MachineInput -> m Machine
 step KyokuNone _ = return KyokuNone
 step (KyokuStartIn _) InpAuto = sendDealStarts >> waitForDraw -- startDeal
 
-step (WaitingDraw pk wanpai) InpAuto        = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded timeout
+step (WaitingDraw pk wanpai) InpAuto = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded timeout
 step (WaitingDraw pk wanpai) (InpTurnAction pk' (TurnTileDraw wanpai' _))
-            | wanpai /= wanpai'             = throwError "You are not supposed to draw there"
-            | pk /= pk'                     = throwError $ "Not your (" ++ tshow pk' ++ ") turn, it's turn of " ++ tshow pk
-            | otherwise                     = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded timeout
+    | wanpai /= wanpai' = throwError "You are not supposed to draw there"
+    | pk /= pk'         = throwError $ "Not your (" ++ tshow pk' ++ ") turn, it's turn of " ++ tshow pk
+    | otherwise         = draw pk wanpai >> askForTurnAction 15 >> return (WaitingDiscard pk) -- TODO hard-coded timeout
 
-step (WaitingDiscard pk) InpAuto            = autoDiscard pk
+step (WaitingDiscard pk) InpAuto = autoDiscard pk
 step (WaitingDiscard pk) (InpTurnAction pk' ta)
-            | pk /= pk'                     = throwError $ "Not your (" ++ tshow pk' ++ ") turn, it's turn of " ++ tshow pk
-            | TurnTileDiscard d <- ta       = processDiscard pk d
-            | TurnAnkan t <- ta             = processAnkan pk t
-            | TurnTsumo <- ta               = endKyoku =<< endTsumo pk
-            | TurnShouminkan t <- ta        = processShouminkan pk t
+    | pk /= pk'               = throwError $ "Not your (" ++ tshow pk' ++ ") turn, it's turn of " ++ tshow pk
+    | TurnTileDiscard d <- ta = processDiscard pk d
+    | TurnAnkan t <- ta       = processAnkan pk t
+    | TurnTsumo <- ta         = endKyoku =<< endTsumo pk
+    | TurnShouminkan t <- ta  = processShouminkan pk t
 
-step (WaitingShouts couldShout winning shouts chankan) inp
-            | InpAuto <- inp, null winning = proceedWithoutShoutsAfterDiscard chankan
-            | InpAuto <- inp               = processShouts (map (shouts L.!!) winning) chankan
-            | null couldShout              = proceedWithoutShoutsAfterDiscard chankan
+step (WaitingShouts _ winning shouts chankan) InpAuto
+    | null winning = proceedWithoutShoutsAfterDiscard chankan
+    | otherwise    = processShouts (map (shouts L.!!) winning) chankan
 
-            | InpPass pk <- inp, couldShout' <- deleteSet pk couldShout
-                                                 = do p <- kazeToPlayer pk
-                                                      tellEvent $ DealWaitForShout (p, pk, 0, [])
-                                                      if' (null couldShout') (flip step InpAuto) return $ WaitingShouts couldShout' winning shouts chankan
+step (WaitingShouts couldShout winning shouts chankan) (InpPass pk) = do
+    let couldShout' = deleteSet pk couldShout
+    p <- kazeToPlayer pk
+    tellEvent $ DealWaitForShout (p, pk, 0, [])
+    if' (null couldShout') (flip step InpAuto) return $ WaitingShouts couldShout' winning shouts chankan
 
-            | InpShout pk _ <- inp, pk `onotElem` couldShout, elemOf (each._1) pk shouts
-                                                 = throwError "You have already called on that tile"
+step (WaitingShouts couldShout winning shouts chankan) (InpShout pk shout)
+    | pk `onotElem` couldShout, elemOf (each._1) pk shouts = throwError "You have already called on that tile"
+    | Just i <- L.findIndex (== (pk, shout)) shouts        = do
+        res <- use pTurn >>= \tk -> case winning of
+            j:js -> case shoutPrecedence tk (shouts L.!! j) (pk, shout) of -- XXX: Would be prettier with a view-pattern
+                EQ      -> return $ WaitingShouts (deleteSet pk couldShout) (i:j:js) shouts chankan -- new goes through with old ones
+                GT      -> return $ WaitingShouts couldShout                (j:js)   shouts chankan -- old takes precedence (XXX: this branch should never even be reached
+                LT      -> return $ WaitingShouts (deleteSet pk couldShout) [i]      shouts chankan -- new takes precedence
+            []          -> return $ WaitingShouts (deleteSet pk couldShout) [i]      shouts chankan
 
-            | InpShout pk shout <- inp, Just i <- L.findIndex (== (pk, shout)) shouts
-                                                 = do
-                res <- use pTurn >>= \tk -> case winning of
-                    j:js -> case shoutPrecedence tk (shouts L.!! j) (pk, shout) of -- XXX: Would be prettier with a view-pattern
-                        EQ      -> return $ WaitingShouts (deleteSet pk couldShout) (i:j:js) shouts chankan -- new goes through with old ones
-                        GT      -> return $ WaitingShouts couldShout                (j:js)   shouts chankan -- old takes precedence (XXX: this branch should never even be reached
-                        LT      -> return $ WaitingShouts (deleteSet pk couldShout) [i]      shouts chankan -- new takes precedence
-                    []          -> return $ WaitingShouts (deleteSet pk couldShout) [i]      shouts chankan
-
-                p <- kazeToPlayer pk
-                tellEvent $ DealWaitForShout (p, pk, 0, [])
-                case res of
-                    WaitingShouts couldShout' _ _ _ | null couldShout' -> step res InpAuto
-                    _ -> return res
-            | otherwise = throwError "No such call is possible"
+        p <- kazeToPlayer pk
+        tellEvent $ DealWaitForShout (p, pk, 0, [])
+        case res of
+            WaitingShouts couldShout' _ _ _ | null couldShout' -> step res InpAuto
+            _ -> return res
+    | otherwise = throwError $ "Call '" ++ tshow shout ++ "' not possible (Your possible calls at the moment are: "
+            ++ tshow (filter ((==pk).fst) shouts) ++ ")"
 
 step CheckEndConditionsAfterDiscard InpAuto = checkEndConditions
 

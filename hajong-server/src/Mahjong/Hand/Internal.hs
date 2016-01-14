@@ -14,8 +14,9 @@ module Mahjong.Hand.Internal where
 import           Import
 import           Mahjong.Tiles
 import           Mahjong.Hand.Mentsu
-import           Data.SafeCopy
 ------------------------------------------------------------------------------
+
+-- * Types
 
 -- XXX: Should be a flag
 data RiichiState = NoRiichi | Riichi | DoubleRiichi
@@ -32,21 +33,12 @@ data Agari = AgariCall Shout
            | AgariTsumo Tile Bool
            deriving (Show, Read, Eq)
 
-agariTile :: Agari -> Tile
-agariTile (AgariCall shout) = shoutTile shout
-agariTile (AgariTsumo tile _) = tile
-
--- * PickedTile
-
 data PickedTile = PickedTile { pickedTile :: Tile, pickedWanpai :: Bool }
                 deriving (Show, Read)
 
--- * Flags
-
 data HandFlag = HandFirsRoundUninterrupted
+              | HandOpen -- ^ Whether the hand has been opened with a non-ron shout
               deriving (Show, Read, Eq, Ord)
-
--- * Discards
 
 data Discard = Discard
     { _dcTile          :: Tile
@@ -54,7 +46,7 @@ data Discard = Discard
     , _dcRiichi        :: Bool
     } deriving (Show, Read)
 
--- * Hand
+makeLenses ''Discard
 
 data Hand = Hand
     { _handConcealed   :: [Tile]           -- ^ Concealed tiles
@@ -70,6 +62,8 @@ data Hand = Hand
     , _handFlags       :: Set HandFlag -- ^ A set of flags active in the hand
     } deriving (Show, Read)
 
+makeLenses ''Hand
+
 -- | Public info only
 newtype PlayerHand = PlayerHand { fromPlayerHand :: Hand }
                      deriving (Show, Read)
@@ -80,11 +74,22 @@ newtype PlayerHand = PlayerHand { fromPlayerHand :: Hand }
 initHand :: [Tile] -> Hand
 initHand tiles = Hand tiles [] [] Nothing [] DrawNone False NotFuriten False NoRiichi (setFromList [HandFirsRoundUninterrupted])
 
--- * Lenses
+-- * Functions
 
---
-makeLenses ''Hand
-makeLenses ''Discard
+isOpen, isConcealed :: Hand -> Bool
+isOpen = isHandFlagSet HandOpen
+isConcealed = not . isOpen
+
+isHandFlagSet :: HandFlag -> Hand -> Bool
+isHandFlagSet flag hand = hand^.handFlags.to (elem flag)
+
+setHandFlag, unsetHandFlag :: HandFlag -> Hand -> Hand
+setHandFlag   flag = handFlags%~insertSet flag
+unsetHandFlag flag = handFlags%~deleteSet flag
+
+agariTile :: Agari -> Tile
+agariTile (AgariCall shout) = shoutTile shout
+agariTile (AgariTsumo tile _) = tile
 
 -- Instances
 
