@@ -1,13 +1,8 @@
 x = done, / = half done, ! = needs testing
 
 ## open tasks
-[ ] [game] pinfu yaku: pair of pinfu can also be a valueless pair
 [ ] [game/gameserver] separation of concerns: redesign kyoku into a state machine that starts with dealt tiles and ends with kyokuresults; Round so that it starts with game start and ends with finalpoints. so two different machines on two abstraction levels
 [ ] [game] in calculating the shape and value of hand, should separete between (4+pair) and others. would simplify many parts of the code
-[x] [game] hand is not considered closed when winning on ron (agari should not produce an open meld)
-[/] [game] riichi is deducted from payer on ron
-[ ] [game] riichi-with tile can be tsumogiri
-[x] [game] fu are calculated incorrectly
 [ ] [game] make local acid state directory configurable (mainly for tests)
 [ ] [elm/game] waiting-for info should be encoded to the gamestate instead of events; now player can discard his shout options by refreshing
 [ ] [elm/game] display uradora on win. They're in roundstate .flags when someone has won (or at least, should be)
@@ -23,6 +18,11 @@ x = done, / = half done, ! = needs testing
 [ ] [site] add favicon
 [ ] [other] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
 
+[x] [game] riichi-with tile can be tsumogiri
+[x] [game] riichi is deducted from payer on ron
+[x] [game] fu are calculated incorrectly
+[x] [game] hand is not considered closed when winning on ron (agari should not produce an open meld)
+[x] [game] pinfu yaku: pair of pinfu can also be a valueless pair
 [x] riichi-nappula liian iso
 [x] Set up logging to file in hajong-server
 [x] huudettu tiili näkyy väärällä puolella mentsussa, aina?

@@ -79,25 +79,35 @@ valueHand player h deal = ValuedHand called concealed (getValue vi)
                               Just (AgariTsumo tsumo _) -> (h^.handCalled, h^.handConcealed ++ [tsumo])
                               Just (AgariCall call) -> (h^.handCalled ++ [fromShout call], h^.handConcealed)
 
--- | Tiles the hand can discard for a riichi.
-handCanRiichiWith :: Hand -> [Tile]
-handCanRiichiWith h
-    | h^.handRiichi /= NoRiichi = []
-    | otherwise                 = h^.handConcealed.to (mapMaybe f)
-    where f t = guard (canRiichiWith t h) >> return t
-
-canRiichiWith :: Tile -> Hand -> Bool
-canRiichiWith t h = null (h^.handCalled) && tenpai (L.delete t tiles)
-    where tiles = h^.handConcealed ++ map pickedTile (h^.handPicks)
-
-furiten :: Hand -> Bool
-furiten h = any (`elem` (h^..handDiscards.each.dcTile)) . concatMap getAgari
-          . filter tenpai $ getGroupings h
-
 handInNagashi :: Hand -> Bool
 handInNagashi h = all id [ h^.handCalled == []
                          , null $ h^..handDiscards.traversed.filtered (isJust . _dcTo)
                          , null $ h^..handDiscards.traversed.filtered (isSuited . _dcTile) ]
+
+-- ** Riichi
+
+-- | Tiles the hand can discard for a riichi.
+--
+-- >>> handCanRiichiWith $ initHand ["M1","M1","M2","M2","M3","M3","S5","S6","S7","P6","P7","S9","S9", "W"]
+-- ["W "]
+--
+-- >>> handCanRiichiWith $ initHand ["M1","M1","M2","M2","M3","M3","S5","S6","S7","P6","P7","S9","S9"] & handPicks .~ [PickedTile "W" False]
+-- ["W "]
+handCanRiichiWith :: Hand -> [Tile]
+handCanRiichiWith h
+    | h^.handRiichi /= NoRiichi = []
+    | otherwise                 = mapMaybe f $ handAllConcealed h
+    where f t = guard (canRiichiWith t h) $> t
+
+canRiichiWith :: Tile -> Hand -> Bool
+canRiichiWith t h = null (h^.handCalled) && tenpai (L.delete t tiles)
+    where tiles = handAllConcealed h
+
+-- ** Furiten
+
+furiten :: Hand -> Bool
+furiten h = any (`elem` (h^..handDiscards.each.dcTile)) . concatMap getAgari
+          . filter tenpai $ getGroupings h
 
 -- * Player actions
 
