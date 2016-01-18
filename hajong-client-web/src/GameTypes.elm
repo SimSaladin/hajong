@@ -25,8 +25,6 @@ type alias GameState =
    , playerInfo      : PlayerInfo.InfoDict
 
     -- In-Game
-   , waitTurnAction : Maybe WaitRecord
-   , waitShout      : Maybe (WaitRecord, List Shout)
    , gameFinalPoints : Maybe FinalPoints
    , turnBegan      : Time
    , riichiWith     : List Tile
@@ -46,8 +44,6 @@ type alias GameState =
 
 type Status = InLounge
             | InGame RoundState
-
-type alias WaitRecord = { seconds : Int, added : Time }
 
 type LogItem = LogMsg { player_nick : String, msg : String }
              | LogDebug { msg : String }
@@ -78,7 +74,14 @@ type alias RoundState =
    , honba     : Int
    , inTable   : Int -- Number of riichi sticks in table
    , eventsHistory : List GameEvent
+   , waiting   : Maybe Waiting 
    }
+
+type alias Waiting =
+   { player     : Player
+   , seconds    : Float
+   , riichiWith : List Tile
+   , shouts     : List Shout }
 
 type alias Round = { kaze : Kaze, round_rot : Int, round_honba : Int }
 

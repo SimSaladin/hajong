@@ -26,6 +26,12 @@ tests = testGroup "Standard Yaku"
                            & vHand.handAgari .~ Just (AgariCall $ Shout Ron Nan "M1" ["M2", "M3"])
         _vaYaku (getValue vi) @?= [Yaku 1 "Pinfu"]
 
+    , testCase "Pinfu with valueless kaze pair" $ do
+        let vi = valueInfo & vHand.handConcealed .~ ["P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "W", "W"]
+                           & vHand.handCalled .~ []
+                           & vHand.handAgari .~ Just (AgariCall $ Shout Ron Nan "M1" ["M2", "M3"])
+        _vaYaku (getValue vi) @?= [Yaku 1 "Pinfu"]
+
     , testCase "Pinfu NOT on end wait " $ do
         let vi = valueInfo & vHand.handConcealed .~ ["M1", "M2", "P2", "P3", "P4", "S5", "S6", "S7", "S1", "S2", "S3", "S9", "S9"]
                            & vHand.handCalled .~ []
@@ -54,6 +60,7 @@ tests = testGroup "Standard Yaku"
         let vi = valueInfo & vHand.handConcealed .~ ["M4", "M5", "M6", "M7", "M8", "M9", "S7", "S8", "S9", "W", "W"]
                            & vHand.handCalled .~ []
                            & vHand.handAgari .~ Just (AgariCall $ Shout Ron Nan "M1" ["M2", "M3"])
+                           & vPlayer .~ Shaa -- valued pair so not pinfu
         _vaYaku (getValue vi) @?= [Yaku 2 "Ittsuu"]
 
     , testCase "Honroutou (+ Toitoi)" $ do

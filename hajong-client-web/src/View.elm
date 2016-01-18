@@ -45,9 +45,7 @@ newState = { status     = InLounge
            , dialogFieldContent = Field.noContent
 
            , gameUUID   = Nothing
-           , waitTurnAction = Nothing
            , gameFinalPoints = Nothing
-           , waitShout  = Nothing
            , turnBegan  = 0
            , riichiWith = []
            , hoveredTileNth = -1
@@ -83,6 +81,7 @@ emptyRoundState =
    , honba         = 0
    , inTable       = 0
    , eventsHistory = []
+   , waiting       = Nothing -- { player = -1, seconds = 0, riichiWith = [], shouts = [] }
    }
 
 -- }}}
@@ -110,7 +109,14 @@ stepGame x gs = case x of
    StateUpdate f      -> f gs
    TimeDelta time     -> { gs | updated   = time
                               , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
+                              , rs        = stepRoundStateTimeDelta (time - gs.updated) gs.rs
                          }
+
+stepRoundStateTimeDelta : Float -> RoundState -> RoundState
+stepRoundStateTimeDelta delta rs = { rs | waiting = Maybe.map (stepWaiting delta) rs.waiting }
+
+stepWaiting : Float -> Waiting -> Waiting
+stepWaiting delta ws = { ws | seconds = ws.seconds - Time.inSeconds delta }
 
 -- | Apply an Event to the GameState.
 stepEvent : Event -> GameState -> GameState

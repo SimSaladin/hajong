@@ -91,6 +91,10 @@ agariTile :: Agari -> Tile
 agariTile (AgariCall shout) = shoutTile shout
 agariTile (AgariTsumo tile _) = tile
 
+-- | Concealed and picks
+handAllConcealed :: Hand -> [Tile]
+handAllConcealed = liftA2 (++) _handConcealed (map pickedTile . _handPicks)
+
 -- Instances
 
 instance Pretty PickedTile where

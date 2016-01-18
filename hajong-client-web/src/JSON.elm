@@ -220,7 +220,7 @@ roundState = object8 RoundState
     ("first-oja"  := int)
     ("tiles-left" := int)
     ("dora"       := list tile)
-    `andThen` (\x -> object7 x
+    `andThen` (\x -> object8 x
        ("hands"      := list playerHand)
        ("players"    := list players)
        ("myhand"     := hand)
@@ -228,7 +228,15 @@ roundState = object8 RoundState
        ("honba"      := int)
        ("in-table"   := int)
        ("event-history" := list gameEvent)
+       ("waiting"       := maybe waiting)
     )
+
+waiting : Decoder Waiting
+waiting = object4 Waiting
+   ("player"      := int)
+   ("seconds"     := float)
+   ("riichi-with" := map (Maybe.withDefault []) (maybe (list tile)))
+   ("shouts"      := map (Maybe.withDefault []) (maybe (list shout)))
 
 round : Decoder Round
 round = tuple3 (\k a b -> { kaze = k, round_rot = a, round_honba = b }) kaze int int

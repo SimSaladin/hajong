@@ -45,7 +45,7 @@ yakuAllTiles = do
 pinfu :: YakuCheck Yaku
 pinfu = do
     concealedHand
-    anyJantou suited
+    anyJantou =<< valueless
 
     -- require: wait (at least) two-sided
     agari <- yakuState <&> view (vHand.handAgari)

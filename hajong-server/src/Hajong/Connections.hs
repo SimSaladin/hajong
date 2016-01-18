@@ -105,6 +105,12 @@ gamePairs (i, (GameSettings t, nicks, uuid)) = object
     , "uuid"    .= uuid
     , "players" .= nicks ]
 
+waitShout :: WaitShout -> [Pair]
+waitShout (player, _, secs, xs) = ["player" .= player, "seconds" .= secs, "shouts" .= xs]
+
+waitTurnAction :: WaitTurnAction -> [Pair]
+waitTurnAction (p,_,sec,rs) = ["player" .= p, "seconds" .= sec, "riichi-with" .= rs]
+
 -- Instances -----------------------------------------------------------------
 
 instance ToJSON Event where
@@ -125,22 +131,22 @@ instance ToJSON Event where
 
 instance ToJSON GameEvent where
     toJSON ge = case ge of
-        DealStarts playerKyoku -> let Object event = atEvent "round-begin"  []
-                                      Object base  = toJSON playerKyoku
-                                      in Object (event <> base)
-        DealWaitForShout (player, _, secs, xs)   -> atEvent "wait-shout"   ["player"      .= player, "seconds" .= secs, "shouts" .= xs]
-        DealWaitForTurnAction (p,_,sec,rs)       -> atEvent "wait-turn"    ["player"      .= p, "seconds" .= sec, "riichi-with" .= rs]
-        DealTurnBegins pk                        -> atEvent "turn-changed" ["player-kaze" .= pk]
-        DealTurnAction pk turnaction             -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
-        DealTurnShouted pk shout                 -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
-        DealPublicHandChanged pk hand            -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
-        DealPrivateHandChanged _ _ hand          -> atEvent "my-hand"      ["hand"        .= hand]
-        DealFlipDora dora                        -> atEvent "flipped-dora" ["tile"        .= dora]
-        DealNick pk p nick                       -> atEvent "nick"         ["player"      .= p, "player-kaze" .= pk, "nick" .= nick]
-        DealRiichi pk                            -> atEvent "riichi"       ["player-kaze" .= pk]
-        DealEnded results                        -> atEvent "end"          ["results"     .= results]
-        GamePoints pk n                          -> atEvent "points"       ["player-kaze" .= pk, "points" .= n]
-        GameEnded (FinalPoints points)           -> atEvent "game-ended"   ["final_points" .= mapToList points]
+        DealStarts playerKyoku          -> let Object event = atEvent "round-begin"  []
+                                               Object base  = toJSON playerKyoku
+                                               in Object (event <> base)
+        DealWaitForShout ws             -> atEvent "wait-shout"   (waitShout ws)
+        DealWaitForTurnAction wta       -> atEvent "wait-turn"    (waitTurnAction wta)
+        DealTurnBegins pk               -> atEvent "turn-changed" ["player-kaze" .= pk]
+        DealTurnAction pk turnaction    -> atEvent "turn-action"  ["player-kaze" .= pk, "action" .= turnaction]
+        DealTurnShouted pk shout        -> atEvent "shout"        ["player-kaze" .= pk, "shout" .= shout]
+        DealPublicHandChanged pk hand   -> atEvent "hand"         ["player-kaze" .= pk, "hand" .= hand]
+        DealPrivateHandChanged _ _ hand -> atEvent "my-hand"      ["hand"        .= hand]
+        DealFlipDora dora               -> atEvent "flipped-dora" ["tile"        .= dora]
+        DealNick pk p nick              -> atEvent "nick"         ["player"      .= p, "player-kaze" .= pk, "nick" .= nick]
+        DealRiichi pk                   -> atEvent "riichi"       ["player-kaze" .= pk]
+        DealEnded results               -> atEvent "end"          ["results"     .= results]
+        GamePoints pk n                 -> atEvent "points"       ["player-kaze" .= pk, "points" .= n]
+        GameEnded (FinalPoints points)  -> atEvent "game-ended"   ["final_points" .= mapToList points]
 
 instance ToJSON TurnAction where
     toJSON (TurnTileDiscard d) = atType "discard"    ["riichi" .= _dcRiichi d, "tile" .= _dcTile d, "to" .= _dcTo d]
@@ -215,10 +221,8 @@ instance ToJSON PlayerKyoku where
           | kaze == handKaze = (toJSON handKaze, toJSON hand)
           | otherwise        = (toJSON handKaze, toJSON $ PlayerHand hand)
 
-      playerWaiting (Left (p,pk,secs,riichi)) = Just $ DealWaitForTurnAction (p,pk,secs,if' (pk == kaze) riichi [])
-      playerWaiting (Right waitshouts)
-          | Just waitshout <- find (^._2.to (== kaze)) waitshouts = Just $ DealWaitForShout waitshout
-          | otherwise = Nothing
+      playerWaiting (Left (p,pk,secs,riichi)) = Just $ atType "wait-turn-action" $ waitTurnAction (p,pk,secs,if' (pk == kaze) riichi [])
+      playerWaiting (Right ws)                = atType "wait-shouts" . waitShout <$> find (^._2.to (== kaze)) ws
 
 instance ToJSON PickedTile where
     toJSON (PickedTile tile wanpai) = object [ "tile" .= tile, "wanpai" .= wanpai ]

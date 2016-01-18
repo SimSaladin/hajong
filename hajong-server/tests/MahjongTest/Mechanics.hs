@@ -69,9 +69,9 @@ gameFlowTests = testGroup "Game flow"
   , testCase "Kyoku goes through with consecutive InpAuto actions" $ do
       kyoku <- testKyoku
       case runKyokuState kyoku (replicateM_ 250 $ stepped InpAuto) of
-          Left err                -> assertFailure (unpack err)
-          Right (_, (KyokuNone,_)) -> assertFailure "Kyoku didn't end withing 250 automatic advances"
-          Right (_, (m,_)) -> assertFailure $ "Expected KyokuNone, but got " ++ show m
+          Right (_, (KyokuNone,_)) -> return ()
+          Right (_, (m,_))         -> assertFailure $ "Expected KyokuNone, but got " ++ show m
+          Left err                 -> assertFailure (unpack err)
 
   , testCase "One han minimum to win a hand, not counting YakuExtra" $ do
       kyoku <- testKyoku <&> sHands . ix Nan . handConcealed  .~ handThatWinsWithP5

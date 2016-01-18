@@ -84,24 +84,20 @@ processInGameEventWith event st rs =
    in case event of
 
       RoundPrivateStarts rs ->
-         setRs { st | gameWait = Nothing, gameFinalPoints = Nothing } rs
+         setRs { st | gameFinalPoints = Nothing } rs
 
       RoundPrivateWaitForTurnAction {seconds, riichiWith} ->
-         { st | waitTurnAction = Just <| WaitRecord seconds st.updated
-              , riichiWith     = riichiWith }
+         setRs st { rs | waiting = Just { player = rs.player, seconds = toFloat seconds, riichiWith = riichiWith, shouts = [] } }
 
       RoundPrivateWaitForShout {seconds, shouts} ->
-         { st | waitShout      = Just <| ( WaitRecord seconds st.updated , maybe shouts (\x -> snd x ++ shouts) st.waitShout) }
+         setRs st { rs | waiting = Just { player = rs.player, seconds = toFloat seconds, riichiWith = [], shouts = shouts } }
 
       RoundPrivateChange {hand} -> setRs st { rs | myhand = hand }
 
       RoundTurnBegins {player_kaze} ->
-         { st | turnBegan      = st.updated
-              , waitTurnAction = Nothing
-              , waitShout      = Nothing
-              , riichiWith     = [] }
+         setRs { st | turnBegan = st.updated }
+               { rs | turn = player_kaze, waiting = Just { player = -1, seconds = -1, riichiWith = [], shouts = [] } }
               |> Util.log ("Turn of " ++ toString player_kaze)
-              |> flip setRs { rs | turn = player_kaze }
 
       RoundTurnAction {player_kaze, action} -> setRs st <| processTurnAction player_kaze action rs
 
@@ -225,7 +221,7 @@ asSideBar st = container 300 (snd st.dimensions) middle
 displayActionButtons : GameState -> Element
 displayActionButtons st = flow right <|
    -- shout-related
-   maybe [] (snd >> displayShoutButtons st) (st.waitShout) ++ [ nocareButton st.waitShout "Pass" ]
+   maybe [] (displayShoutButtons st) (st.rs.waiting)
    -- own turn
    ++ if st.rs.turn == st.rs.mypos
          then shouminkanButtons st.rs "Shouminkan"
@@ -324,16 +320,13 @@ dealAndRoundIndicator st = toForm
       centered (T.fromString (toString <| st.rs.round.round_rot))
 
 turnIndicator : GameState -> Form
-turnIndicator st =
-   let col = if isNothing st.waitShout then lightGreen else lightOrange
-                in group
-   [ rotate (degrees 90) <| filled col <| ngon 3 80
-   , moveY 60
-         <| toForm <| show <| floor
-         <| case st.waitTurnAction of
-               Nothing -> inSeconds <| st.updated - st.turnBegan
-               Just wr -> toFloat wr.seconds - (inSeconds (st.updated - wr.added))
-   ]
+turnIndicator st = case st.rs.waiting of
+   Nothing -> toForm empty
+   Just ws -> let col = if List.isEmpty ws.shouts then lightGreen else lightOrange
+                  secs = if ws.seconds < 0 then empty 
+                                           else show <| floor ws.seconds
+              in group [ rotate (degrees 90) <| filled col <| ngon 3 80
+                       , moveY 60 <| toForm secs ]
 
 honbaIndicator h = if h > 0 then move (-60,-60) <| toForm <| centered <| T.fromString <| toString h ++ "H"
                             else toForm empty
@@ -559,10 +552,15 @@ tileHidden = collage t_w (t_h // 3) [ rect t_w (t_h / 3) |> outlined defaultLine
 
 -- {{{ Buttons -----------------------------------------------------------------
 
-displayShoutButtons : GameState -> List Shout -> List Element
-displayShoutButtons st = map <| \s -> shoutButton s
-   |> hoverable (\f -> message shoutHover.address <|
-         if f then (getTileIndices (sortTiles st.rs.myhand.concealed) s.shoutTo, Just s) else ([], Nothing))
+displayShoutButtons : GameState -> Waiting -> List Element
+displayShoutButtons st {shouts} =
+   let shoutButtons = map (\s -> shoutButton s
+         |> hoverable (\f -> message shoutHover.address <| if f then (getTileIndices (sortTiles st.rs.myhand.concealed) s.shoutTo, Just s)
+                                                                else ([], Nothing))) shouts
+       nocareButton = clickable (message nocare.address True) <| buttonElem' "Pass" green
+   in if List.isEmpty shouts
+         then []
+         else shoutButtons ++ [ nocareButton ]
 
 riichiButtons : RoundState -> List Tile -> List Element
 riichiButtons rs = map <| \t -> buttonElem' "Riichi" red
@@ -585,11 +583,6 @@ ankanButton rs str = case findFourTiles rs of
    Nothing -> empty
 
 tsumoButton b = if b then clickable (message tsumo.address (Just ())) <| buttonElem' "Tsumo" orange else empty
-
--- TODO is his turn
-nocareButton w str = case w of
-   Just (w, _ :: _) -> clickable (message nocare.address True) <| buttonElem' str green
-   _                -> empty
 
 buttonElem' str col = collage 80 40
    [ oval 80 40 |> filled col

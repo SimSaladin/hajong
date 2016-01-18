@@ -24,9 +24,9 @@ module Mahjong.Hand.Yaku.Builder
     -- *** Stateful
     , anyShuntsu', anyMentsu', anyKoutsuKantsu', anyMentsuJantou'
 
-    -- ** Specific
+    -- ** Tile-based
     , terminal, honor, sangenpai, kazehai, suited, anyTile, concealed
-    , sameTile, containsTile, sameNumber, sameSuit, ofNumber
+    , sameTile, containsTile, sameNumber, sameSuit, ofNumber, valueless
 
     -- ** Combinators
     , (&.), (|.), propNot, tileGroupHead, tileGroupTiles
@@ -183,6 +183,15 @@ suited    = TileSuited
 anyTile   = PropAny
 concealed = TileConcealed
 
+-- | A tile which has no intrinsic fu value i.e. is suited or not round or
+-- player kaze. Depends on the kyoku state.
+valueless :: YakuCheck MentsuProp
+valueless = do
+    vi <- yakuState
+    let valuedKaze = [ vi^.vPlayer, vi^.vKyoku.pRound._1 ]
+        valueless  = map (sameTile . T.kaze) $ filter (`onotElem` valuedKaze) [T.Ton .. T.Pei]
+    return $ foldr (|.) suited valueless
+
 sameTile, containsTile, sameNumber, sameSuit :: Tile -> MentsuProp
 sameTile = TileSameAs
 containsTile = TileContained
@@ -207,30 +216,43 @@ findMatch mp (x:xs)
 
 -- | Match a property on a TileGroup. GroupLeftOver's always result False.
 matchProp :: MentsuProp -> TileGroup -> Bool
-matchProp _                  GroupLeftover{}        = False
-matchProp MentsuJantou       tg                     = isPair tg
-matchProp MentsuOrJantou     _                      = True
-matchProp MentsuShuntsu      (GroupComplete mentsu) = isShuntsu mentsu
-matchProp MentsuKoutsu       (GroupComplete mentsu) = isKoutsu mentsu
-matchProp MentsuKantsu       (GroupComplete mentsu) = isKantsu mentsu
-matchProp MentsuKoutsuKantsu (GroupComplete mentsu) = isKantsu mentsu || isKoutsu mentsu
-matchProp tt tg
-    | TileTerminal        <- tt = any T.terminal tiles
-    | TileSameAs tile     <- tt = headEx tiles == tile
-    | TileContained tile  <- tt = tile `elem` tiles
-    | TileSuited          <- tt = T.isSuited (headEx tiles)
-    | TileSameSuit tile   <- tt = T.suitedSame tile (headEx tiles)
-    | TileSameNumber tile <- tt = isJust (T.tileNumber tile) && T.tileNumber tile == T.tileNumber (headEx tiles)
-    | TileNumber n        <- tt = T.tileNumber (headEx tiles) == Just n
-    | TileHonor           <- tt = not $ T.isSuited (headEx tiles)
-    | TileSangenpai       <- tt = T.sangenpai (headEx tiles)
-    | TileKazehai         <- tt = T.kazehai (headEx tiles)
-    | TileAnd x y         <- tt = matchProp x tg && matchProp y tg
-    | TileOr x y          <- tt = matchProp x tg || matchProp y tg
-    | TileNot x           <- tt = not $ matchProp x tg
-    | TileConcealed       <- tt = case tg of GroupComplete mentsu -> isNothing $ mentsuShout mentsu
-                                             _ -> True
-    | PropAny             <- tt = True
-    | otherwise                 = False
+matchProp _  GroupLeftover{} = False
+matchProp tt tg              = case tt of
+    MentsuJantou       -> isPair tg
+    MentsuOrJantou     -> True
+
+    MentsuShuntsu      -> case tg of
+        GroupComplete mentsu -> isShuntsu mentsu
+        _                    -> False
+
+    MentsuKoutsu       -> case tg of
+        GroupComplete mentsu -> isKoutsu mentsu
+        _                    -> False
+
+    MentsuKantsu       -> case tg of
+        GroupComplete mentsu -> isKantsu mentsu
+        _                    -> False
+
+    MentsuKoutsuKantsu -> case tg of
+        GroupComplete mentsu -> isKantsu mentsu || isKoutsu mentsu
+        _                    -> False
+
+    TileTerminal        -> any T.terminal tiles
+    TileSameAs tile     -> headEx tiles == tile
+    TileContained tile  -> tile `elem` tiles
+    TileSuited          -> T.isSuited (headEx tiles)
+    TileSameSuit tile   -> T.suitedSame tile (headEx tiles)
+    TileSameNumber tile -> isJust (T.tileNumber tile) && T.tileNumber tile == T.tileNumber (headEx tiles)
+    TileNumber n        -> T.tileNumber (headEx tiles) == Just n
+    TileHonor           -> not $ T.isSuited (headEx tiles)
+    TileSangenpai       -> T.sangenpai (headEx tiles)
+    TileKazehai         -> T.kazehai (headEx tiles)
+    TileAnd x y         -> matchProp x tg && matchProp y tg
+    TileOr x y          -> matchProp x tg || matchProp y tg
+    TileNot x           -> not $ matchProp x tg
+    TileConcealed       -> case tg of
+        GroupComplete mentsu -> isNothing $ mentsuShout mentsu
+        _                    -> True
+    PropAny             -> True
   where
     tiles = tileGroupTiles tg
