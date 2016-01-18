@@ -403,12 +403,16 @@ riichiTests = testGroup "Riichi tests"
           Left err -> err @?= "Cannot riichi: not tenpai"
           Right (_,(m,k)) -> traceShowM (m,k) >> assertFailure "Game should have errored"
 
-  , testCase "When riichi, ura-dora are opened" $ do
-      kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ handThatWinsWithP5
-                         <&> sHands . ix Ton . handAgari .~ Just (AgariTsumo "P5" False)
-                         <&> sHands . ix Ton . handRiichi .~ Riichi
-      let res = runKyoku kyoku $ getValuedHand Ton
-      requireRight res $ \(vh, _, _) -> return () -- we just check that there were no complications
+  , testCase "Ura-dora are yielded" $ do
+        kyoku <- testKyoku <&> sHands . ix Ton . handConcealed .~ handThatWinsWithP5Pinfu
+                           <&> sHands . ix Ton . handRiichi .~ Riichi
+                           <&> sHands . ix Ton . handFlags .~ mempty
+                           <&> pFlags .~ mempty
+                           <&> sWall %~ ("P5" <|)
+        let res = runKyokuState kyoku $ drawAndTurnAction Ton TurnTsumo
+        requireRight res $ \(_,(r,k)) -> case r of
+            KyokuEnded (DealTsumo [win] _) -> YakuExtra 1 "Ura-Dora" `elem` (win^._3.vhValue.vaYaku) @? show ("Ura-dora not present", win, k^.pFlags)
+            _                              -> assertFailure $ "Expected KyokuEnded Tsumo but received " ++ show r
   ]
 
 weirdYaku :: TestTree

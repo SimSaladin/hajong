@@ -545,7 +545,7 @@ dealEnds results = do
 getValuedHand :: InKyoku m => Kaze -> m ValuedHand
 getValuedHand pk = do
     revealUraDora -- TODO wrong place for this
-    vh <- valueHand pk <$> handOf' pk <*> get
+    vh <- valueHand pk <$> handOf' pk <*> use id
     when (length (vh^..vhValue.vaYaku.each.filtered yakuNotExtra) == 0) $
         throwError $ "Need at least one yaku that ain't dora to win.\nThe ValuedHand: " ++ tshow vh
     return vh

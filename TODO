@@ -4,10 +4,9 @@ x = done, / = half done, ! = needs testing
 [ ] [game/gameserver] separation of concerns: redesign kyoku into a state machine that starts with dealt tiles and ends with kyokuresults; Round so that it starts with game start and ends with finalpoints. so two different machines on two abstraction levels
 [ ] [game] in calculating the shape and value of hand, should separete between (4+pair) and others. would simplify many parts of the code
 [ ] [game] make local acid state directory configurable (mainly for tests)
-[ ] [elm/game] waiting-for info should be encoded to the gamestate instead of events; now player can discard his shout options by refreshing
 [ ] [elm/game] display uradora on win. They're in roundstate .flags when someone has won (or at least, should be)
-[ ] [elm/game] uradorat ei toimi? näytä ura-indikaattorit pelin lopussa
 [ ] [elm/game] new dora are not updated from server? at least, not displayed in elm without a refresh. see the flipped-dora event.
+[ ] [elm] when over 3 * 6 tiles, the +1th goes to fourth row; should extend the 3rd
 [ ] [elm] on tsumo, agari is not displayed at all. it is in hand-picks and those are not displayed atm
 [ ] [elm] add clickables via elm-html. That is, tiles in hand and shouts. The Graphics.Input.clickable has major problems with at least android tablets
 [ ] [elm] restyle kyoku results and final points views. they're crappy at best.  Perhaps should fit into the info block in the center? and the winning hand(s) could be displayed as the hand of the winning player(s).
@@ -18,6 +17,7 @@ x = done, / = half done, ! = needs testing
 [ ] [site] add favicon
 [ ] [other] go through the TODO's in the code. If a note is relevant create an issue for it in gh and annotate the todo with issue number
 
+[x] [elm/game] waiting-for info should be encoded to the gamestate instead of events; now player can discard his shout options by refreshing
 [x] [game] riichi-with tile can be tsumogiri
 [x] [game] riichi is deducted from payer on ron
 [x] [game] fu are calculated incorrectly
