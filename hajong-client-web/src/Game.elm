@@ -277,14 +277,18 @@ dispOthersHands : GameState -> Form
 dispOthersHands st = [Ton, Nan, Shaa, Pei]
    |> List.filter (\x -> x /= st.rs.mypos)
    |> map (\k ->
-      let maybeTenpai = st.rs.results `Maybe.andThen` (\res -> case res of
-            DealDraw{tenpai} -> Just tenpai
-            _                -> Nothing) `Maybe.andThen` Util.listFindWith .player_kaze k
 
-      in (case maybeTenpai of
-            Just {mentsu,tiles} -> flow right <| map (dispTile st) tiles ++ map (dispMentsu st k) mentsu
-            Nothing             -> Util.listFind k st.rs.hands |> dispOthersHand st k
-         ) |> toForm |> moveRotateKaze (handOffCenter, 0) st.rs.mypos k
+      let dispTenpaiHand {mentsu,tiles} = flow right <| map (dispTile st) tiles ++ map (dispMentsu st k) mentsu
+
+          dispVisible = st.rs.results `Maybe.andThen` (\res -> case res of
+            DealDraw{tenpai}   -> Maybe.map dispTenpaiHand <| Util.listFindWith .player_kaze k tenpai
+            DealTsumo{winners} -> Maybe.map (.valuehand >> dispValued st) <| Util.listFindWith .player_kaze k winners
+            DealRon{winners}   -> Maybe.map (.valuehand >> dispValued st) <| Util.listFindWith .player_kaze k winners
+             )
+
+      in Maybe.withDefault (Util.listFind k st.rs.hands |> dispOthersHand st k) dispVisible
+         |> toForm
+         |> moveRotateKaze (handOffCenter, 0) st.rs.mypos k
       )
    |> group
 
@@ -353,6 +357,24 @@ moveRotateKaze (offY, offX) mypos pos =
       2 -> moveY offY    << moveX (-offX) << rotate (degrees 180)
       _ -> moveX (-offY) << moveY (-offX) << rotate (degrees 270)
 
+-- | like @moveRotateKaze@, but does not rotate.
+moveKaze : (Float, Float) -> Kaze -> Kaze -> Form -> Form
+moveKaze (offY, offX) mypos pos =
+   case (kazeNth pos - kazeNth mypos) % 4 of
+      0 -> moveY (-offY) << moveX offX
+      1 -> moveX offY    << moveY offX
+      2 -> moveY offY    << moveX (-offX)
+      _ -> moveX (-offY) << moveY (-offX)
+
+-- | Rotates only those adjacant to ourself.
+moveRotateAdjacentKaze : (Float, Float) -> Kaze -> Kaze -> Form -> Form
+moveRotateAdjacentKaze (offY, offX) mypos pos =
+   case (kazeNth pos - kazeNth mypos) % 4 of
+      0 -> moveY (-offY) << moveX offX
+      1 -> moveX offY    << moveY offX << rotate (degrees 90) 
+      2 -> moveY offY    << moveX (-offX)
+      _ -> moveX (-offY) << moveY (-offX) << rotate (degrees 270)
+
 -- | Riichi stick, not rotated.
 playerRiichi : GameState -> Form
 playerRiichi st = toForm <| image (infoBlockWidth - 20) 20 <| lookupResource st "stick-1000"
@@ -360,67 +382,102 @@ playerRiichi st = toForm <| image (infoBlockWidth - 20) 20 <| lookupResource st 
 
 -- {{{ Display: Results ----------------------------------------------
 dispResults : GameState -> RoundResult -> Form
-dispResults st res =
-   let (col, view) = case res of
-            DealTsumo {winners, payers} -> (lightBlue,
-               titleText "Tsumo!"
-               :: flow down (map (dispWinner st) winners)
-               :: flow down (map dispPayer payers) :: [])
+dispResults st res = case res of
+   DealDraw {tenpai, nooten} -> dispDraw st tenpai nooten
+   DealTsumo {winners, payers} -> dispTsumo st winners payers
+   DealRon {winners, payers} -> dispRon st winners payers
 
-            DealRon {winners, payers} -> (lightGreen,
-               titleText "Ron!"
-               :: flow down (map (dispWinner st) winners)
-               :: flow down (map dispPayer payers) :: [])
+dispDraw : GameState -> List Tenpai -> List Payer -> Form
+dispDraw st tenpai nooten = group
+   [ toForm
+      <| color yellow
+      <| opacity 0.3
+      <| container infoBlockWidth infoBlockWidth middle empty
+   , toForm
+      <| titleText "Draw!"
+   , toForm
+      <| collage playAreaWidth playAreaHeight
+      <| map (dispTenpai st) tenpai ++ map (dispPayer st) nooten
+   ]
 
-            DealDraw {tenpai, nooten} -> (lightYellow,
-               titleText "Draw!"
-               :: flow down (map dispTenpai tenpai)
-               :: flow down (map dispPayer nooten) :: [])
-   in toForm
-         <| color col
-         <| container 700 300 middle
-         <| flow down view
+dispTsumo : GameState -> List Winner -> List Payer -> Form
+dispTsumo st winner payer = group
+   [ toForm
+      <| color blue
+      <| opacity 0.3
+      <| container infoBlockWidth infoBlockWidth middle empty
+   , toForm
+      <| titleText "Tsumo!"
+   , toForm
+      <| collage playAreaWidth playAreaHeight
+      <| map (dispWinner st) winner ++ map (dispPayer st) payer
+   ]
 
-dispWinner : GameState -> Winner -> Element
+dispRon : GameState -> List Winner -> List Payer -> Form
+dispRon st winner payer = group
+   [ toForm
+      <| color red
+      <| opacity 0.3
+      <| container infoBlockWidth infoBlockWidth middle empty
+   , toForm
+      <| titleText "Ron!"
+   , toForm
+      <| collage playAreaWidth playAreaHeight
+      <| map (dispWinner st) winner ++ map (dispPayer st) payer
+   ]
+
+-- | Displays the points rotated to correct place
+dispTenpai : GameState -> Tenpai -> Form
+dispTenpai st {player_kaze, points} =
+   dispPoints points
+   |> centered
+   |> toForm
+   |> moveKaze (220,0) st.rs.mypos player_kaze
+
+-- | Displays the points rotated to correct place
+dispPayer : GameState -> Payer -> Form
+dispPayer st {player_kaze, points} =
+   dispPoints points
+   |> centered
+   |> toForm
+   |> moveKaze (220,0) st.rs.mypos player_kaze
+
+dispWinner : GameState -> Winner -> Form
 dispWinner st {player_kaze, points, valuehand} =
-   [ T.concat [ T.fromString (toString player_kaze)
-              , T.fromString (toString points) |> T.append (T.fromString "+") |> T.color green
-              ] |> centered
-   , dispValued st valuehand ]
-   |> flow down
-
-dispPayer : Payer -> Element
-dispPayer {player_kaze, points} = T.concat
-   [ T.fromString (toString player_kaze), T.fromString "        "
-   , T.fromString (toString points) |> T.append (T.fromString "-") |> T.color red ]
-   |> centered
-
-dispTenpai : Tenpai -> Element
-dispTenpai {player_kaze, points} = T.concat
-   [ T.fromString (toString player_kaze), T.fromString "        "
-   , T.fromString (toString points) |> T.append (T.fromString "+") |> T.color green ]
-   |> centered
+   let pointsT = dispPoints points
+       handValueT = dispHandValue valuehand.value
+   in T.concat [ pointsT, T.fromString "\n", handValueT ]
+         |> centered
+         |> toForm
+         |> moveRotateAdjacentKaze (200,0) st.rs.mypos player_kaze
 
 dispValued : GameState -> Valued -> Element
 dispValued st {mentsu, tiles, value} =
-   [ collage 600 80
-      [ flow right (map (dispTileHand st) tiles ++ map (dispMentsu st Ton) mentsu) -- TODO get player ton
-        |> toForm |> scale 0.6 ]
-   , dispHandValue value
-   ] |> flow down
+   flow right (map (dispTileHand st) tiles ++ map (dispMentsu st Ton) mentsu) -- TODO get correct player kaze
 
-dispHandValue : HandValue -> Element
-dispHandValue {yaku, fu, han, points, named} = (T.concat
-   [ T.fromString (toString han), T.fromString " Han, "
-   , T.fromString (toString fu), T.fromString (" Fu.") ]
-   |> centered)
-   `above` flow down (map dispYaku yaku)
+dispHandValue : HandValue -> T.Text
+dispHandValue {yaku, fu, han, points, named} =
+   let firstline = case named of
+            Just name -> T.fromString name |> T.color red
+            Nothing   -> T.concat
+               [ T.fromString (toString han), T.fromString " Han "
+               , T.fromString (toString fu), T.fromString (" Fu ") ]
+   in T.concat
+         [ firstline
+         , T.fromString "\n", T.concat (map dispYaku yaku) ]
 
-dispYaku : Yaku -> Element
+dispPoints : Points -> T.Text
+dispPoints n = if n < 0
+   then T.fromString "-" `T.append` T.fromString (toString n) |> T.color red
+   else T.fromString "+" `T.append` T.fromString (toString n) |> T.color green
+
+dispYaku : Yaku -> T.Text
 dispYaku {han, name} = T.concat
-   [ T.fromString name |> T.bold, T.fromString " "
-   , T.fromString (toString han) |> T.color green ]
-   |> centered
+   [ T.fromString name |> T.bold
+   , T.fromString " "
+   , T.fromString ("(" ++ toString han ++ ")") |> T.color red
+   , T.fromString " "
+   ]
 -- }}}
 
 -- {{{ Display: My hand ---------------------------------------------------
