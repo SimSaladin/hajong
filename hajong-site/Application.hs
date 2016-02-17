@@ -33,7 +33,7 @@ import System.Log.FastLogger                (defaultBufSize, newStdoutLoggerSet,
 
 import Prelude (read, tail)
 import Control.Concurrent (forkIO, threadDelay)
-import qualified Control.Concurrent.Lock as Lock
+import qualified Control.Concurrent.Extra as Extra
 import qualified Hajong.Server as G
 import qualified Hajong.Connections as G
 import qualified Network.WebSockets as WS
@@ -66,7 +66,7 @@ makeFoundation appSettings = do
         (if appMutableStatic appSettings then staticDevel else static)
         (appStaticDir appSettings)
 
-    appGameLock <- Lock.new
+    appGameLock <- Extra.newLock
     appGameIn <- newEmptyMVar
     appGameOut <- newEmptyMVar
 

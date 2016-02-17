@@ -26,7 +26,7 @@ import Language.Haskell.TH (runIO, litE, stringL)
 import Data.Acid
 import qualified Hajong.Database as G
 import qualified Hajong.Connections as G
-import Control.Concurrent.Lock
+import Control.Concurrent.Extra
 import qualified Network.WebSockets as WS
 
 import Handler.SendMail
