@@ -15,7 +15,21 @@ import Mahjong
 import MahjongTest.Mechanics
 
 -- | Defaults for the tests
-kyoku = Kyoku {_pRound = (Ton, 1, 0), _pTurn = Ton, _pOja = Player 3, _pFirstOja = Player 3, _pWallTilesLeft = 70, _pDora = [], _pFlags = setFromList [OpenedUraDora []], _pPlayers = error "not used", _pHonba = 0, _pRiichi = 0, _pResults = Nothing, _sEventHistory = [], _sHands = error "not used", _sWall = [], _sWanpai = Wanpai [] [] ["M1"] [], _sWaiting = Nothing}
+kyoku = Kyoku
+    { _pRound = (Ton, 1, 0), _pTurn = Ton, _pOja = Player 3, _pFirstOja = Player 3
+    , _pWallTilesLeft = 70
+    , _pDora = []
+    , _pFlags = setFromList [OpenedUraDora []]
+    , _pPlayers = error "not used"
+    , _pHonba = 0, _pRiichi = 0
+    , _pResults = Nothing
+    , _sEventHistory = []
+    , _sHands = error "not used"
+    , _sWall = []
+    , _sWanpai = Wanpai [] [] ["M1"] []
+    , _sWaiting = Nothing
+    }
+
 valueInfo = ValueInfo kyoku Ton $ initHand []
 
 tests :: TestTree
@@ -154,6 +168,7 @@ tests = testGroup "Standard Yaku"
                            & vHand.handCalled .~ []
                            & vHand.handAgari .~ Just (AgariCall $ Shout Ron Nan "M3" ["M3"])
         _vaYaku (getValue vi) @?= [Yaku 2 "Chiitoitsu"]
+        _vaFu (getValue vi)   @?= 25
 
     , testCase "Menzen Tsumo" $ do
         let vi = valueInfo & vHand.handConcealed .~ ["M2", "M2", "P2", "P3", "P4", "S5", "S6", "S7", "S2", "S3", "S4", "S9", "S9"]

@@ -26,7 +26,7 @@ import Language.Haskell.TH (runIO, litE, stringL)
 import Data.Acid
 import qualified Hajong.Database as G
 import qualified Hajong.Connections as G
-import Control.Concurrent.Extra
+import Control.Concurrent.Extra (Lock, withLock)
 import qualified Network.WebSockets as WS
 
 import Handler.SendMail
@@ -356,7 +356,7 @@ compileTime = $(runIO getCurrentTime >>= litE . stringL . show)
 goGame :: G.InternalEvent -> Handler G.InternalResult
 goGame ev = do
     App{..} <- getYesod
-    liftIO $ with appGameLock $ do
+    liftIO $ withLock appGameLock $ do
         putMVar appGameIn ev
         takeMVar appGameOut
 

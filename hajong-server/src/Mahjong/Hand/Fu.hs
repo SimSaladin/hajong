@@ -29,6 +29,7 @@ hanSum = sum . map _yHan
 grpFu :: Grouping -> [Yaku] -> ValueInfo -> [([Yaku], Fu)]
 grpFu grp yaku vi
     | hanSum yaku >= 5 = [(yaku, 0)]
+    | any (\y -> _yName y == "Chiitoitsu") yaku = [(yaku, 25)]
     | otherwise        = over (each._2) rounded
         [ (yaku', baseMentsuFu + wFu + openPinfuFu + tsumoFu)
         | wFu <- maybe [0] (waitFuAgari grp) (vi^.vHand.handAgari)
@@ -50,10 +51,11 @@ grpFu grp yaku vi
 
     rounded x = ceiling (fromIntegral x / 10) * 10
 
--- | 25 if chiitoitsu, 30 if concealed ron, 20 otherwise (tsumo or open)
+-- | 30 if concealed ron, 20 otherwise (tsumo or open).
+--
+-- Note: result for chiitoi is probably something weird.
 baseFu :: [Yaku] -> ValueInfo -> Fu
 baseFu yaku vi
-    | any (\y -> _yName y == "Chiitoitsu") yaku                         = 25
     | vi^.vHand.to isConcealed, Just AgariCall{} <- vi^.vHand.handAgari = 30
     | otherwise                                                         = 20
 
