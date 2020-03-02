@@ -432,7 +432,9 @@ flipNewDora = tellEvent . DealFlipDora =<< wanpaiGetDora
 revealUraDora :: InKyoku m => m ()
 revealUraDora = do
     count <- use (pDora.to length)
-    use (sWanpai.wUraDora) >>= setFlag . OpenedUraDora . map TileEq . take count
+    ura <- use (sWanpai.wUraDora) <&> take count
+    tellEvent $ DealFlipDora ura
+    setFlag . OpenedUraDora $ map TileEq ura
 
 -- | Get supplementary tile from wanpai. Argument must be a tile from
 -- the wall to append to the wall.

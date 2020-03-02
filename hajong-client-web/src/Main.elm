@@ -1,7 +1,13 @@
 module Main where
 
+{-| The main on the play site. Unless in a game, show the lounge.
+
+Some debug wirings is also done here. Perhaps that should be put elsewhere
+-}
+
 import Http
 
+import Model exposing (GameState, Status(..))
 import PlayerInfo
 import Lounge
 import MsgDialog

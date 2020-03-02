@@ -1,6 +1,9 @@
 module MsgDialog where
 
+{-| A chat box -}
+
 import GameTypes exposing (..)
+import Model exposing (LogItem(..))
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -14,6 +17,7 @@ import Graphics.Input.Field as Field
 import Graphics.Element as Element
 import Graphics.Element exposing (Element)
 
+-- TODO: Should just use the `Model`.
 type alias State a = { a | dialogFieldContent : Field.Content
                          , dimensions : (Int, Int)
                          , logging : List LogItem

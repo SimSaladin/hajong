@@ -1,57 +1,12 @@
 module GameTypes where
 
-import PlayerInfo
+{-| This module defines types we can receive or send to hajong-server -}
 
 import Dict exposing (Dict)
 import Time exposing (Time)
-import Dict
 import Set exposing (Set)
-import Set
-import Debug
 import Graphics.Input.Field as Field
-
--- {{{ GameState -------------------------------------------------------------
-type alias GameState =
-   { status     : Status
-   , mynick     : String
-   , myid       : Int
-   , gameWait   : Maybe Int
-   , supportURL : String
-   , dialogFieldContent : Field.Content
-
-   -- lounge-related
-   , lounge          : LoungeData
-   , lobbyChosenGame : Maybe GameInfo
-   , playerInfo      : PlayerInfo.InfoDict
-
-    -- In-Game
-   , gameFinalPoints : Maybe FinalPoints
-   , turnBegan      : Time
-   , riichiWith     : List Tile
-   , gameUUID       : Maybe String
-   , hoveredTileNth : Int
-   , relatedToShout : List Int
-   , rs             : RoundState
-
-   , resources : Dict String String -- image urls
-
-   -- properties
-   , updated    : Time
-   , dimensions : (Int, Int)
-   -- Debug
-   , logging    : List LogItem
-   }
-
-type Status = InLounge
-            | InGame RoundState
-
-type LogItem = LogMsg { player_nick : String, msg : String }
-             | LogDebug { msg : String }
-             | LogError { msg : String }
-
-type alias ProfilePictures = Dict String String
-
--- }}}
+import Debug
 
 -- {{{ RoundState ------------------------------------------------------------
 
@@ -67,6 +22,7 @@ type alias RoundState =
    , firstoja  : Player
    , tilesleft : Int
    , dora      : List Tile
+   , uradora   : List Tile
    , hands     : List (Kaze, HandPublic)
    , players   : List (Kaze, (Player, Int, String))
    , myhand    : Hand
@@ -178,7 +134,9 @@ type Suit   = ManTile | PinTile | SouTile
 type Honor  = Kazehai Kaze | Sangenpai Sangen
 type Kaze   = Ton | Nan | Shaa | Pei
 type Sangen = Haku | Hatsu | Chun
+-- }}}
 
+-- {{{ Tile Functions
 readKaze x = case x of
     "Ton"  -> Ton
     "Nan"  -> Nan
@@ -186,6 +144,7 @@ readKaze x = case x of
     "Pei"  -> Pei
     _      -> Debug.crash <| "Couldn't deserialize string `" ++ x ++ "' to a kaze"
 
+{-| ad-hoc polymorphism isn't really a thing -}
 tileOrder : Tile -> Tile -> Order
 tileOrder a b = case (a, b) of
    (Suited _ _ _, Honor _) -> LT

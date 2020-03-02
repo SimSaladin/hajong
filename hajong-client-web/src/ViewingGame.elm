@@ -1,6 +1,7 @@
 module ViewingGame where
 
 import GameTypes exposing (..)
+import Model exposing (GameState, Status(..), LogItem(..))
 import JSON
 import Game
 import View

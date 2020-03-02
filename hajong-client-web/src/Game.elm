@@ -3,6 +3,7 @@ module Game where
 import Util exposing (..)
 import Lounge
 import GameTypes exposing (..)
+import Model exposing (GameState, Status(..))
 import MsgDialog
 
 import List
@@ -237,7 +238,7 @@ dispPlayerInfos : GameState -> Form
 dispPlayerInfos st = [Ton, Nan, Shaa, Pei]
    |> List.concatMap (\k ->
       [ dispPlayerInfo st k |> moveRotateKaze (handOffCenter-t_h,-playAreaWidth / 4) st.rs.mypos k
-      , kazeImage st k |> toForm |> scale 0.7 |> moveRotateKaze (2.5 * t_w, 0) st.rs.mypos k ]
+      , kazeImage st k |> toForm |> scale 0.7 |> moveRotateKaze (2.2 * t_w, 0) st.rs.mypos k ]
    )
    |> group
 
@@ -311,32 +312,50 @@ dispInfoBlock st =
    <| color gray
    <| collage infoBlockWidth infoBlockWidth
    <| [ turnIndicator st |> moveRotateKaze (infoBlockWidth / 2, 0) st.rs.mypos st.rs.turn
-      , dealAndRoundIndicator st
-      , toForm (dispWanpai st) |> move (-40, 50)
-      , honbaIndicator st.rs.honba
-      , riichiInTableIndicator st.rs.inTable
-      , moveY (-t_h) <| toForm <| centered <| T.fromString <| toString st.rs.tilesleft
+      , toForm (dispWanpai st)               |> move (0, 25)
+      , dealAndRoundIndicator st             |> move (30, -20)
+      , honbaIndicator st.rs.honba           |> move (35, -40)
+      , riichiInTableIndicator st.rs.inTable |> move (60, -40)
+      , tilesLeftIndicator st.rs             |> move (40, -60)
       ]
 
-dealAndRoundIndicator st = toForm
-   <| kazeImage st (st.rs.round.kaze)
-         `beside`
-      centered (T.fromString (toString <| st.rs.round.round_rot))
+tilesLeftIndicator : RoundState -> Form
+tilesLeftIndicator rs =
+   toForm <| centered <| T.fromString
+   <| toString rs.tilesleft
+
+dealAndRoundIndicator : GameState -> Form
+dealAndRoundIndicator st =
+   group
+   [ scale 0.6 <| toForm <| kazeImage st (st.rs.round.kaze)
+   , moveX 15 <| toForm <| centered (T.fromString (toString <| st.rs.round.round_rot))
+   ]
 
 turnIndicator : GameState -> Form
 turnIndicator st = case st.rs.waiting of
    Nothing -> toForm empty
-   Just ws -> let col = if List.isEmpty ws.shouts then lightGreen else lightOrange
-                  secs = if ws.seconds < 0 then empty 
-                                           else show <| floor ws.seconds
-              in group [ rotate (degrees 90) <| filled col <| ngon 3 80
-                       , moveY 60 <| toForm secs ]
+   Just ws ->
+      let col = if List.isEmpty ws.shouts
+                   then lightGreen
+                   else lightOrange
 
-honbaIndicator h = if h > 0 then move (-60,-60) <| toForm <| centered <| T.fromString <| toString h ++ "H"
-                            else toForm empty
+          secs = if ws.seconds < 0 && ws.player == st.rs.player
+                    then empty 
+                    else show <| floor ws.seconds
+      in group
+         [ rotate (degrees 90) <| filled col <| ngon 3 80
+         , moveY 40 <| toForm secs
+         ]
 
-riichiInTableIndicator n = if n > 0 then move (-30, -60) <| toForm <| centered <| T.color red <| T.fromString <| toString (n / 1000) ++ "R"
-                                    else toForm empty
+honbaIndicator h =
+   if h > 0
+      then toForm <| centered <| T.fromString <| toString h ++ "H"
+      else toForm empty
+
+riichiInTableIndicator n =
+   if n > 0
+      then toForm <| centered <| T.color red <| T.fromString <| toString (n / 1000) ++ "R"
+      else toForm empty
 -- }}}
 
 -- {{{ Display: Utility ----------------------------------------------
@@ -401,30 +420,18 @@ dispDraw st tenpai nooten = group
    ]
 
 dispTsumo : GameState -> List Winner -> List Payer -> Form
-dispTsumo st winner payer = group
-   [ toForm
-      <| color blue
-      <| opacity 0.3
-      <| container infoBlockWidth infoBlockWidth middle empty
-   , toForm
-      <| titleText "Tsumo!"
-   , toForm
+dispTsumo st winner payer =
+   toForm
       <| collage playAreaWidth playAreaHeight
-      <| map (dispWinner st) winner ++ map (dispPayer st) payer
-   ]
+      <| map (dispWinner st <| T.fromString "Tsumo") winner
+      ++ map (dispPayer st) payer
 
 dispRon : GameState -> List Winner -> List Payer -> Form
-dispRon st winner payer = group
-   [ toForm
-      <| color red
-      <| opacity 0.3
-      <| container infoBlockWidth infoBlockWidth middle empty
-   , toForm
-      <| titleText "Ron!"
-   , toForm
+dispRon st winner payer =
+   toForm
       <| collage playAreaWidth playAreaHeight
-      <| map (dispWinner st) winner ++ map (dispPayer st) payer
-   ]
+      <| map (dispWinner st <| T.fromString "Ron") winner
+      ++ map (dispPayer st) payer
 
 -- | Displays the points rotated to correct place
 dispTenpai : GameState -> Tenpai -> Form
@@ -442,11 +449,18 @@ dispPayer st {player_kaze, points} =
    |> toForm
    |> moveKaze (220,0) st.rs.mypos player_kaze
 
-dispWinner : GameState -> Winner -> Form
-dispWinner st {player_kaze, points, valuehand} =
+{-| points and yaku oriented towards the winner -}
+dispWinner : GameState -> T.Text -> Winner -> Form
+dispWinner st extraT {player_kaze, points, valuehand} =
    let pointsT = dispPoints points
        handValueT = dispHandValue valuehand.value
-   in T.concat [ pointsT, T.fromString "\n", handValueT ]
+   in T.concat
+         [ pointsT
+         , T.fromString "\n"
+         , handValueT
+         , T.fromString "\n"
+         , extraT
+         ]
          |> centered
          |> toForm
          |> moveRotateAdjacentKaze (200,0) st.rs.mypos player_kaze
@@ -581,7 +595,10 @@ dispTileHand : GameState -> Tile -> Element
 dispTileHand = tileImage True
 
 dispWanpai : GameState -> Element
-dispWanpai st = st.rs.dora |> map (dispTile st) |> flow right
+dispWanpai st =
+   let dispDora = st.rs.dora |> map (dispTile st) |> flow right
+       dispUra  = st.rs.uradora |> map (dispTile st) |> flow right
+   in dispDora `above` dispUra
 
 tileImage : Bool -> GameState -> Tile -> Element
 tileImage inhand st tile =

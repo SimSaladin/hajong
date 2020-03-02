@@ -89,6 +89,7 @@ data GameEvent = DealStarts PlayerKyoku -- ^ Only at the start of a round
                | DealPublicHandChanged Kaze PlayerHand
                | DealPrivateHandChanged Player Kaze Hand -- ^ Wholly private
                | DealFlipDora Tile -- ^ New dora was flipped
+               | DealFlipUraDora [Tile] -- ^ Ura flipped upto resp. dora
                | DealNick Kaze Player Text -- Pos, player id, nick TODO: no nick but fetch the player info separetely
                | DealRiichi Kaze
                | DealEnded KyokuResults

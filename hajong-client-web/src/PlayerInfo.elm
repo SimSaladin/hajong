@@ -7,16 +7,15 @@
 --    |> Maybe.withDefault def
 module PlayerInfo where
 
+{-| Player information is fetched from two places: the hajong-server gives
+an identifier, and then we can query the hajong-site for additional information
+with the player identifier.
+-}
+
 import Http
-
-import Json.Decode exposing (Decoder, (:=))
-import Json.Decode as Json
-
+import Json.Decode as Json exposing (Decoder, (:=))
 import Task exposing (..)
-
-import Dict
 import Dict exposing (Dict)
-import Set
 import Set exposing (Set)
 
 -- | A mapping from usernames to user information.

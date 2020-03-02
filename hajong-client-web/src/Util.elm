@@ -1,6 +1,9 @@
 module Util where
 
+{-| General utilities for lists and whatnot -}
+
 import GameTypes exposing (..)
+import Model exposing (..)
 import PlayerInfo
 import Maybe
 

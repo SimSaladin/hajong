@@ -1,12 +1,15 @@
 module View where
 
-import Lounge
-import MsgDialog
-import Game
+{-| Play view -}
+
 import Events
-import Util exposing (..)
+import Game
 import GameTypes exposing (..)
 import JSON exposing (decodeEvent, encodeEvent, encodeRoundState)
+import Lounge
+import Model exposing (GameState, Status(..))
+import MsgDialog
+import Util exposing (..)
 
 import Set
 import Mouse
@@ -72,6 +75,7 @@ emptyRoundState =
    , firstoja      = -1
    , tilesleft     = -1
    , dora          = []
+   , uradora       = []
    , hands         = []
    , players       = []
    , myhand        = { concealed = [], picks = [], furiten = NotFuriten,
@@ -81,7 +85,7 @@ emptyRoundState =
    , honba         = 0
    , inTable       = 0
    , eventsHistory = []
-   , waiting       = Nothing -- { player = -1, seconds = 0, riichiWith = [], shouts = [] }
+   , waiting       = Nothing
    }
 
 -- }}}
@@ -107,10 +111,13 @@ stepGame x gs = case x of
    MsgDialogInput inp -> MsgDialog.stepUserInput inp gs
    Dimensions x       -> { gs | dimensions = x }
    StateUpdate f      -> f gs
-   TimeDelta time     -> { gs | updated   = time
-                              , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
-                              , rs        = stepRoundStateTimeDelta (time - gs.updated) gs.rs
-                         }
+   TimeDelta time     ->
+      if gs.updated == 0 -- XXX: Should use an initial effect to set the initial delta 
+         then { gs | updated = time }
+         else { gs | updated   = time
+                   , turnBegan = if gs.turnBegan == 0 then time else gs.turnBegan
+                   , rs        = stepRoundStateTimeDelta (time - gs.updated) gs.rs
+                   }
 
 stepRoundStateTimeDelta : Float -> RoundState -> RoundState
 stepRoundStateTimeDelta delta rs = { rs | waiting = Maybe.map (stepWaiting delta) rs.waiting }

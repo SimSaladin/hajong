@@ -1,5 +1,10 @@
 module JSON where
 
+{-| Very boiler-plate decoding and encoding of `GameTypes`. Perhaps could use
+some automated means so that we could share haskell code from hajong-server.
+
+But this works now, so no incentive to change it atm. -}
+
 import Util
 import GameTypes exposing (..)
 
@@ -212,15 +217,16 @@ readShoutKind s = case s of
 
 roundState : Decoder RoundState
 roundState = object8 RoundState
-    ("mypos"      := kaze)
-    ("round"      := round)
-    ("turn"       := kaze)
-    ("player"     := int)
-    ("oja"        := int)
-    ("first-oja"  := int)
-    ("tiles-left" := int)
-    ("dora"       := list tile)
+       ("mypos"      := kaze)
+       ("round"      := round)
+       ("turn"       := kaze)
+       ("player"     := int)
+       ("oja"        := int)
+       ("first-oja"  := int)
+       ("tiles-left" := int)
+       ("dora"       := list tile)
     `andThen` (\x -> object8 x
+       ("ura-dora"   := list tile)
        ("hands"      := list playerHand)
        ("players"    := list players)
        ("myhand"     := hand)
@@ -228,7 +234,8 @@ roundState = object8 RoundState
        ("honba"      := int)
        ("in-table"   := int)
        ("event-history" := list gameEvent)
-       ("waiting"       := maybe waiting)
+    ) `andThen` (\x -> object1 x
+       ("waiting"    := maybe waiting)
     )
 
 waiting : Decoder Waiting

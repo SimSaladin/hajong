@@ -206,6 +206,12 @@ instance ToJSON PlayerKyoku where
         , "first-oja"     .= _pFirstOja
         , "tiles-left"    .= _pWallTilesLeft
         , "dora"          .= _pDora
+        , "ura-dora"      .=
+            fmap (\(OpenedUraDora xs) -> xs)
+            (find (\x -> case x of
+                 OpenedUraDora _ -> True
+                 _ -> False) _pFlags)
+
         , "players"       .= map (toJSON *** toJSON) (M.toList _pPlayers)
         , "honba"         .= _pHonba
         , "in-table"      .= _pRiichi

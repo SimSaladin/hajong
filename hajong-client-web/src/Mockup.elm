@@ -1,15 +1,18 @@
 module Mockup where
 
-import View
+{-| Uses `View` to make mockups of different game states. Useful to debug and
+code different states of the game.
+-}
+
 import View exposing (newState)
 
 import GameTypes exposing (..)
+import Model exposing (..)
 import JSON
 import MsgDialog
 import Game
 import Lounge
 
-import Signal
 import Signal exposing (Signal, map)
 import Window
 import Time
@@ -34,6 +37,7 @@ roundState = identity
    -- <| setsTsumo
    <| setsRon
    <| setsDefaults
+   <| setsWaiting
    <| View.emptyRoundState
 
 setsDefaults rs = { rs
@@ -42,6 +46,7 @@ setsDefaults rs = { rs
    , firstoja      = 0
    , tilesleft     = 10
    , dora          = [Suited ManTile 1 False, Suited PinTile 5 True]
+   , uradora       = [Suited ManTile 4 False, Suited ManTile 4 False, Suited ManTile 4 False, Suited ManTile 4 False]
    , hands         = List.map2 (,) [Ton, Nan, Shaa, Pei]
       [ publicHand
       , { publicHand | riichiState = Riichi
@@ -53,8 +58,8 @@ setsDefaults rs = { rs
                         canTsumo = False, state = DrawNone, called = [],
                         discards = [], riichiState = NoRiichi, ippatsu = True }
    , results       = Nothing
-   , honba         = 0
-   , inTable       = 0
+   , honba         = 2
+   , inTable       = 1000
    , eventsHistory = []
    }
 
@@ -69,6 +74,10 @@ setsDraw rs = { rs
 setsRon rs = { rs
    | results = Just <| DealRon { winners = [winner Shaa], payers = [] }
    }
+
+setsWaiting rs =
+   let waiting = { player = 0, seconds = 30, riichiWith = [], shouts = [] }
+   in { rs | waiting = Just waiting }
 
 winner k = { player_kaze = k, points = 5000, valuehand = valued }
 

@@ -40,3 +40,4 @@ tests = testGroup "Hajong tests"
     --, Client.tests
     , Worker.tests
     ]
+

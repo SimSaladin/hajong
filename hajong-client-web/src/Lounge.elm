@@ -1,6 +1,9 @@
 module Lounge where
 
+{-| Defines the lounge component. -}
+
 import GameTypes exposing (..)
+import Model exposing (GameState)
 import Events
 import Util exposing (..)
 

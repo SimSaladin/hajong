@@ -1,5 +1,7 @@
 module Events where
 
+{-| Wrappers around the `Event`-type. -}
+
 import GameTypes exposing (..)
 
 -- Create Events ------------------------------------------------------------
